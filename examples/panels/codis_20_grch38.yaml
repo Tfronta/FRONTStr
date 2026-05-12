@@ -1,0 +1,210 @@
+# FRONTStr panel: CODIS 20 core forensic loci on GRCh38.
+#
+# Coordinates and motifs follow the consensus from the STRBase project and
+# the published forensic literature. Values may need adjustment after lab
+# validation; this is a starting template, not a certified panel.
+#
+# WARNING: Triallelic propensity flags are set conservatively. Adjust per
+# laboratory experience. See plan-longtr-improved.md §6.4.
+
+name: CODIS 20
+version: 2026.05-draft
+reference_build: GRCh38
+description: |
+  Core CODIS 20 autosomal markers + Amelogenin. ONT R10-friendly defaults.
+
+systems:
+  - name: D3S1358
+    chromosome: chr3
+    ref_start: 45582231
+    ref_end: 45582294
+    motif: TCTA,TCTG
+    period: -1
+    corr_value: 11
+    category: autosomal
+
+  - name: vWA
+    chromosome: chr12
+    ref_start: 5983977
+    ref_end: 5984049
+    motif: TCTA,TCTG
+    period: -1
+    corr_value: 0
+    category: autosomal
+
+  - name: FGA
+    chromosome: chr4
+    ref_start: 154587735
+    ref_end: 154587823
+    motif: CTTT,TTCC,CTCC
+    period: -1
+    corr_value: 0
+    category: autosomal
+    allow_triallelic: true
+
+  - name: D8S1179
+    chromosome: chr8
+    ref_start: 124894865
+    ref_end: 124894916
+    motif: TCTA,TCTG
+    period: -1
+    corr_value: 0
+    category: autosomal
+
+  - name: D21S11
+    chromosome: chr21
+    ref_start: 19181972
+    ref_end: 19182099
+    motif: TCTA,TCTG
+    period: -1
+    corr_value: 0
+    category: autosomal
+    allow_triallelic: true
+
+  - name: D18S51
+    chromosome: chr18
+    ref_start: 63281669
+    ref_end: 63281731
+    motif: AGAA
+    period: 4
+    corr_value: 0
+    category: autosomal
+
+  - name: D5S818
+    chromosome: chr5
+    ref_start: 123775556
+    ref_end: 123775594
+    motif: AGAT
+    period: 4
+    corr_value: 0
+    category: autosomal
+
+  - name: D13S317
+    chromosome: chr13
+    ref_start: 82148025
+    ref_end: 82148071
+    motif: TATC
+    period: 4
+    corr_value: 0
+    category: autosomal
+
+  - name: D7S820
+    chromosome: chr7
+    ref_start: 84160226
+    ref_end: 84160266
+    motif: GATA
+    period: 4
+    corr_value: 0
+    category: autosomal
+    allow_triallelic: true
+
+  - name: D16S539
+    chromosome: chr16
+    ref_start: 86352703
+    ref_end: 86352747
+    motif: GATA
+    period: 4
+    corr_value: 0
+    category: autosomal
+
+  - name: TH01
+    chromosome: chr11
+    ref_start: 2171088
+    ref_end: 2171115
+    motif: AATG
+    period: 4
+    corr_value: 4
+    category: autosomal
+
+  - name: TPOX
+    chromosome: chr2
+    ref_start: 1489651
+    ref_end: 1489684
+    motif: AATG
+    period: 4
+    corr_value: 0
+    category: autosomal
+    allow_triallelic: true
+    tri_balanced_thr: 0.5  # TPOX type II can fall to ~0.5 PHR
+
+  - name: CSF1PO
+    chromosome: chr5
+    ref_start: 150076323
+    ref_end: 150076367
+    motif: AGAT
+    period: 4
+    corr_value: 0
+    category: autosomal
+
+  - name: D2S1338
+    chromosome: chr2
+    ref_start: 218014847
+    ref_end: 218014916
+    motif: TGCC,TTCC
+    period: -1
+    corr_value: 0
+    category: autosomal
+
+  - name: D19S433
+    chromosome: chr19
+    ref_start: 29926234
+    ref_end: 29926293
+    motif: AAGG,TAGG
+    period: -1
+    corr_value: 0
+    category: autosomal
+
+  - name: D10S1248
+    chromosome: chr10
+    ref_start: 129294241
+    ref_end: 129294285
+    motif: GGAA
+    period: 4
+    corr_value: 0
+    category: autosomal
+
+  - name: D1S1656
+    chromosome: chr1
+    ref_start: 230769616
+    ref_end: 230769683
+    motif: TAGA,CAGA
+    period: -1
+    corr_value: 0
+    category: autosomal
+
+  - name: D2S441
+    chromosome: chr2
+    ref_start: 68011946
+    ref_end: 68011990
+    motif: TCTA,TCAA
+    period: -1
+    corr_value: 0
+    category: autosomal
+
+  - name: D12S391
+    chromosome: chr12
+    ref_start: 12297038
+    ref_end: 12297113
+    motif: AGAT,AGAC
+    period: -1
+    corr_value: 0
+    category: autosomal
+
+  - name: D22S1045
+    chromosome: chr22
+    ref_start: 37140287
+    ref_end: 37140338
+    motif: ATT
+    period: 3
+    corr_value: 0
+    category: autosomal
+
+  - name: AMEL
+    chromosome: chrX
+    ref_start: 11296898
+    ref_end: 11297012
+    motif: A  # not a real TR; AMEL handled specially in interp/amel.py
+    period: 1
+    corr_value: 0
+    category: x_chromosomal
+    ont_len_tolerance: 0

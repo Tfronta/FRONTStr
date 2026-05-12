@@ -1,0 +1,267 @@
+{# FRONTStr HTML report template.
+   Self-contained. CSS/JS/data are inlined; SVG charts are pre-rendered. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="FRONTStr {{ payload.meta.app_version }}">
+<title>FRONTStr — {{ payload.meta.sample_name }} ({{ payload.meta.panel_name }})</title>
+<style>{{ css_bundle | safe }}</style>
+</head>
+<body>
+<div class="app">
+
+{# ====================================================================== #}
+{# PAGE 1 — Cover / executive summary                                       #}
+{# ====================================================================== #}
+<header class="cover" id="cover">
+  <h1>{{ payload.meta.sample_name }}</h1>
+  <div class="subtitle">
+    {{ payload.meta.panel_name }}{% if payload.meta.panel_version %} v{{ payload.meta.panel_version }}{% endif %}
+    {% if payload.meta.operator %} · operator {{ payload.meta.operator }}{% endif %}
+    {% if payload.meta.run_id %} · run {{ payload.meta.run_id }}{% endif %}
+  </div>
+  <div class="meta">
+    <span>Platform: {{ payload.meta.platform|upper }}</span>
+    <span>Reference: {{ payload.meta.reference_build }}</span>
+    {% if payload.meta.longtr_version %}<span>LongTR: {{ payload.meta.longtr_version }}</span>{% endif %}
+    <span>Generated: {{ payload.meta.started_at }}</span>
+    <span>FRONTStr {{ payload.meta.app_version }}</span>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi"><b>{{ payload.summary.loci_total }}</b>loci in panel</div>
+    <div class="kpi"><b>{{ payload.summary.loci_called }}</b>called</div>
+    <div class="kpi {% if payload.summary.tri_count %}warn{% endif %}"><b>{{ payload.summary.tri_count }}</b>tri-allelic</div>
+    <div class="kpi {% if payload.summary.dropouts %}warn{% endif %}"><b>{{ payload.summary.dropouts }}</b>drop-outs</div>
+    <div class="kpi {% if payload.summary.mixture_count %}danger{% endif %}"><b>{{ payload.summary.mixture_count }}</b>mixture alert</div>
+    <div class="kpi {% if payload.summary.discordant_count %}warn{% endif %}"><b>{{ payload.summary.discordant_count }}</b>LongTR discord</div>
+  </div>
+</header>
+
+<nav class="page-tabs">
+  <a href="#profile">Profile</a>
+  <a href="#qc">QC</a>
+  <a href="#loci">Per-locus</a>
+  <a href="#raw">Raw / Audit</a>
+</nav>
+
+{# ====================================================================== #}
+{# PAGE 2 — Forensic profile table                                          #}
+{# ====================================================================== #}
+<section id="profile">
+  <h2>Forensic profile <small>{{ payload.summary.loci_called }}/{{ payload.summary.loci_total }} markers called</small></h2>
+  <div class="card">
+    <div class="toolbar">
+      <input id="profile-search" type="search" placeholder="filter markers (eg. TPOX)…" autocomplete="off">
+      <select id="profile-status">
+        <option value="">all statuses</option>
+        <option value="ok">OK</option>
+        <option value="tri">tri-allelic</option>
+        <option value="mixture">mixture</option>
+        <option value="discordant">discordant</option>
+        <option value="no_data">no data</option>
+      </select>
+      <span class="pill" id="profile-count"></span>
+    </div>
+    <table class="profile">
+      <thead>
+        <tr>
+          <th data-sortable="text">Marker</th>
+          <th data-sortable="text">Call</th>
+          <th data-sortable="text">Allele 1 (ISFG)</th>
+          <th data-sortable="text">Motif runs 1</th>
+          <th data-sortable="num">CE 1</th>
+          <th data-sortable="num">Cov 1</th>
+          <th data-sortable="text">Allele 2 (ISFG)</th>
+          <th data-sortable="text">Motif runs 2</th>
+          <th data-sortable="num">CE 2</th>
+          <th data-sortable="num">Cov 2</th>
+          <th data-sortable="text">Allele 3 (ISFG)</th>
+          <th data-sortable="text">Motif runs 3</th>
+          <th data-sortable="num">CE 3</th>
+          <th data-sortable="num">Cov 3</th>
+          <th data-sortable="num">Total</th>
+          <th data-sortable="text">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in payload.profile_rows %}
+        <tr data-search="{{ row.marker|lower }} {{ row.call_rule }} {{ row.status_chip }} {{ row.tri_type }}"
+            data-chip="{{ row.status_chip }}"
+            class="{% if row.status_chip == 'mixture' %}row-mixture{% elif row.status_chip == 'discordant' %}row-discordant{% elif row.status_chip == 'no_data' %}row-no-data{% endif %}">
+          <td class="marker"><a href="#locus-{{ row.marker|e }}">{{ row.marker }}</a></td>
+          <td class="mono">{{ row.call_rule }}</td>
+          <td class="mono">{{ row.allele1_isfg or '' }}</td>
+          <td class="mono repeat-line">{{ row.allele1_repeat_summary or '' }}</td>
+          <td class="num" data-sort-value="{{ row.allele1_ce if row.allele1_ce is not none else '' }}">{{ row.allele1_ce if row.allele1_ce is not none else '–' }}</td>
+          <td class="num" data-sort-value="{{ row.allele1_cov or 0 }}">{{ row.allele1_cov if row.allele1_cov is not none else '–' }}</td>
+          <td class="mono">{{ row.allele2_isfg or '' }}</td>
+          <td class="mono repeat-line">{{ row.allele2_repeat_summary or '' }}</td>
+          <td class="num" data-sort-value="{{ row.allele2_ce if row.allele2_ce is not none else '' }}">{{ row.allele2_ce if row.allele2_ce is not none else '–' }}</td>
+          <td class="num" data-sort-value="{{ row.allele2_cov or 0 }}">{{ row.allele2_cov if row.allele2_cov is not none else '–' }}</td>
+          <td class="mono">{{ row.allele3_isfg or '' }}</td>
+          <td class="mono repeat-line">{{ row.allele3_repeat_summary or '' }}</td>
+          <td class="num" data-sort-value="{{ row.allele3_ce if row.allele3_ce is not none else '' }}">{{ row.allele3_ce if row.allele3_ce is not none else '–' }}</td>
+          <td class="num" data-sort-value="{{ row.allele3_cov or 0 }}">{{ row.allele3_cov if row.allele3_cov is not none else '–' }}</td>
+          <td class="num">{{ row.total_reads }}</td>
+          <td>
+            <span class="chip {{ row.status_chip }}">{{ row.status_chip }}</span>
+            {% if row.tri_type %}<span class="chip tri">{{ row.tri_type }}</span>{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{# ====================================================================== #}
+{# PAGE 3 — QC dashboard                                                    #}
+{# ====================================================================== #}
+<section id="qc">
+  <h2>Quality control <small>mean {{ "%.1f"|format(payload.qc.mean_coverage) }}x · min {{ payload.qc.min_coverage }}x · max {{ payload.qc.max_coverage }}x</small></h2>
+  <div class="card">
+    <h3 style="font-size:13px;margin:0 0 8px;color:var(--text-soft);">Coverage per locus</h3>
+    {{ qc_coverage_svg | safe }}
+  </div>
+  <div class="card" style="margin-top:14px;">
+    <h3 style="font-size:13px;margin:0 0 8px;color:var(--text-soft);">Cluster status distribution</h3>
+    <table class="profile">
+      <thead><tr><th>Status</th><th class="num">Clusters</th></tr></thead>
+      <tbody>
+      {% for entry in payload.qc.status_breakdown %}
+        <tr><td><span class="chip {{ entry.status }}">{{ entry.status }}</span></td><td class="num">{{ entry.count }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{# ====================================================================== #}
+{# PAGE 4 — Per-locus detail                                                #}
+{# ====================================================================== #}
+<section id="loci">
+  <h2>
+    Per-locus detail
+    <small>
+      <button id="expand-all" type="button" style="font:inherit;cursor:pointer;background:none;border:0;color:var(--primary);padding:0;">expand all</button>
+      ·
+      <button id="collapse-all" type="button" style="font:inherit;cursor:pointer;background:none;border:0;color:var(--primary);padding:0;">collapse</button>
+    </small>
+  </h2>
+  {% for r in payload.results %}
+    <details class="locus" id="locus-{{ r.marker_name|e }}"
+             {% if r.tri_type or r.discordant or r.call_rule == 'no_data' %}open{% endif %}>
+      <summary>
+        <b>{{ r.marker_name }}</b>
+        <span class="chip {% if r.tri_type == 'mixture_suspected' %}mixture{% elif r.tri_type %}tri{% elif r.discordant %}discordant{% elif r.call_rule == 'no_data' %}no_data{% else %}ok{% endif %}">{{ r.call_rule }}</span>
+        {% if r.tri_type %}<span class="chip tri">{{ r.tri_type }}</span>{% endif %}
+        {% if r.discordant %}<span class="chip discordant">LongTR≠evidence</span>{% endif %}
+        <span class="meta">{{ r.system.chromosome }}:{{ r.system.ref_start }}-{{ r.system.ref_end }} · motif {{ r.system.motif }} · {{ r.total_reads }} reads</span>
+      </summary>
+      <div class="body">
+        <div>
+          <div class="locus-meta">
+            <span><b>Motif</b> {{ r.system.motif }}</span>
+            <span><b>Period</b> {{ r.system.period }}</span>
+            <span><b>Category</b> {{ r.system.category }}</span>
+            <span><b>Allow tri</b> {{ 'yes' if r.system.allow_triallelic else 'no' }}</span>
+            <span><b>Reads</b> {{ r.total_reads }}</span>
+          </div>
+          {{ r.svg_electropherogram | safe }}
+          {% if r.warnings %}
+          <div style="margin-top:10px;font-size:12px;color:var(--warn);">
+            {% for w in r.warnings %}<div>⚠ {{ w }}</div>{% endfor %}
+          </div>
+          {% endif %}
+          <table class="allele-table">
+            <thead>
+              <tr>
+                <th>#</th><th>ISFG</th><th>Motif runs</th><th class="num">CE</th><th class="num">len bp</th>
+                <th class="num">reads</th><th class="num">HP1/HP2</th><th class="num">+/-</th>
+                <th class="num">mean Q</th><th class="num">ES</th><th>status</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for a in r.alleles %}
+              <tr class="is-{{ a.status }}">
+                <td>{{ a.cluster_index }}</td>
+                <td class="mono">{{ a.isfg }}</td>
+                <td class="mono" style="font-size:11px;color:var(--text-soft);">{{ a.motif_repeat_summary }}</td>
+                <td class="num">{{ '%.1f'|format(a.ce) if a.ce is not none else '–' }}</td>
+                <td class="num">{{ a.length_bp }}</td>
+                <td class="num"><b>{{ a.n_reads_total }}</b></td>
+                <td class="num">{{ a.n_reads_hp1 }}/{{ a.n_reads_hp2 }}</td>
+                <td class="num">{{ a.n_forward }}/{{ a.n_reverse }}</td>
+                <td class="num">{{ a.mean_qual }}</td>
+                <td class="num">{{ a.expected_stutter }}</td>
+                <td><span class="chip {{ 'ok' if a.status == 'allele' else 'no_data' }}">{{ a.status }}</span>
+                  {% if a.longtr_inexact %} <span class="chip discordant">inexact</span>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text-soft);margin-bottom:6px;">Haplotype split</div>
+          {{ r.svg_haplotype | safe }}
+          {% if r.longtr %}
+          <div style="margin-top:12px;font-size:12px;">
+            <div style="color:var(--text-soft);margin-bottom:4px;">LongTR concordance</div>
+            <div>GT: {{ r.longtr.gt_indices }} (Q={{ r.longtr.posterior }})</div>
+            <div>DP: {{ r.longtr.depth }} · PDP: {{ r.longtr.pdp_hp1 }} / {{ r.longtr.pdp_hp2 }}</div>
+            <div>ALT bp_diffs: {{ r.longtr.alleles|map(attribute='bp_diff')|list }}</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </details>
+  {% endfor %}
+</section>
+
+{# ====================================================================== #}
+{# PAGE 5 — Raw / Audit                                                     #}
+{# ====================================================================== #}
+<section id="raw">
+  <h2>Raw / audit</h2>
+  <div class="card">
+    <h3 style="font-size:13px;margin:0 0 8px;color:var(--text-soft);">Chain of custody (SHA-256)</h3>
+    <dl class="raw-grid">
+      <dt>Sample</dt><dd>{{ payload.meta.sample_name }}</dd>
+      {% if payload.meta.bam_path %}
+      <dt>BAM</dt><dd><span class="hash">{{ payload.meta.bam_sha256 or '–' }}</span> <button class="mono" type="button" data-copy="{{ payload.meta.bam_sha256 or '' }}" style="font-size:10px;cursor:pointer;">copy</button></dd>
+      <dt>BAM path</dt><dd>{{ payload.meta.bam_path }}</dd>
+      {% endif %}
+      {% if payload.meta.longtr_vcf_path %}
+      <dt>LongTR VCF</dt><dd><span class="hash">{{ payload.meta.longtr_vcf_sha256 or '–' }}</span></dd>
+      {% endif %}
+      {% if payload.meta.panel_sha256 %}
+      <dt>Panel</dt><dd><span class="hash">{{ payload.meta.panel_sha256 }}</span></dd>
+      {% endif %}
+      <dt>Report</dt><dd><span class="hash" id="report-hash">@@REPORT_SHA256@@</span></dd>
+    </dl>
+    {% if payload.meta.pipeline_argv %}
+    <h3 style="font-size:13px;margin:16px 0 8px;color:var(--text-soft);">Pipeline command</h3>
+    <pre class="argv">{{ payload.meta.pipeline_argv | join(' ') }}</pre>
+    {% endif %}
+  </div>
+  <details class="locus" id="run-data-blob" style="margin-top:14px;">
+    <summary><b>Embedded run payload (JSON)</b><span class="meta">click to inspect</span></summary>
+    <pre class="argv" style="max-height:60vh;overflow:auto;">{{ run_data_json_pretty | safe }}</pre>
+  </details>
+</section>
+
+<footer class="report-footer">
+  <span>FRONTStr {{ payload.meta.app_version }}</span>
+  <span>Sample <b>{{ payload.meta.sample_name }}</b></span>
+  <span class="hash">sha256 <span id="report-hash-footer">@@REPORT_SHA256@@</span></span>
+</footer>
+
+{# Embed full payload for programmatic extraction (no fetch needed). #}
+<script type="application/json" id="run-data">{{ run_data_json | safe }}</script>
+<script>{{ app_js_bundle | safe }}</script>
+
+</div>
+</body></html>

@@ -1,0 +1,212 @@
+"""Per-locus read pileup: extracts the TR subsequence from each spanning read.
+
+This is **Layer 2** of FRONTStr: integer per-allele coverage straight from the
+BAM, independent of the caller. See plan-longtr-improved.md §5.2.
+
+Coordinate convention
+---------------------
+
+Internally we use **0-based half-open** intervals (``[start, end)``), which is
+what pysam and BED conventionally use. Callers that come from forensic panel
+YAML (1-based inclusive) must convert:
+
+    start_0based = system.ref_start - 1
+    end_0based   = system.ref_end          # already exclusive of the next base
+
+Strand handling
+---------------
+
+Per the SAM v1 specification, the ``SEQ`` field of a reverse-strand read is
+already reverse-complemented to forward orientation. ``pysam.query_sequence``
+returns the SAM ``SEQ`` field verbatim, so ``query_sequence[a:b]`` is always
+in **reference (forward)** orientation regardless of read strand. We record
+strand in the :class:`Observation` for QC but the sequence is canonical.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from frontstr.errors import EvidenceError
+
+
+@dataclass(slots=True, frozen=True)
+class Observation:
+    """A single read's contribution at one locus.
+
+    Attributes:
+        read_id: BAM ``QNAME`` (used for auditing / drill-down).
+        sequence: TR subsequence in reference orientation, uppercase.
+        hp: Haplotype tag (``1``, ``2``) or ``None`` if absent.
+        mean_qual: Mean Phred quality of the TR subsequence.
+        strand: ``"+"`` if mapped to forward strand, ``"-"`` for reverse.
+        flank_left_ok: True if the left flank anchor was clean (no clip/indel).
+        flank_right_ok: Same for the right flank anchor.
+    """
+
+    read_id: str
+    sequence: str
+    hp: int | None
+    mean_qual: float
+    strand: str
+    flank_left_ok: bool
+    flank_right_ok: bool
+
+
+_DEFAULT_FLANK_ANCHOR = 20
+_DEFAULT_FETCH_MARGIN = 200
+
+
+def pileup_locus(
+    bam_path: Path,
+    chrom: str,
+    start: int,
+    end: int,
+    *,
+    min_mapq: int = 20,
+    flank_anchor: int = _DEFAULT_FLANK_ANCHOR,
+    fetch_margin: int = _DEFAULT_FETCH_MARGIN,
+) -> list[Observation]:
+    """Extract one :class:`Observation` per read that fully spans ``[start, end)``.
+
+    Args:
+        bam_path: Indexed BAM (``.bai`` or ``.csi`` next to it).
+        chrom: Chromosome name as it appears in the BAM ``@SQ`` header.
+        start: 0-based inclusive start of the TR.
+        end: 0-based exclusive end of the TR.
+        min_mapq: Drop reads with MAPQ below this threshold.
+        flank_anchor: Required bp of clean reference-aligned flank on each side
+            (drops reads whose alignment edge falls inside this window).
+        fetch_margin: How far around the locus to ``fetch`` reads. Reads whose
+            alignment extends beyond ``start - fetch_margin`` to ``end +
+            fetch_margin`` are inspected; the actual gating is by alignment
+            boundary checks below.
+
+    Returns:
+        A list of :class:`Observation`, possibly empty. Order matches the BAM
+        iteration order (which is coordinate-sorted for sorted BAMs).
+
+    Raises:
+        EvidenceError: If the BAM cannot be opened or fetch fails.
+    """
+    if start < 0 or end <= start:
+        raise EvidenceError(f"Invalid locus window: start={start}, end={end}")
+    if not bam_path.exists():
+        raise EvidenceError(f"BAM not found: {bam_path}")
+
+    try:
+        import pysam
+    except ImportError as exc:
+        raise EvidenceError("pysam is required for pileup_locus") from exc
+
+    try:
+        bam = pysam.AlignmentFile(str(bam_path), "rb")
+    except (ValueError, OSError) as exc:
+        raise EvidenceError(f"Cannot open BAM {bam_path}: {exc}") from exc
+
+    obs: list[Observation] = []
+    fetch_start = max(0, start - fetch_margin)
+    fetch_end = end + fetch_margin
+    try:
+        for read in bam.fetch(chrom, fetch_start, fetch_end):
+            o = _read_to_observation(read, start, end, min_mapq, flank_anchor)
+            if o is not None:
+                obs.append(o)
+    except (ValueError, OSError) as exc:
+        raise EvidenceError(f"Fetch failed on {chrom}:{start}-{end}: {exc}") from exc
+    finally:
+        bam.close()
+    return obs
+
+
+def _read_to_observation(
+    read: object,  # pysam.AlignedSegment — typed as object to keep pysam optional
+    start: int,
+    end: int,
+    min_mapq: int,
+    flank_anchor: int,
+) -> Observation | None:
+    """Decide whether ``read`` contributes an :class:`Observation` and build it."""
+    if read.is_unmapped or read.is_secondary or read.is_supplementary:  # type: ignore[attr-defined]
+        return None
+    if read.mapping_quality < min_mapq:  # type: ignore[attr-defined]
+        return None
+    ref_start: int = read.reference_start  # type: ignore[attr-defined]
+    ref_end: int | None = read.reference_end  # type: ignore[attr-defined]
+    if ref_end is None:
+        return None
+    if ref_start > start - flank_anchor:
+        return None
+    if ref_end < end + flank_anchor:
+        return None
+
+    qseq: str | None = read.query_sequence  # type: ignore[attr-defined]
+    if not qseq:
+        return None
+
+    qstart, qend = _locate_window(read, start, end)
+    if qstart is None or qend is None or qend <= qstart:
+        return None
+
+    sequence = qseq[qstart:qend].upper()
+
+    hp: int | None = None
+    try:
+        if read.has_tag("HP"):  # type: ignore[attr-defined]
+            hp_val = read.get_tag("HP")  # type: ignore[attr-defined]
+            hp = int(hp_val) if hp_val in (1, 2, "1", "2") else None
+    except (ValueError, KeyError):
+        hp = None
+
+    mean_qual = _mean_quality(read, qstart, qend)
+    strand = "-" if read.is_reverse else "+"  # type: ignore[attr-defined]
+
+    return Observation(
+        read_id=read.query_name or "?",  # type: ignore[attr-defined]
+        sequence=sequence,
+        hp=hp,
+        mean_qual=mean_qual,
+        strand=strand,
+        flank_left_ok=True,
+        flank_right_ok=True,
+    )
+
+
+def _locate_window(
+    read: object,  # pysam.AlignedSegment
+    start: int,
+    end: int,
+) -> tuple[int | None, int | None]:
+    """Translate the reference window ``[start, end)`` into query coordinates.
+
+    Returns ``(qstart, qend)`` such that ``query_sequence[qstart:qend]`` is the
+    portion of the read aligned to the requested reference window. Either may
+    be ``None`` if the alignment does not cover the requested position.
+
+    Handles insertions (extra read bases inside the window) and deletions
+    (missing reference positions inside the window) naturally because
+    ``get_aligned_pairs`` reports indel positions with ``None`` on one side.
+    """
+    qstart: int | None = None
+    qend: int | None = None
+    for qpos, rpos in read.get_aligned_pairs(matches_only=False):  # type: ignore[attr-defined]
+        if rpos is None:
+            continue
+        if rpos == start and qstart is None and qpos is not None:
+            qstart = qpos
+        if rpos == end and qend is None and qpos is not None:
+            qend = qpos
+            break
+    return qstart, qend
+
+
+def _mean_quality(read: object, qstart: int, qend: int) -> float:
+    """Mean Phred quality across ``query_qualities[qstart:qend]``."""
+    quals = read.query_qualities  # type: ignore[attr-defined]
+    if quals is None:
+        return 0.0
+    window = list(quals)[qstart:qend]
+    if not window:
+        return 0.0
+    return sum(window) / len(window)
