@@ -4,11 +4,13 @@ Charts are rendered as plain SVG strings — no JS, no fetches, no Vega-Lite
 dependency. This keeps the report deterministic (byte-stable for the same
 inputs) and printable to PDF without any JavaScript-aware engine.
 
-The two charts that matter forensically:
+Primary per-locus chart:
 
-- :func:`electropherogram_svg` — per-locus bar chart of integer read counts
-  per cluster, colored by classification status, with the expected-stutter
-  envelope drawn as a dashed line.
+- :func:`allele_coverage_svg` — NGS-style stacked bars by repeat group with read
+  counts per haplotype (isoalleles stack at one tick).
+
+Also:
+
 - :func:`coverage_bar_svg` — per-marker coverage overview for the QC page.
 
 Style is intentionally MinKNOW-ish: thin axes, soft colors, no chart junk.
@@ -16,6 +18,7 @@ Style is intentionally MinKNOW-ish: thin axes, soft colors, no chart junk.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -30,10 +33,12 @@ STATUS_COLORS: dict[str, str] = {
     "no_data": "#cfd8dc",
     "pending": "#e0e0e0",
 }
-EXPECTED_STUTTER_COLOR = "#455a64"
 GRID_COLOR = "#e0e0e0"
 AXIS_COLOR = "#90a4ae"
 TEXT_COLOR = "#37474f"
+
+TEAL_BAR = "#0d9488"
+TEAL_BAR_ISO = "#14b8a6"
 
 
 @dataclass(slots=True)
@@ -54,84 +59,123 @@ class _ChartBox:
         return self.height - self.margin_top - self.margin_bottom
 
 
-def electropherogram_svg(
+def allele_coverage_svg(
     marker_result: dict[str, Any],
     *,
     width: int = 640,
-    height: int = 260,
+    height: int = 280,
 ) -> str:
-    """Render one locus's evidence clusters as a colored bar chart.
+    """NGS-style stacked bars: one tick per repeat group, Y = read counts."""
+    panel = marker_result.get("ngs_panel") or {}
+    groups = list(panel.get("chart_groups") or [])
+    marker_name = str(marker_result.get("marker_name") or "")
+    if not groups:
+        return _empty_chart_svg(width, height, "no alleles in NGS panel")
 
-    Args:
-        marker_result: One entry from ``payload["results"]`` (the JSON-shape,
-            not a :class:`MarkerResult`).
-        width: SVG outer width in CSS pixels.
-        height: SVG outer height in CSS pixels.
+    peak_stack = 1
+    peak_seg = 1
+    for grp in groups:
+        segs = grp.get("segments") or []
+        stack_sum = sum(int(s.get("coverage_reads") or 0) for s in segs)
+        peak_stack = max(peak_stack, stack_sum)
+        for s in segs:
+            peak_seg = max(peak_seg, int(s.get("coverage_reads") or 0))
+    y_max = float(_nice_y_axis_max(max(peak_stack, peak_seg)))
 
-    Returns:
-        Complete ``<svg>...</svg>`` string. Returns an "empty locus" placeholder
-        when there are no clusters.
-    """
-    alleles = list(marker_result.get("alleles", []))
-    if not alleles:
-        return _empty_chart_svg(width, height, "no reads at locus")
-
-    box = _ChartBox(width=width, height=height)
-    max_cov = max(int(a.get("n_reads_total", 0)) for a in alleles) or 1
-    max_expected = max(float(a.get("expected_stutter", 0.0) or 0.0) for a in alleles)
-    y_max = max(max_cov, int(max_expected) + 1)
-
-    bar_slot = box.inner_w / len(alleles)
-    bar_pad = max(2, int(bar_slot * 0.18))
-    bar_w = max(6, int(bar_slot - 2 * bar_pad))
+    box = _ChartBox(
+        width=width,
+        height=height,
+        margin_top=max(14, min(22, height // 13)),
+        margin_bottom=max(36, min(50, height // 5 + 8)),
+        margin_left=44,
+        margin_right=16,
+    )
+    n_groups = len(groups)
+    slot_w = box.inner_w / max(n_groups, 1)
 
     parts: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
         f'width="100%" height="{height}" role="img" '
-        f'aria-label="Electropherogram for {_xml(marker_result.get("marker_name", ""))}">'
+        f'aria-label="Allele coverage for {_xml(marker_name)}">'
     ]
-    parts.append(_axes(box, y_max, y_label="reads"))
+    parts.append(
+        _axes(
+            box,
+            y_max,
+            y_label="Read coverage",
+            grid_dashed=True,
+            x_label="Allele",
+        )
+    )
 
-    for idx, a in enumerate(alleles):
-        cov = int(a.get("n_reads_total", 0))
-        status = str(a.get("status", "pending"))
-        ce = a.get("ce")
-        isfg = str(a.get("isfg") or "")
-        consensus_len = int(a.get("length_bp", 0))
-        expected = float(a.get("expected_stutter", 0.0) or 0.0)
-        cx = box.margin_left + bar_slot * idx + bar_slot / 2
+    y_floor = float(box.margin_top + box.inner_h)
+
+    for gi, grp in enumerate(groups):
+        rg = grp["repeat_group"]
+        segments = sorted(
+            grp.get("segments") or [],
+            key=lambda s: int(s.get("stack_index") or 0),
+        )
+        n_seg = len(segments)
+        base_bw = slot_w * 0.52
+        bar_w = min(
+            slot_w * 0.9,
+            base_bw + min(slot_w * 0.38, 14 * max(0, n_seg - 1)),
+        )
+        cx = box.margin_left + slot_w * gi + slot_w / 2
         bar_x = cx - bar_w / 2
-        bar_h = (cov / y_max) * box.inner_h if y_max else 0
-        bar_y = box.margin_top + box.inner_h - bar_h
-        color = STATUS_COLORS.get(status, "#bdbdbd")
-        label = f"CE{ce}" if ce is not None else f"{consensus_len}bp"
-        tip = f"{label} | {status} | {cov} reads | ES={expected:.1f}"
-        if isfg:
-            tip += f" | {isfg}"
-        parts.append(
-            f'<rect x="{bar_x:.1f}" y="{bar_y:.1f}" width="{bar_w}" height="{bar_h:.1f}" '
-            f'fill="{color}" rx="2" ry="2"><title>{_xml(tip)}</title></rect>'
-        )
-        if expected > 0:
-            ex_h = min(expected, y_max) / y_max * box.inner_h
-            ex_y = box.margin_top + box.inner_h - ex_h
+
+        y_cursor = y_floor
+        for si, seg in enumerate(segments):
+            cov = int(seg.get("coverage_reads") or 0)
+            h = (cov / y_max) * box.inner_h if y_max else 0.0
+            y_cursor -= h
+            iso = bool(seg.get("is_isoallele"))
+            fill = TEAL_BAR_ISO if iso else TEAL_BAR
+            opacity = "0.85" if iso else "1"
+            row_id = str(seg.get("row_id") or "")
+            reads_tip = f"{cov} reads"
             parts.append(
-                f'<line x1="{bar_x - 2:.1f}" x2="{bar_x + bar_w + 2:.1f}" '
-                f'y1="{ex_y:.1f}" y2="{ex_y:.1f}" '
-                f'stroke="{EXPECTED_STUTTER_COLOR}" stroke-width="1.5" '
-                f'stroke-dasharray="3 2"/>'
+                f'<rect class="ngs-segment" tabindex="0" role="button" '
+                f'data-row-id="{_xml(row_id)}" x="{bar_x:.1f}" y="{y_cursor:.1f}" '
+                f'width="{bar_w:.1f}" height="{max(h, 0):.1f}" fill="{fill}" '
+                f'opacity="{opacity}" rx="2" ry="2" stroke="#e2f8f5" stroke-width="0.6">'
+                f"<title>{_xml(reads_tip)}</title></rect>"
             )
+            if si < len(segments) - 1:
+                parts.append(
+                    f'<line x1="{bar_x:.1f}" x2="{bar_x + bar_w:.1f}" '
+                    f'y1="{y_cursor:.1f}" y2="{y_cursor:.1f}" '
+                    'stroke="#ffffff" stroke-width="1.2" opacity="0.85"/>'
+                )
+
         parts.append(
-            f'<text x="{cx:.1f}" y="{box.margin_top + box.inner_h + 14:.1f}" '
-            f'text-anchor="middle" font-size="11" fill="{TEXT_COLOR}">{_xml(label)}</text>'
-        )
-        parts.append(
-            f'<text x="{cx:.1f}" y="{bar_y - 4:.1f}" text-anchor="middle" '
-            f'font-size="11" fill="{TEXT_COLOR}" font-weight="600">{cov}</text>'
+            f'<text x="{cx:.1f}" y="{box.margin_top + box.inner_h + 26:.1f}" '
+            f'text-anchor="middle" font-size="11" fill="{TEXT_COLOR}">{rg}</text>'
         )
 
     parts.append("</svg>")
     return "".join(parts)
+
+
+def electropherogram_svg(
+    marker_result: dict[str, Any],
+    **kw: Any,
+) -> str:
+    """Deprecated alias for :func:`allele_coverage_svg`."""
+    return allele_coverage_svg(marker_result, **kw)
+
+
+def _nice_y_axis_max(raw: float) -> float:
+    """Round read-count axis up with modest headroom."""
+    if raw <= 0:
+        return 1.0
+    headroom = raw * 1.06 + 1.0
+    if headroom <= 12:
+        return float(math.ceil(headroom))
+    step = 10 ** math.floor(math.log10(headroom))
+    nice_step = step if headroom / step <= 5 else step * 2
+    return math.ceil(headroom / nice_step) * nice_step
 
 
 def coverage_bar_svg(
@@ -256,16 +300,25 @@ def haplotype_stack_svg(
     return "".join(parts)
 
 
-def _axes(box: _ChartBox, y_max: float, *, y_label: str) -> str:
+def _axes(
+    box: _ChartBox,
+    y_max: float,
+    *,
+    y_label: str,
+    grid_dashed: bool = False,
+    x_label: str = "",
+) -> str:
     """Common axes + gridlines block."""
     parts: list[str] = []
+    dash = ' stroke-dasharray="2 4"' if grid_dashed else ""
     # Horizontal gridlines at 0%, 25%, 50%, 75%, 100% of y_max.
     for frac in (0.0, 0.25, 0.5, 0.75, 1.0):
         y = box.margin_top + box.inner_h * (1 - frac)
         value = round(y_max * frac)
         parts.append(
             f'<line x1="{box.margin_left}" x2="{box.margin_left + box.inner_w}" '
-            f'y1="{y:.1f}" y2="{y:.1f}" stroke="{GRID_COLOR}" stroke-width="1"/>'
+            f'y1="{y:.1f}" y2="{y:.1f}" stroke="{GRID_COLOR}" '
+            f'stroke-width="1"{dash}/>'
         )
         parts.append(
             f'<text x="{box.margin_left - 6}" y="{y + 3:.1f}" text-anchor="end" '
@@ -286,6 +339,12 @@ def _axes(box: _ChartBox, y_max: float, *, y_label: str) -> str:
         f'transform="rotate(-90 6,{box.margin_top + box.inner_h / 2:.1f})" '
         f'font-size="11" fill="{TEXT_COLOR}">{_xml(y_label)}</text>'
     )
+    if x_label:
+        cx = box.margin_left + box.inner_w / 2
+        parts.append(
+            f'<text x="{cx:.1f}" y="{box.height - 10:.1f}" text-anchor="middle" '
+            f'font-size="11" fill="{TEXT_COLOR}">{_xml(x_label)}</text>'
+        )
     return "".join(parts)
 
 

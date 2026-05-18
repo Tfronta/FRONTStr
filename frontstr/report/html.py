@@ -26,8 +26,8 @@ from frontstr.errors import FrontstrError
 from frontstr.interp.models import MarkerResult
 from frontstr.report.payload import RunContext, serialize_run
 from frontstr.report.svg_charts import (
+    allele_coverage_svg,
     coverage_bar_svg,
-    electropherogram_svg,
     haplotype_stack_svg,
 )
 
@@ -78,7 +78,9 @@ def _render(payload: dict[str, Any]) -> str:
     enriched_results: list[dict[str, Any]] = []
     for r in payload.get("results", []):
         enriched = dict(r)
-        enriched["svg_electropherogram"] = electropherogram_svg(r)
+        n_groups = len(enriched.get("ngs_panel", {}).get("chart_groups") or [])
+        chart_height = min(180, max(120, 88 + 18 * max(n_groups, 1)))
+        enriched["svg_allele_coverage"] = allele_coverage_svg(r, height=chart_height)
         enriched["svg_haplotype"] = haplotype_stack_svg(r)
         enriched_results.append(enriched)
     payload = {**payload, "results": enriched_results}

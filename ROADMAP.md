@@ -83,7 +83,7 @@ science with real labs in week 4.
 ### 1.6 HTML report — DONE
 
 - [x] `report/payload.py` — single serializer (`serialize_run`) shared by all exports
-- [x] `report/svg_charts.py` — server-side SVG: electropherogram, coverage bar, haplotype split (no JS for data)
+- [x] `report/svg_charts.py` — server-side SVG: allele coverage (NGS stacked bars), QC coverage bar, haplotype split (no JS for data)
 - [x] `report/html.py` — Jinja2-based generator + SHA-256 self-stamp
 - [x] `report/static/styles.css` — MinKNOW-inspired theme with dark-mode + print rules
 - [x] `report/static/app.js` — vanilla JS for table sort/filter, expand-all, copy-hash

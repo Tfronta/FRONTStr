@@ -248,15 +248,32 @@ details.locus summary::before {
 details.locus[open] summary::before { transform: rotate(90deg); }
 details.locus summary b { font-size: 14px; flex-grow: 1; }
 details.locus summary .meta { font-size: 11px; color: var(--text-faint); }
-details.locus .body {
-  padding: 0 16px 16px;
+/* Per-locus: full-width NGS stack, then forensic + haplotype row */
+details.locus .body.locus-body {
+  padding: 0 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  align-items: stretch;
+}
+.locus-ngs-full {
+  width: 100%;
+}
+.locus-split {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 16px;
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+  gap: 24px;
   align-items: start;
 }
-details.locus .body > .full { grid-column: 1 / -1; }
-@media (max-width: 760px) { details.locus .body { grid-template-columns: 1fr; } }
+.locus-split-main {
+  min-width: 0;
+}
+.locus-split-aside {
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .locus-split { grid-template-columns: 1fr; }
+}
 
 .locus-meta {
   font-size: 12px;
@@ -288,6 +305,143 @@ details.locus .body > .full { grid-column: 1 / -1; }
 .allele-table tr.is-inexact { background: rgba(158, 157, 36, 0.06); }
 .allele-table tr.is-stutter { color: var(--text-soft); }
 .allele-table tr.is-noise, .allele-table tr.is-artefact { color: var(--text-faint); }
+
+/* ---------- NGS panel (calm STRhub-like rhythm; sequence-forward) ---------- */
+.ngs-panel {
+  margin-top: 4px;
+  padding: 22px 24px 26px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 2px);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.ngs-panel-head {
+  margin-bottom: 18px;
+}
+.ngs-panel-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--text);
+}
+.ngs-panel-sub {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-soft);
+  line-height: 1.55;
+  max-width: 52em;
+}
+.ngs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 22px;
+}
+.ngs-table th, .ngs-table td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.ngs-table th {
+  font-weight: 600;
+  color: var(--text-soft);
+  background: rgba(15, 23, 42, 0.035);
+}
+.ngs-table th .th-hint {
+  font-weight: 400;
+  color: var(--text-faint);
+}
+.ngs-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ngs-table .allele-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ngs-table .allele-iso {
+  font-size: 0.62em;
+  font-weight: 600;
+  margin-left: 1px;
+  color: var(--text-soft);
+}
+.ngs-table .sequence-cell {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.sequence-scroll {
+  max-width: 420px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.sequence-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.sequence-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+}
+.repeat-highlight {
+  color: #0f766e;
+  font-weight: 700;
+}
+@media (prefers-color-scheme: dark) {
+  .repeat-highlight { color: #5eead4; }
+  .ngs-table th {
+    background: rgba(255, 255, 255, 0.04);
+  }
+}
+.ngs-chart-wrap {
+  margin-top: 8px;
+  width: 100%;
+}
+.ngs-chart-wrap svg {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+}
+.ngs-empty {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+tr.ngs-row {
+  cursor: pointer;
+}
+tr.ngs-row:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+tr.ngs-row.is-selected {
+  background: rgba(13, 148, 136, 0.11);
+}
+rect.ngs-segment {
+  cursor: pointer;
+}
+rect.ngs-segment:focus {
+  outline: none;
+}
+rect.ngs-segment.is-selected {
+  stroke: #0f766e !important;
+  stroke-width: 2.5px !important;
+}
+@media (prefers-color-scheme: dark) {
+  rect.ngs-segment.is-selected { stroke: #5eead4 !important; }
+}
+details.forensic-audit {
+  margin-top: 12px;
+}
+details.forensic-audit summary {
+  cursor: pointer;
+  font-size: 12px;
+  list-style: none;
+}
+details.forensic-audit summary::-webkit-details-marker { display: none; }
 
 /* ---------- raw page ---------- */
 .raw-grid {

@@ -26,6 +26,7 @@ from frontstr.interp.models import (
     MarkerResult,
     TriType,
 )
+from frontstr.report.ngs_display import build_ngs_panel, build_strhub_projection
 from frontstr.version import __version__
 
 DEFAULT_DROPOUT_FLOOR = 30
@@ -69,7 +70,9 @@ def serialize_run(
 
     Returns:
         Dict with top-level keys ``meta`` / ``summary`` / ``qc`` /
-        ``profile_rows`` / ``results``. Safe to ``json.dumps`` directly.
+        ``profile_rows`` / ``results`` / ``strhub``. Each marker in
+        ``results`` includes ``ngs_panel`` for HTML / tooling. Safe to
+        ``json.dumps`` directly.
     """
     if context.bam_path is not None and context.bam_sha256 is None:
         context.bam_sha256 = _file_sha256(context.bam_path)
@@ -80,7 +83,7 @@ def serialize_run(
     summary = _compute_summary(results, context.dropout_floor)
     qc = _compute_qc(results)
 
-    return {
+    payload: dict[str, Any] = {
         "meta": {
             "app": "frontstr",
             "app_version": __version__,
@@ -101,16 +104,19 @@ def serialize_run(
             "longtr_vcf_sha256": context.longtr_vcf_sha256,
             "longtr_version": context.longtr_version,
             "pipeline_argv": context.pipeline_argv,
+            "dropout_floor": context.dropout_floor,
         },
         "summary": summary,
         "qc": qc,
         "profile_rows": [_profile_row(r) for r in results],
         "results": serialized_results,
     }
+    payload["strhub"] = build_strhub_projection(payload)
+    return payload
 
 
 def _serialize_marker(r: MarkerResult) -> dict[str, Any]:
-    return {
+    marker_dict: dict[str, Any] = {
         "marker_name": r.marker_name,
         "system": {
             "name": r.system.name,
@@ -136,6 +142,8 @@ def _serialize_marker(r: MarkerResult) -> dict[str, Any]:
         ],
         "longtr": _serialize_longtr(r),
     }
+    marker_dict["ngs_panel"] = build_ngs_panel(marker_dict)
+    return marker_dict
 
 
 def _serialize_allele(a: Allele, total_reads: int, motif: str) -> dict[str, Any]:

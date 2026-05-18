@@ -93,4 +93,44 @@
       } catch (_) {}
     });
   });
+
+  /* ---------- NGS panel: sync table rows ↔ stacked chart segments ---------- */
+  document.querySelectorAll(".ngs-panel").forEach((panel) => {
+    const rows = panel.querySelectorAll("tr.ngs-row[data-row-id]");
+    const segments = panel.querySelectorAll("rect.ngs-segment[data-row-id]");
+
+    const clear = () => {
+      panel.querySelectorAll(".is-selected").forEach((el) => el.classList.remove("is-selected"));
+    };
+
+    const selectRowId = (id) => {
+      clear();
+      rows.forEach((tr) => {
+        if (tr.dataset.rowId === id) tr.classList.add("is-selected");
+      });
+      segments.forEach((seg) => {
+        if (seg.dataset.rowId === id) seg.classList.add("is-selected");
+      });
+    };
+
+    segments.forEach((seg) => {
+      seg.addEventListener("click", () => selectRowId(seg.dataset.rowId || ""));
+      seg.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectRowId(seg.dataset.rowId || "");
+        }
+      });
+    });
+
+    rows.forEach((tr) => {
+      tr.addEventListener("click", () => selectRowId(tr.dataset.rowId || ""));
+      tr.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectRowId(tr.dataset.rowId || "");
+        }
+      });
+    });
+  });
 })();

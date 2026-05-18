@@ -119,6 +119,8 @@ def test_build_report_embeds_json_payload(tmp_path: Path) -> None:
     data = json.loads(blob.text)
     assert data["meta"]["sample_name"] == "S2"
     assert {r["marker_name"] for r in data["results"]} == {"TH01", "TPOX"}
+    assert data["strhub"]["schema"] == "strhub.ngs_panel/v1"
+    assert len(data["strhub"]["markers"]) == 2
 
 
 def test_build_report_stamps_self_hash(tmp_path: Path) -> None:
@@ -132,8 +134,68 @@ def test_build_report_stamps_self_hash(tmp_path: Path) -> None:
     matches = re.findall(r"[0-9a-f]{64}", html)
     assert matches, "expected at least one SHA-256 hash in the report footer"
     # Hash should appear both inline and in footer (two slots)
-    sha_in_footer = re.search(r"id=\"report-hash-footer\">([0-9a-f]{64})<", html)
+    sha_in_footer = re.search(r'id="report-hash-footer">([0-9a-f]{64})<', html)
     assert sha_in_footer is not None
+
+
+def test_build_report_includes_ngs_panel(tmp_path: Path) -> None:
+    out = tmp_path / "r.html"
+    build_report(
+        _make_results(),
+        RunContext(sample_name="S-NGS", panel_name="P"),
+        out,
+    )
+    html = out.read_text(encoding="utf-8")
+    assert "Next-Generation Sequencing Analysis" in html
+    assert 'class="ngs-panel"' in html
+    assert "(reads)" in html
+    assert "Forensic audit" in html
+    assert "sequence-scroll" in html
+
+
+def test_profile_tri_columns_only_when_tri_chip(tmp_path: Path) -> None:
+    """Allele 3 columns appear iff some marker has status_chip tri."""
+    out_tri = tmp_path / "tri.html"
+    build_report(
+        _make_results(),
+        RunContext(sample_name="T", panel_name="P"),
+        out_tri,
+    )
+    html_tri = out_tri.read_text(encoding="utf-8")
+    assert "Allele 3 (ISFG)" in html_tri
+
+    th01_only = [
+        MarkerResult(
+            marker_name="TH01",
+            system=System(
+                name="TH01",
+                chromosome="chr11",
+                ref_start=2_171_000,
+                ref_end=2_171_050,
+                motif="AATG",
+                period=4,
+            ),
+            alleles=[
+                _allele(0, 9.0, 60, AlleleStatus.ALLELE),
+                _allele(1, 8.0, 55, AlleleStatus.ALLELE),
+            ],
+            alleles_called=[
+                _allele(0, 9.0, 60, AlleleStatus.ALLELE),
+                _allele(1, 8.0, 55, AlleleStatus.ALLELE),
+            ],
+            call_rule=CallRule.HETEROZYGOUS,
+            tri_type=TriType.NONE,
+            total_reads=115,
+        ),
+    ]
+    out_no = tmp_path / "no_tri.html"
+    build_report(
+        th01_only,
+        RunContext(sample_name="N", panel_name="P"),
+        out_no,
+    )
+    html_no = out_no.read_text(encoding="utf-8")
+    assert "Allele 3 (ISFG)" not in html_no
 
 
 def test_build_report_is_deterministic(tmp_path: Path) -> None:

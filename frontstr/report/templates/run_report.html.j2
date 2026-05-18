@@ -50,6 +50,7 @@
 {# PAGE 2 — Forensic profile table                                          #}
 {# ====================================================================== #}
 <section id="profile">
+  {% set profile_show_tri = payload.profile_rows | selectattr('status_chip', 'equalto', 'tri') | list | length > 0 %}
   <h2>Forensic profile <small>{{ payload.summary.loci_called }}/{{ payload.summary.loci_total }} markers called</small></h2>
   <div class="card">
     <div class="toolbar">
@@ -77,10 +78,12 @@
           <th data-sortable="text">Motif runs 2</th>
           <th data-sortable="num">CE 2</th>
           <th data-sortable="num">Cov 2</th>
+          {% if profile_show_tri %}
           <th data-sortable="text">Allele 3 (ISFG)</th>
           <th data-sortable="text">Motif runs 3</th>
           <th data-sortable="num">CE 3</th>
           <th data-sortable="num">Cov 3</th>
+          {% endif %}
           <th data-sortable="num">Total</th>
           <th data-sortable="text">Status</th>
         </tr>
@@ -100,10 +103,12 @@
           <td class="mono repeat-line">{{ row.allele2_repeat_summary or '' }}</td>
           <td class="num" data-sort-value="{{ row.allele2_ce if row.allele2_ce is not none else '' }}">{{ row.allele2_ce if row.allele2_ce is not none else '–' }}</td>
           <td class="num" data-sort-value="{{ row.allele2_cov or 0 }}">{{ row.allele2_cov if row.allele2_cov is not none else '–' }}</td>
+          {% if profile_show_tri %}
           <td class="mono">{{ row.allele3_isfg or '' }}</td>
           <td class="mono repeat-line">{{ row.allele3_repeat_summary or '' }}</td>
           <td class="num" data-sort-value="{{ row.allele3_ce if row.allele3_ce is not none else '' }}">{{ row.allele3_ce if row.allele3_ce is not none else '–' }}</td>
           <td class="num" data-sort-value="{{ row.allele3_cov or 0 }}">{{ row.allele3_cov if row.allele3_cov is not none else '–' }}</td>
+          {% endif %}
           <td class="num">{{ row.total_reads }}</td>
           <td>
             <span class="chip {{ row.status_chip }}">{{ row.status_chip }}</span>
@@ -160,8 +165,8 @@
         {% if r.discordant %}<span class="chip discordant">LongTR≠evidence</span>{% endif %}
         <span class="meta">{{ r.system.chromosome }}:{{ r.system.ref_start }}-{{ r.system.ref_end }} · motif {{ r.system.motif }} · {{ r.total_reads }} reads</span>
       </summary>
-      <div class="body">
-        <div>
+      <div class="body locus-body">
+        <div class="locus-ngs-full">
           <div class="locus-meta">
             <span><b>Motif</b> {{ r.system.motif }}</span>
             <span><b>Period</b> {{ r.system.period }}</span>
@@ -169,13 +174,50 @@
             <span><b>Allow tri</b> {{ 'yes' if r.system.allow_triallelic else 'no' }}</span>
             <span><b>Reads</b> {{ r.total_reads }}</span>
           </div>
-          {{ r.svg_electropherogram | safe }}
+          <div class="ngs-panel" data-marker="{{ r.marker_name|e }}">
+            <div class="ngs-panel-head">
+              <h3 class="ngs-panel-title">{{ r.ngs_panel.title }}</h3>
+              <p class="ngs-panel-sub">{{ r.ngs_panel.subtitle }}</p>
+            </div>
+            {% if r.ngs_panel.rows %}
+            <table class="ngs-table">
+              <thead>
+                <tr>
+                  <th>Allele</th>
+                  <th class="num">Coverage <span class="th-hint">(reads)</span></th>
+                  <th>Repeat Sequence</th>
+                  <th>Full Sequence</th>
+                </tr>
+              </thead>
+              <tbody>
+              {% for row in r.ngs_panel.rows %}
+                <tr class="ngs-row" data-row-id="{{ row.id|e }}" tabindex="0" role="button">
+                  <td class="allele-cell">{{ row.allele_display }}{% if row.is_isoallele %}<sup class="allele-iso">iso{% if row.iso_ordinal > 1 %}{{ row.iso_ordinal }}{% endif %}</sup>{% endif %}</td>
+                  <td class="num cov-cell" title="{{ '%.2f'|format(row.coverage_fraction_pct) }}% of locus reads"><b>{{ row.coverage_reads }}</b></td>
+                  <td class="mono">{{ row.repeat_sequence }}</td>
+                  <td class="mono sequence-cell"><div class="sequence-scroll">{{ row.full_sequence_html | safe }}</div></td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+            <p class="ngs-empty">No alleles in the NGS summary panel for this locus.</p>
+            {% endif %}
+            <div class="ngs-chart-wrap">
+              {{ r.svg_allele_coverage | safe }}
+            </div>
+          </div>
           {% if r.warnings %}
           <div style="margin-top:10px;font-size:12px;color:var(--warn);">
             {% for w in r.warnings %}<div>⚠ {{ w }}</div>{% endfor %}
           </div>
           {% endif %}
-          <table class="allele-table">
+        </div>
+        <div class="locus-split">
+          <div class="locus-split-main">
+          <details class="forensic-audit">
+            <summary><b>Forensic audit</b><span class="meta"> — all clusters</span></summary>
+            <table class="allele-table">
             <thead>
               <tr>
                 <th>#</th><th>ISFG</th><th>Motif runs</th><th class="num">CE</th><th class="num">len bp</th>
@@ -203,8 +245,9 @@
             {% endfor %}
             </tbody>
           </table>
-        </div>
-        <div>
+          </details>
+          </div>
+          <aside class="locus-split-aside">
           <div style="font-size:11px;color:var(--text-soft);margin-bottom:6px;">Haplotype split</div>
           {{ r.svg_haplotype | safe }}
           {% if r.longtr %}
@@ -215,6 +258,7 @@
             <div>ALT bp_diffs: {{ r.longtr.alleles|map(attribute='bp_diff')|list }}</div>
           </div>
           {% endif %}
+          </aside>
         </div>
       </div>
     </details>
