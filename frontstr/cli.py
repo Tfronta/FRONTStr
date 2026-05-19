@@ -123,16 +123,116 @@ def run(
 @app.command("batch")
 def batch(
     manifest: Annotated[Path, typer.Option("--manifest", help="Batch manifest TSV.")],
-    panel: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
-    reference: Annotated[Path, typer.Option("--reference", "-r", help="Reference FASTA.")],
+    panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
     out: Annotated[Path, typer.Option("--out", "-o", help="Output directory.")],
+    reference: Annotated[
+        Path | None,
+        typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
+    ] = None,
+    formats: Annotated[
+        str,
+        typer.Option(
+            "--formats",
+            help=(
+                "Comma-separated list. One or more of: "
+                "profile,evidence,seqs,json,html."
+            ),
+        ),
+    ] = "profile,evidence,seqs,json,html",
+    workers: Annotated[
+        int, typer.Option("--workers", "-j", help="Parallel processes (default: 1).")
+    ] = 1,
+    platform: Annotated[str, typer.Option("--platform")] = "ont",
+    operator: Annotated[str | None, typer.Option("--operator")] = None,
+    run_id: Annotated[str | None, typer.Option("--run-id")] = None,
+    min_mapq: Annotated[int, typer.Option("--min-mapq")] = 20,
+    identity: Annotated[float, typer.Option("--identity")] = 0.97,
+    analytical_thresh: Annotated[float, typer.Option("--analytical-thresh")] = 0.02,
+    calling_thresh: Annotated[float, typer.Option("--calling-thresh")] = 0.10,
 ) -> None:
-    """Run FRONTStr on a multi-sample batch (Phase 4)."""
-    _ = manifest, panel, reference, out
+    """Run FRONTStr on a multi-sample batch from a manifest TSV.
+
+    The manifest is a tab-separated file with columns ``sample_id``, ``bam``
+    and optionally ``role`` (sample|positive_ctrl|negative_ctrl|reagent_blank).
+    Lines starting with ``#`` are ignored. Example::
+
+        # FRONTStr batch manifest
+        sample_id\\tbam\\trole
+        HG00113\\t/data/HG00113.bam\\tsample
+        CTRL_POS\\t/data/ctrl_pos.bam\\tpositive_ctrl
+
+    Per-sample outputs are written under ``<out>/<sample_id>/``.
+    A ``batch_summary.csv`` with all called CEs is written to ``<out>/``.
+    """
+    import os
+
+    from frontstr.batch import parse_manifest, run_batch
+    from frontstr.panel.loader import load_panel
+
+    wanted = frozenset(f.strip().lower() for f in formats.split(",") if f.strip())
+    unknown = wanted - {"profile", "evidence", "seqs", "json", "html"}
+    if unknown:
+        console.print(f"[red]Unknown formats:[/red] {sorted(unknown)}")
+        raise typer.Exit(code=2)
+
+    try:
+        entries = parse_manifest(manifest)
+        panel = load_panel(panel_path)
+    except FrontstrError as exc:
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+
+    n = len(entries)
+    effective_workers = max(1, min(workers, n, os.cpu_count() or 1))
     console.print(
-        "[yellow]not implemented yet[/yellow] — Phase 4 of ROADMAP.md."
+        f"[bold]FRONTStr batch[/bold] — {n} sample(s), "
+        f"{effective_workers} worker(s), panel: [cyan]{panel.name}[/cyan]"
     )
-    raise typer.Exit(code=64)
+
+    completed: list[str] = []
+
+    def _tick(sample_id: str) -> None:
+        completed.append(sample_id)
+        console.print(f"  [{len(completed)}/{n}] {sample_id}")
+
+    try:
+        results = run_batch(
+            entries=entries,
+            panel=panel,
+            out_dir=out,
+            reference_fasta=reference,
+            formats=wanted,
+            min_mapq=min_mapq,
+            identity=identity,
+            analytical_thresh=analytical_thresh,
+            calling_thresh=calling_thresh,
+            platform=platform,
+            operator=operator,
+            run_id=run_id,
+            workers=effective_workers,
+            progress_callback=_tick,
+        )
+    except FrontstrError as exc:
+        console.print(f"[red]batch error:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+
+    ok = sum(1 for r in results if r.status == "ok")
+    errors = [r for r in results if r.status == "error"]
+
+    console.print(f"\n[green]✓ {ok}/{n} samples succeeded[/green]")
+    if errors:
+        console.print(f"[red]✗ {len(errors)} error(s):[/red]")
+        for r in errors:
+            first_line = r.error.splitlines()[0] if r.error else "unknown"
+            console.print(f"  [red]{r.sample_id}[/red]: {first_line}")
+
+    summary = out / "batch_summary.csv"
+    if summary.exists():
+        size_kb = summary.stat().st_size / 1024
+        console.print(f"[green]wrote[/green] {summary}  ({size_kb:.1f} KB)")
+
+    if errors:
+        raise typer.Exit(code=1)
 
 
 @app.command("call")
