@@ -187,17 +187,33 @@ def _locate_window(
     Handles insertions (extra read bases inside the window) and deletions
     (missing reference positions inside the window) naturally because
     ``get_aligned_pairs`` reports indel positions with ``None`` on one side.
+
+    Deletion-at-boundary handling:
+    - If a deletion covers ``start``, qstart is set to the first non-None qpos
+      at any rpos >= start (i.e., the first read base after the deleted region).
+    - If a deletion covers ``end``, qend is set to last_qpos + 1 (exclusive
+      slice index after the last read base that was inside the window).
     """
     qstart: int | None = None
     qend: int | None = None
+    last_qpos: int | None = None  # tracks last non-None qpos for deletion-at-end
     for qpos, rpos in read.get_aligned_pairs(matches_only=False):  # type: ignore[attr-defined]
         if rpos is None:
             continue
-        if rpos == start and qstart is None and qpos is not None:
-            qstart = qpos
-        if rpos == end and qend is None and qpos is not None:
-            qend = qpos
+        if qpos is not None:
+            last_qpos = qpos
+        # Check end boundary first so we break as soon as the window is passed.
+        if rpos >= end:
+            if qpos is not None and rpos == end:
+                qend = qpos
+            else:
+                # Deletion at or spanning end: use position after last matched base.
+                qend = last_qpos + 1 if last_qpos is not None else None
             break
+        # Accept the first non-None qpos at any rpos >= start so that a deletion
+        # covering the exact start position does not silently lose the read.
+        if qstart is None and rpos >= start and qpos is not None:
+            qstart = qpos
     return qstart, qend
 
 

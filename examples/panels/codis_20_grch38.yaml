@@ -206,10 +206,14 @@ systems:
     category: autosomal
 
   - name: AMEL
+    marker_type: amel
     chromosome: chrX
     ref_start: 11296898
     ref_end: 11297012
-    motif: A  # not a real TR; AMEL handled specially in interp/amel.py
+    y_chromosome: chrY
+    y_ref_start: 6732519
+    y_ref_end: 6732633
+    motif: A  # placeholder; AMEL is not a TR, marker_type=amel routes to interp/amel.py
     period: 1
     corr_value: 0
     category: x_chromosomal

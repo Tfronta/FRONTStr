@@ -284,7 +284,8 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
             row[f"allele{i + 1}_ce_label"] = ce_label
             row[f"allele{i + 1}_ce_is_kit_ce"] = ce_is_kit
             row[f"allele{i + 1}_cov"] = slot.n_reads_total
-            row[f"allele{i + 1}_hp"] = f"{slot.n_reads_hp1}/{slot.n_reads_hp2}"
+            row[f"allele{i + 1}_hp1"] = slot.n_reads_hp1
+            row[f"allele{i + 1}_hp2"] = slot.n_reads_hp2
         else:
             row[f"allele{i + 1}_isfg"] = None
             row[f"allele{i + 1}_repeat_summary"] = None
@@ -293,7 +294,8 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
             row[f"allele{i + 1}_ce_label"] = None
             row[f"allele{i + 1}_ce_is_kit_ce"] = None
             row[f"allele{i + 1}_cov"] = None
-            row[f"allele{i + 1}_hp"] = None
+            row[f"allele{i + 1}_hp1"] = None
+            row[f"allele{i + 1}_hp2"] = None
     return row
 
 
