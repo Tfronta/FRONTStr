@@ -126,6 +126,9 @@ def _serialize_marker(r: MarkerResult) -> dict[str, Any]:
             "ref_end": r.system.ref_end,
             "motif": r.system.motif,
             "period": r.system.period,
+            "corr_value": r.system.corr_value,
+            "reference_ce": r.system.reference_ce,
+            "allele_bp_step": r.system.allele_bp_step,
             "category": r.system.category,
             "allow_triallelic": r.system.allow_triallelic,
         },
@@ -152,6 +155,8 @@ def _serialize_allele(a: Allele, total_reads: int, motif: str) -> dict[str, Any]
         "consensus": a.consensus,
         "length_bp": a.length_bp,
         "ce": a.ce,
+        "allele_numeric": a.allele_numeric,
+        "allele_numeric_source": a.allele_numeric_source,
         "isfg": a.isfg,
         "motif_repeat_summary": motif_repeat_summary(a.consensus, motif),
         "bp_diff": a.bp_diff,
@@ -204,6 +209,52 @@ def _serialize_longtr(r: MarkerResult) -> dict[str, Any] | None:
     }
 
 
+def _trim_ce_display(ce: float) -> str:
+    """Pretty CE string from a forensic CE value."""
+    x = round(float(ce), 4)
+    if abs(x - int(x)) < 1e-9:
+        return str(int(round(x)))
+    return f"{x:.10f}".rstrip("0").rstrip(".")
+
+
+def _profile_allele_ce_sort_and_label(
+    ce: float | None, length_bp: int
+) -> tuple[float | None, str | None, bool]:
+    """Legacy CE / TR-bp cell when :attr:`Allele.allele_numeric` is absent."""
+    if ce is not None:
+        x = round(float(ce), 4)
+        return (x, _trim_ce_display(ce), True)
+    if length_bp > 0:
+        return (float(length_bp), f"{length_bp} bp TR", False)
+    return (None, None, False)
+
+
+def _profile_forensic_display(
+    *,
+    allele_numeric: float | None,
+    allele_src: str,
+    ce: float | None,
+    length_bp: int,
+) -> tuple[float | None, str | None, bool]:
+    """(sort key, table cell, confident_absolute_scale).
+
+    Prefer :class:`Allele.allele_numeric`; fall back to CE / bp TR strings.
+    """
+    if (
+        allele_numeric is not None
+        and allele_src
+        and allele_src not in {"unavailable", "deletion"}
+    ):
+        base = _trim_ce_display(float(allele_numeric))
+        if allele_src == "delta_only" and abs(float(allele_numeric)) > 1e-9:
+            label = f"Δ{base}"
+        else:
+            label = base
+        confident = allele_src in {"period_ce", "reference_offset"}
+        return float(allele_numeric), label, confident
+    return _profile_allele_ce_sort_and_label(ce, length_bp)
+
+
 def _profile_row(r: MarkerResult) -> dict[str, Any]:
     """Wide row for the profile table: 1 marker, up to 3 alleles."""
     called = list(r.alleles_called)[:3]
@@ -223,12 +274,24 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
                 slot.consensus, r.system.motif
             )
             row[f"allele{i + 1}_ce"] = slot.ce
+            ce_sort, ce_label, ce_is_kit = _profile_forensic_display(
+                allele_numeric=slot.allele_numeric,
+                allele_src=slot.allele_numeric_source,
+                ce=slot.ce,
+                length_bp=slot.length_bp,
+            )
+            row[f"allele{i + 1}_ce_sort"] = ce_sort
+            row[f"allele{i + 1}_ce_label"] = ce_label
+            row[f"allele{i + 1}_ce_is_kit_ce"] = ce_is_kit
             row[f"allele{i + 1}_cov"] = slot.n_reads_total
             row[f"allele{i + 1}_hp"] = f"{slot.n_reads_hp1}/{slot.n_reads_hp2}"
         else:
             row[f"allele{i + 1}_isfg"] = None
             row[f"allele{i + 1}_repeat_summary"] = None
             row[f"allele{i + 1}_ce"] = None
+            row[f"allele{i + 1}_ce_sort"] = None
+            row[f"allele{i + 1}_ce_label"] = None
+            row[f"allele{i + 1}_ce_is_kit_ce"] = None
             row[f"allele{i + 1}_cov"] = None
             row[f"allele{i + 1}_hp"] = None
     return row

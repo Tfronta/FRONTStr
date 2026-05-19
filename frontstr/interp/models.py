@@ -78,6 +78,11 @@ class Allele:
     isfg: str
     bp_diff: int
     is_deletion: bool
+    #: Primary numeric allele for reports: CE when period is defined, else
+    #: LongTR-style offset from REF anchor (see :mod:`frontstr.interp.allele_numeric`).
+    allele_numeric: float | None = None
+    #: ``period_ce`` | ``reference_offset`` | ``delta_only`` | ``deletion`` | ``unavailable``
+    allele_numeric_source: str = ""
     expected_stutter: float = 0.0
     status: AlleleStatus = AlleleStatus.PENDING
     longtr_match: bool = False

@@ -15,6 +15,7 @@ from frontstr.evidence.cluster import Cluster, cluster_observations
 from frontstr.evidence.pileup import pileup_locus
 from frontstr.interp.classify import classify_allele
 from frontstr.interp.concordance import cross_check
+from frontstr.interp.allele_numeric import compute_allele_numeric, resolve_ref_anchor_bp
 from frontstr.interp.isfg import ce_from_length, compress_isfg
 from frontstr.interp.models import Allele, MarkerResult
 from frontstr.interp.stutter import build_expected_stutter
@@ -46,12 +47,16 @@ def interpret_marker(
         calling_thresh: Below this fraction (but >= analytical) → artefact.
         parent_fraction: Clusters with fraction ≥ this become parents for
             stutter-expectation calculation (default 0.20).
-        ref_length_bp: Reference allele length used to compute ``bp_diff``.
-            If ``None`` and ``longtr`` is provided, falls back to ``len(longtr.alleles[0].sequence)``.
+        ref_length_bp: Optional override for reference TR length (bp) used for
+            ``bp_diff`` and compound numeric alleles. If ``None``, uses LongTR REF
+            length when ``longtr`` is present, otherwise the panel span
+            (``ref_end - ref_start + 1``).
     """
     total_reads = sum(c.n_reads for c in clusters)
-    if ref_length_bp is None and longtr and longtr.alleles:
-        ref_length_bp = len(longtr.alleles[0].sequence)
+    longtr_ref_len = len(longtr.alleles[0].sequence) if longtr and longtr.alleles else None
+    ref_length_bp = resolve_ref_anchor_bp(
+        system, explicit=ref_length_bp, longtr_ref_len=longtr_ref_len
+    )
 
     alleles = [
         _allele_from_cluster(idx, c, system, ref_length_bp)
@@ -164,17 +169,16 @@ def _safe_pileup_and_cluster(
 
 
 def _allele_from_cluster(
-    idx: int, c: Cluster, system: System, ref_length_bp: int | None,
+    idx: int, c: Cluster, system: System, ref_length_bp: int,
 ) -> Allele:
     """Build an unclassified :class:`Allele` from one :class:`Cluster`."""
     consensus = c.consensus
     is_deletion = len(consensus) == 0
     ce = ce_from_length(len(consensus), system.period, system.corr_value)
     isfg = compress_isfg(consensus, motif=system.motif) if consensus else ""
-    bp_diff = (
-        len(consensus) - ref_length_bp
-        if ref_length_bp is not None
-        else 0
+    bp_diff = len(consensus) - ref_length_bp
+    allele_num, allele_src = compute_allele_numeric(
+        len(consensus), system, ref_length_bp
     )
     return Allele(
         cluster_index=idx,
@@ -191,6 +195,8 @@ def _allele_from_cluster(
         isfg=isfg,
         bp_diff=bp_diff,
         is_deletion=is_deletion,
+        allele_numeric=allele_num,
+        allele_numeric_source=allele_src,
     )
 
 

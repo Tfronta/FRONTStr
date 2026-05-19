@@ -1,0 +1,23 @@
+name: demo-panel
+version: "0.1"
+reference_build: GRCh38
+description: Demo two-locus panel for FRONTStr Phase 1.5
+systems:
+  - name: TH01_LIKE
+    chromosome: chr1
+    ref_start: 101
+    ref_end: 148
+    motif: AGAT
+    period: 4
+    corr_value: 0
+    category: autosomal
+  - name: TPOX_LIKE
+    chromosome: chr1
+    ref_start: 301
+    ref_end: 332
+    motif: AATG
+    period: 4
+    corr_value: 0
+    category: autosomal
+    allow_triallelic: true
+    tri_balanced_thr: 0.5

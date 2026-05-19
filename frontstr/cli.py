@@ -27,6 +27,26 @@ app = typer.Typer(
 console = Console()
 
 
+def _interpret_allele_cell(a) -> str:
+    """Format one genotype line: numeric allele … (reads).
+
+    Mirrors :mod:`frontstr.interp.allele_numeric` — CE / Δ / len fallback."""
+    cov = a.n_reads_total
+    ns = getattr(a, "allele_numeric_source", "") or ""
+    num = getattr(a, "allele_numeric", None)
+    if num is not None and ns not in ("", "deletion", "unavailable"):
+        v = float(num)
+        body = f"{v:.10f}".rstrip("0").rstrip(".")
+        if ns == "delta_only" and abs(v) > 1e-9:
+            body = f"Δ{body}"
+        return f"{body}({cov})"
+    ce = getattr(a, "ce", None)
+    if ce is not None:
+        body = f"{float(ce):.10f}".rstrip("0").rstrip(".")
+        return f"{body}({cov})"
+    return f"len{getattr(a, 'length_bp', 0)}({cov})"
+
+
 def _version_callback(value: bool) -> None:
     if value:
         console.print(f"[bold]FRONTStr[/bold] {__version__}")
@@ -509,10 +529,7 @@ def interpret(
     t.add_column("Cov", justify="right")
     t.add_column("LongTR?")
     for r in results:
-        called = ", ".join(
-            f"CE{a.ce}({a.n_reads_total})" if a.ce is not None else f"len{a.length_bp}({a.n_reads_total})"
-            for a in r.alleles_called
-        )
+        called = ", ".join(_interpret_allele_cell(a) for a in r.alleles_called)
         longtr_flag = (
             "[red]discordant[/red]" if r.discordant
             else ("ok" if r.longtr_result else "-")

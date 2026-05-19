@@ -23,6 +23,14 @@ class System(BaseModel):
     corr_value: int = 0
     category: str = "autosomal"
 
+    #: Kit-style allele number for the GRCh38 (or configured build) REF
+    #: haplotype in this panel interval. Enables ``Δbp/step`` → absolute alleles for
+    #: compound markers (period -1); curate per lab from STRBase / manufacturer tables.
+    reference_ce: float | None = None
+    #: Effective bp increment per +1 forensic repeat unit used with ``Δ bp`` versus
+    #: the REF anchor length (defaults to tetranucleotide-style mapping).
+    allele_bp_step: int = Field(default=4, ge=1)
+
     min_mapq: int | None = None
     min_mean_qual: int | None = None
     max_tr_len: int = 1000

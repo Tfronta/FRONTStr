@@ -72,17 +72,17 @@
           <th data-sortable="text">Call</th>
           <th data-sortable="text">Allele 1 (ISFG)</th>
           <th data-sortable="text">Motif runs 1</th>
-          <th data-sortable="num">CE 1</th>
-          <th data-sortable="num">Cov 1</th>
+          <th data-sortable="num">Allele idx 1 <span class="th-hint">CE / bp</span></th>
+          <th data-sortable="num">Reads 1</th>
           <th data-sortable="text">Allele 2 (ISFG)</th>
           <th data-sortable="text">Motif runs 2</th>
-          <th data-sortable="num">CE 2</th>
-          <th data-sortable="num">Cov 2</th>
+          <th data-sortable="num">Allele idx 2 <span class="th-hint">CE / bp</span></th>
+          <th data-sortable="num">Reads 2</th>
           {% if profile_show_tri %}
           <th data-sortable="text">Allele 3 (ISFG)</th>
           <th data-sortable="text">Motif runs 3</th>
-          <th data-sortable="num">CE 3</th>
-          <th data-sortable="num">Cov 3</th>
+          <th data-sortable="num">Allele idx 3 <span class="th-hint">CE / bp</span></th>
+          <th data-sortable="num">Reads 3</th>
           {% endif %}
           <th data-sortable="num">Total</th>
           <th data-sortable="text">Status</th>
@@ -97,16 +97,34 @@
           <td class="mono">{{ row.call_rule }}</td>
           <td class="mono">{{ row.allele1_isfg or '' }}</td>
           <td class="mono repeat-line">{{ row.allele1_repeat_summary or '' }}</td>
-          <td class="num" data-sort-value="{{ row.allele1_ce if row.allele1_ce is not none else '' }}">{{ row.allele1_ce if row.allele1_ce is not none else '–' }}</td>
+          <td class="num{% if row.allele1_ce_is_kit_ce %} ce-kit-ce{% endif %}"
+              data-sort-value="{{ row.allele1_ce_sort if row.allele1_ce_sort is not none else '' }}"
+              {% if row.allele1_ce_label %}
+                {% if row.allele1_ce_is_kit_ce %}title="CE from panel: (repeat length − corr) / period."
+                {% else %}title="Sizing only: tandem-repeat span within the marker window (compound motif; not a CODIS ladder allele)."
+                {% endif %}
+              {% endif %}>{{ row.allele1_ce_label if row.allele1_ce_label else '–' }}</td>
           <td class="num" data-sort-value="{{ row.allele1_cov or 0 }}">{{ row.allele1_cov if row.allele1_cov is not none else '–' }}</td>
           <td class="mono">{{ row.allele2_isfg or '' }}</td>
           <td class="mono repeat-line">{{ row.allele2_repeat_summary or '' }}</td>
-          <td class="num" data-sort-value="{{ row.allele2_ce if row.allele2_ce is not none else '' }}">{{ row.allele2_ce if row.allele2_ce is not none else '–' }}</td>
+          <td class="num{% if row.allele2_ce_is_kit_ce %} ce-kit-ce{% endif %}"
+              data-sort-value="{{ row.allele2_ce_sort if row.allele2_ce_sort is not none else '' }}"
+              {% if row.allele2_ce_label %}
+                {% if row.allele2_ce_is_kit_ce %}title="CE from panel: (repeat length − corr) / period."
+                {% else %}title="Sizing only: tandem-repeat span within the marker window (compound motif; not a CODIS ladder allele)."
+                {% endif %}
+              {% endif %}>{{ row.allele2_ce_label if row.allele2_ce_label else '–' }}</td>
           <td class="num" data-sort-value="{{ row.allele2_cov or 0 }}">{{ row.allele2_cov if row.allele2_cov is not none else '–' }}</td>
           {% if profile_show_tri %}
           <td class="mono">{{ row.allele3_isfg or '' }}</td>
           <td class="mono repeat-line">{{ row.allele3_repeat_summary or '' }}</td>
-          <td class="num" data-sort-value="{{ row.allele3_ce if row.allele3_ce is not none else '' }}">{{ row.allele3_ce if row.allele3_ce is not none else '–' }}</td>
+          <td class="num{% if row.allele3_ce_is_kit_ce %} ce-kit-ce{% endif %}"
+              data-sort-value="{{ row.allele3_ce_sort if row.allele3_ce_sort is not none else '' }}"
+              {% if row.allele3_ce_label %}
+                {% if row.allele3_ce_is_kit_ce %}title="CE from panel: (repeat length − corr) / period."
+                {% else %}title="Sizing only: tandem-repeat span within the marker window (compound motif; not a CODIS ladder allele)."
+                {% endif %}
+              {% endif %}>{{ row.allele3_ce_label if row.allele3_ce_label else '–' }}</td>
           <td class="num" data-sort-value="{{ row.allele3_cov or 0 }}">{{ row.allele3_cov if row.allele3_cov is not none else '–' }}</td>
           {% endif %}
           <td class="num">{{ row.total_reads }}</td>
@@ -118,6 +136,7 @@
       {% endfor %}
       </tbody>
     </table>
+    <p class="profile-note"><strong>Coverage vs reads:</strong> each <em>Reads N</em> column counts evidence reads for that consensus. <strong>Total</strong> is all spanning reads (includes stutter / noise peaks not genotype-called). <strong>Allele idx</strong> uses panel CE when <code>period ≥ 1</code>. Compound loci (<code>period: -1</code>) use LongTR-style math: Δbp versus the REF anchor length (panel span when no caller VCF, else LongTR REF allele length), scaled by <code>allele_bp_step</code> (default 4), plus optional <code>reference_ce</code> in the YAML — the CODIS/str number for the genome reference haplotype in that window. Without <code>reference_ce</code>, values prefixed <strong>Δ</strong> are repeat-unit offset from that anchor only; set lab-curated <code>reference_ce</code> per marker for CODIS-scale output alongside sequence.</p>
   </div>
 </section>
 

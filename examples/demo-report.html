@@ -1,0 +1,1886 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="FRONTStr 0.1.0.dev0">
+<title>FRONTStr — FRONTStr-Demo (demo-panel)</title>
+<style>/* FRONTStr report — STRhub-aligned tokens (teal accent, shadcn-like neutrals).
+ * Single-file offline bundle; no Tailwind runtime.
+ */
+
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --muted: #f1f5f9;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text: #0f172a;
+  --text-soft: #475569;
+  --text-faint: #94a3b8;
+
+  --accent: #0d9488;
+  --accent-foreground: #042f2e;
+  --accent-soft: rgba(13, 148, 136, 0.14);
+
+  --primary: #0d9488;
+  --primary-hover: #0f766e;
+  --primary-soft: #ccfbf1;
+
+  --seq-flank: #64748b;
+  --seq-repeat-bg: rgba(13, 148, 136, 0.2);
+  --seq-repeat-fg: #134e4a;
+
+  --success: #059669;
+  --warn: #d97706;
+  --danger: #dc2626;
+  --info: #475569;
+  --tri: #7c3aed;
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --radius: 8px;
+  --radius-lg: 10px;
+  --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --muted: #334155;
+    --border: #334155;
+    --border-strong: #475569;
+    --text: #f8fafc;
+    --text-soft: #cbd5e1;
+    --text-faint: #94a3b8;
+
+    --accent: #2dd4bf;
+    --accent-foreground: #ecfdf5;
+    --accent-soft: rgba(45, 212, 191, 0.14);
+
+    --primary: #2dd4bf;
+    --primary-hover: #5eead4;
+    --primary-soft: rgba(13, 148, 136, 0.25);
+
+    --seq-flank: #94a3b8;
+    --seq-repeat-bg: rgba(45, 212, 191, 0.22);
+    --seq-repeat-fg: #ccfbf1;
+
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.25);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--primary-hover); text-decoration: underline; }
+
+code, pre, .mono {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.app {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 32px 64px;
+}
+
+/* ---------- header (STRhub teal) ---------- */
+header.cover {
+  background: linear-gradient(135deg, #0f766e 0%, var(--accent) 45%, #14b8a6 100%);
+  color: white;
+  padding: 28px 32px;
+  border-radius: var(--radius-lg);
+  margin-bottom: 24px;
+  box-shadow: var(--shadow);
+}
+header.cover h1 {
+  margin: 0 0 4px;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+header.cover .subtitle {
+  font-size: 13px;
+  opacity: 0.85;
+}
+header.cover .meta {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+header.cover .meta span::before { content: "·"; margin-right: 4px; opacity: 0.5; }
+header.cover .meta span:first-child::before { content: ""; }
+
+/* ---------- nav ---------- */
+nav.page-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 4px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+}
+nav.page-tabs a {
+  padding: 6px 12px;
+  border-radius: 4px;
+  color: var(--text-soft);
+}
+nav.page-tabs a:hover {
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+  text-decoration: none;
+}
+
+/* ---------- KPI cards ---------- */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+.kpi {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(6px);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.9;
+}
+.kpi b { display: block; font-size: 26px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+.kpi.warn b { color: #ffcc80; }
+.kpi.danger b { color: #ffab91; }
+
+/* ---------- sections ---------- */
+section { margin: 28px 0; }
+section h2 {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 12px;
+  color: var(--text);
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+section h2 small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+}
+
+/* ---------- profile table ---------- */
+table.profile {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+table.profile thead th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-soft);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+}
+table.profile tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+table.profile tbody tr:hover { background: var(--accent-soft); }
+table.profile td.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.profile td.mono {
+  font-family: var(--mono);
+  font-size: 12px;
+  max-width: 280px;
+  word-break: break-word;
+  white-space: normal;
+}
+table.profile td.mono.repeat-line {
+  font-size: 11px;
+  color: var(--text-soft);
+  max-width: 220px;
+  word-break: break-word;
+  white-space: normal;
+}
+table.profile td.marker { font-weight: 600; }
+table.profile td.dim { color: var(--text-faint); }
+table.profile tr.row-discordant td { background: rgba(239, 108, 0, 0.06); }
+table.profile tr.row-mixture td { background: rgba(198, 40, 40, 0.06); }
+table.profile tr.row-no-data td { background: rgba(0, 0, 0, 0.025); }
+
+/* ---------- chips ---------- */
+.chip {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.chip.ok { background: rgba(46, 125, 50, 0.12); color: var(--success); }
+.chip.tri { background: rgba(123, 31, 162, 0.12); color: var(--tri); }
+.chip.mixture { background: rgba(198, 40, 40, 0.12); color: var(--danger); }
+.chip.discordant { background: rgba(239, 108, 0, 0.12); color: var(--warn); }
+.chip.no_data { background: rgba(0, 0, 0, 0.06); color: var(--text-faint); }
+
+/* ---------- locus detail ---------- */
+details.locus {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 10px 0;
+  box-shadow: var(--shadow);
+}
+details.locus[open] { border-color: var(--border-strong); }
+details.locus summary {
+  cursor: pointer;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  user-select: none;
+  list-style: none;
+}
+details.locus summary::-webkit-details-marker { display: none; }
+details.locus summary::before {
+  content: "▶";
+  font-size: 10px;
+  color: var(--text-faint);
+  transition: transform 0.15s;
+}
+details.locus[open] summary::before { transform: rotate(90deg); }
+details.locus summary b { font-size: 14px; flex-grow: 1; }
+details.locus summary .meta { font-size: 11px; color: var(--text-faint); }
+/* Per-locus: full-width NGS stack, then forensic + haplotype row */
+details.locus .body.locus-body {
+  padding: 0 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  align-items: stretch;
+}
+.locus-ngs-full {
+  width: 100%;
+}
+.locus-split {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.locus-split-main {
+  min-width: 0;
+}
+.locus-split-aside {
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .locus-split { grid-template-columns: 1fr; }
+}
+
+.locus-meta {
+  font-size: 12px;
+  color: var(--text-soft);
+  margin-bottom: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.locus-meta b { color: var(--text); font-weight: 600; }
+
+.allele-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 8px;
+}
+.allele-table th, .allele-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.allele-table th {
+  font-weight: 600;
+  color: var(--text-soft);
+}
+.allele-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.allele-table tr.is-allele { background: rgba(46, 125, 50, 0.04); }
+.allele-table tr.is-inexact { background: rgba(158, 157, 36, 0.06); }
+.allele-table tr.is-stutter { color: var(--text-soft); }
+.allele-table tr.is-noise, .allele-table tr.is-artefact { color: var(--text-faint); }
+
+/* ---------- NGS panel (STRhub card + catalog-style sequence) ---------- */
+.ngs-panel {
+  margin-top: 4px;
+  padding: 28px 28px 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.ngs-panel-head {
+  margin-bottom: 20px;
+  padding-bottom: 4px;
+}
+.ngs-panel-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.ngs-panel-sub {
+  margin: 12px 0 0;
+  font-size: 0.8125rem;
+  color: var(--text-soft);
+  line-height: 1.65;
+  max-width: 56rem;
+}
+
+.ngs-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.8125rem;
+  margin-bottom: 24px;
+}
+.ngs-table th, .ngs-table td {
+  padding: 14px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.ngs-table tbody tr:nth-child(even) {
+  background: var(--muted);
+}
+.ngs-table tbody tr.ngs-row:hover {
+  background: var(--accent-soft);
+}
+.ngs-table th {
+  font-weight: 600;
+  font-size: 0.8125rem;
+  color: var(--text-soft);
+  background: var(--muted);
+}
+.ngs-table th .th-hint {
+  font-weight: 400;
+  color: var(--text-faint);
+}
+.ngs-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ngs-table .allele-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ngs-table .allele-iso {
+  font-size: 0.62em;
+  font-weight: 600;
+  margin-left: 2px;
+  color: var(--text-soft);
+  vertical-align: super;
+}
+
+/* Sequence: horizontal scroll; flanks muted; repeat band (STRhub) */
+.ngs-table .sequence-cell {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+.sequence-scroll {
+  max-width: 420px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  padding: 2px 0 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.seq-flank {
+  color: var(--seq-flank);
+  font-weight: 400;
+}
+.repeat-highlight {
+  display: inline;
+  padding: 0.12em 0.35em;
+  margin-inline: 0.06em;
+  border-radius: 4px;
+  font-weight: 700;
+  color: var(--seq-repeat-fg);
+  background: var(--seq-repeat-bg);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.sequence-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.sequence-scroll::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ngs-table tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .ngs-table th {
+    background: rgba(255, 255, 255, 0.06);
+  }
+}
+
+.ngs-chart-wrap {
+  margin-top: 10px;
+  width: 100%;
+}
+.ngs-chart-wrap svg {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+}
+.ngs-empty {
+  margin: 0 0 16px;
+  font-size: 0.8125rem;
+  color: var(--text-soft);
+}
+tr.ngs-row {
+  cursor: pointer;
+}
+tr.ngs-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+tr.ngs-row.is-selected {
+  background: var(--accent-soft) !important;
+}
+rect.ngs-segment {
+  cursor: pointer;
+}
+rect.ngs-segment:focus {
+  outline: none;
+}
+rect.ngs-segment.is-selected {
+  stroke: var(--accent) !important;
+  stroke-width: 2.5px !important;
+}
+@media (prefers-color-scheme: dark) {
+  rect.ngs-segment.is-selected { stroke: var(--primary) !important; }
+}
+details.forensic-audit {
+  margin-top: 12px;
+}
+details.forensic-audit summary {
+  cursor: pointer;
+  font-size: 12px;
+  list-style: none;
+}
+details.forensic-audit summary::-webkit-details-marker { display: none; }
+
+/* ---------- raw page ---------- */
+.raw-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  font-size: 12px;
+}
+.raw-grid dt { color: var(--text-soft); }
+.raw-grid dd { margin: 0; word-break: break-all; font-family: var(--mono); }
+
+pre.argv {
+  background: rgba(15, 23, 42, 0.04);
+  padding: 12px;
+  border-radius: var(--radius);
+  font-size: 11px;
+  overflow-x: auto;
+}
+
+/* ---------- footer ---------- */
+footer.report-footer {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  font-size: 11px;
+  color: var(--text-faint);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  align-items: center;
+}
+footer.report-footer .hash {
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+/* ---------- print ---------- */
+@media print {
+  body { background: white; }
+  .app { max-width: 100%; padding: 8mm 10mm; }
+  nav.page-tabs, .toolbar { display: none; }
+  header.cover {
+    background: white !important;
+    color: black !important;
+    border: 1px solid var(--border);
+    page-break-after: avoid;
+  }
+  header.cover h1, header.cover .meta, .kpi b { color: black !important; }
+  .kpi { background: white !important; border: 1px solid var(--border); }
+  details.locus { break-inside: avoid; page-break-inside: avoid; }
+  details.locus[open] summary::before { display: none; }
+  details.locus { border: 1px solid var(--border) !important; }
+}
+
+/* ---------- table sort/filter UI ---------- */
+.toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  align-items: center;
+}
+.toolbar input[type="search"] {
+  font: inherit;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  min-width: 220px;
+}
+.toolbar select {
+  font: inherit;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+}
+.toolbar .pill {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-left: auto;
+}
+table.profile thead th[data-sortable] { cursor: pointer; user-select: none; }
+table.profile thead th[data-sortable]:hover { color: var(--primary); }
+table.profile thead th[data-sort-dir="asc"]::after { content: " ▲"; font-size: 10px; }
+table.profile thead th[data-sort-dir="desc"]::after { content: " ▼"; font-size: 10px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+
+
+
+<header class="cover" id="cover">
+  <h1>FRONTStr-Demo</h1>
+  <div class="subtitle">
+    demo-panel v0.1
+     · operator demo@frontstr
+     · run demo-001
+  </div>
+  <div class="meta">
+    <span>Platform: ONT</span>
+    <span>Reference: GRCh38</span>
+    
+    <span>Generated: 2026-05-18T17:17:57.102475+00:00</span>
+    <span>FRONTStr 0.1.0.dev0</span>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi"><b>2</b>loci in panel</div>
+    <div class="kpi"><b>2</b>called</div>
+    <div class="kpi warn"><b>1</b>tri-allelic</div>
+    <div class="kpi "><b>0</b>drop-outs</div>
+    <div class="kpi "><b>0</b>mixture alert</div>
+    <div class="kpi "><b>0</b>LongTR discord</div>
+  </div>
+</header>
+
+<nav class="page-tabs">
+  <a href="#profile">Profile</a>
+  <a href="#qc">QC</a>
+  <a href="#loci">Per-locus</a>
+  <a href="#raw">Raw / Audit</a>
+</nav>
+
+
+
+
+<section id="profile">
+  
+  <h2>Forensic profile <small>2/2 markers called</small></h2>
+  <div class="card">
+    <div class="toolbar">
+      <input id="profile-search" type="search" placeholder="filter markers (eg. TPOX)…" autocomplete="off">
+      <select id="profile-status">
+        <option value="">all statuses</option>
+        <option value="ok">OK</option>
+        <option value="tri">tri-allelic</option>
+        <option value="mixture">mixture</option>
+        <option value="discordant">discordant</option>
+        <option value="no_data">no data</option>
+      </select>
+      <span class="pill" id="profile-count"></span>
+    </div>
+    <table class="profile">
+      <thead>
+        <tr>
+          <th data-sortable="text">Marker</th>
+          <th data-sortable="text">Call</th>
+          <th data-sortable="text">Allele 1 (ISFG)</th>
+          <th data-sortable="text">Motif runs 1</th>
+          <th data-sortable="num">CE 1</th>
+          <th data-sortable="num">Cov 1</th>
+          <th data-sortable="text">Allele 2 (ISFG)</th>
+          <th data-sortable="text">Motif runs 2</th>
+          <th data-sortable="num">CE 2</th>
+          <th data-sortable="num">Cov 2</th>
+          
+          <th data-sortable="text">Allele 3 (ISFG)</th>
+          <th data-sortable="text">Motif runs 3</th>
+          <th data-sortable="num">CE 3</th>
+          <th data-sortable="num">Cov 3</th>
+          
+          <th data-sortable="num">Total</th>
+          <th data-sortable="text">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+      
+        <tr data-search="th01_like heterozygous ok "
+            data-chip="ok"
+            class="">
+          <td class="marker"><a href="#locus-TH01_LIKE">TH01_LIKE</a></td>
+          <td class="mono">heterozygous</td>
+          <td class="mono">[AGAT]12</td>
+          <td class="mono repeat-line">AGATx12 (TR 48 bp)</td>
+          <td class="num" data-sort-value="12.0">12.0</td>
+          <td class="num" data-sort-value="30">30</td>
+          <td class="mono">[AGAT]11</td>
+          <td class="mono repeat-line">AGATx11 (TR 44 bp)</td>
+          <td class="num" data-sort-value="11.0">11.0</td>
+          <td class="num" data-sort-value="25">25</td>
+          
+          <td class="mono"></td>
+          <td class="mono repeat-line"></td>
+          <td class="num" data-sort-value="">–</td>
+          <td class="num" data-sort-value="0">–</td>
+          
+          <td class="num">58</td>
+          <td>
+            <span class="chip ok">ok</span>
+            
+          </td>
+        </tr>
+      
+        <tr data-search="tpox_like triallelic_type_II tri tri_II_balanced"
+            data-chip="tri"
+            class="">
+          <td class="marker"><a href="#locus-TPOX_LIKE">TPOX_LIKE</a></td>
+          <td class="mono">triallelic_type_II</td>
+          <td class="mono">[AATG]8</td>
+          <td class="mono repeat-line">AATGx8 (TR 32 bp)</td>
+          <td class="num" data-sort-value="8.0">8.0</td>
+          <td class="num" data-sort-value="22">22</td>
+          <td class="mono">[AATG]9</td>
+          <td class="mono repeat-line">AATGx9 (TR 36 bp)</td>
+          <td class="num" data-sort-value="9.0">9.0</td>
+          <td class="num" data-sort-value="20">20</td>
+          
+          <td class="mono">[AATG]7</td>
+          <td class="mono repeat-line">AATGx7 (TR 28 bp)</td>
+          <td class="num" data-sort-value="7.0">7.0</td>
+          <td class="num" data-sort-value="20">20</td>
+          
+          <td class="num">62</td>
+          <td>
+            <span class="chip tri">tri</span>
+            <span class="chip tri">tri_II_balanced</span>
+          </td>
+        </tr>
+      
+      </tbody>
+    </table>
+  </div>
+</section>
+
+
+
+
+<section id="qc">
+  <h2>Quality control <small>mean 60.0x · min 58x · max 62x</small></h2>
+  <div class="card">
+    <h3 style="font-size:13px;margin:0 0 8px;color:var(--text-soft);">Coverage per locus</h3>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 84" width="100%" height="84" role="img" aria-label="Coverage per marker"><line x1="472.9" x2="472.9" y1="20" y2="68" stroke="#ef9a9a" stroke-width="1" stroke-dasharray="3 2"/><text x="472.9" y="14" text-anchor="middle" font-size="10" fill="#c62828">dropout floor (30x)</text><text x="104.0" y="40.0" text-anchor="end" font-size="11" fill="#37474f">TH01_LIKE</text><rect x="110" y="26" width="701.6" height="16" fill="#1976d2" rx="2" ry="2"><title>TH01_LIKE: 58 reads (ok)</title></rect><text x="815.6" y="40.0" font-size="11" fill="#37474f">58</text><text x="104.0" y="62.0" text-anchor="end" font-size="11" fill="#37474f">TPOX_LIKE</text><rect x="110" y="48" width="750.0" height="16" fill="#7b1fa2" rx="2" ry="2"><title>TPOX_LIKE: 62 reads (tri)</title></rect><text x="864.0" y="62.0" font-size="11" fill="#37474f">62</text></svg>
+  </div>
+  <div class="card" style="margin-top:14px;">
+    <h3 style="font-size:13px;margin:0 0 8px;color:var(--text-soft);">Cluster status distribution</h3>
+    <table class="profile">
+      <thead><tr><th>Status</th><th class="num">Clusters</th></tr></thead>
+      <tbody>
+      
+        <tr><td><span class="chip allele">allele</span></td><td class="num">5</td></tr>
+      
+        <tr><td><span class="chip artefact">artefact</span></td><td class="num">1</td></tr>
+      
+      </tbody>
+    </table>
+  </div>
+</section>
+
+
+
+
+<section id="loci">
+  <h2>
+    Per-locus detail
+    <small>
+      <button id="expand-all" type="button" style="font:inherit;cursor:pointer;background:none;border:0;color:var(--primary);padding:0;">expand all</button>
+      ·
+      <button id="collapse-all" type="button" style="font:inherit;cursor:pointer;background:none;border:0;color:var(--primary);padding:0;">collapse</button>
+    </small>
+  </h2>
+  
+    <details class="locus" id="locus-TH01_LIKE"
+             >
+      <summary>
+        <b>TH01_LIKE</b>
+        <span class="chip ok">heterozygous</span>
+        
+        
+        <span class="meta">chr1:101-148 · motif AGAT · 58 reads</span>
+      </summary>
+      <div class="body locus-body">
+        <div class="locus-ngs-full">
+          <div class="locus-meta">
+            <span><b>Motif</b> AGAT</span>
+            <span><b>Period</b> 4</span>
+            <span><b>Category</b> autosomal</span>
+            <span><b>Allow tri</b> no</span>
+            <span><b>Reads</b> 58</span>
+          </div>
+          <div class="ngs-panel" data-marker="TH01_LIKE">
+            <div class="ngs-panel-head">
+              <h3 class="ngs-panel-title">Next-Generation Sequencing Analysis</h3>
+              <p class="ngs-panel-sub">Allele haplotypes from ONT read clusters (FRONTStr evidence layer); coverage is read count per consensus sequence.</p>
+            </div>
+            
+            <table class="ngs-table">
+              <thead>
+                <tr>
+                  <th>Allele</th>
+                  <th class="num">Coverage <span class="th-hint">(reads)</span></th>
+                  <th>Repeat Sequence</th>
+                  <th>Full Sequence</th>
+                </tr>
+              </thead>
+              <tbody>
+              
+                <tr class="ngs-row" data-row-id="TH01_LIKE:1" tabindex="0" role="button">
+                  <td class="allele-cell">11</td>
+                  <td class="num cov-cell" title="43.10% of locus reads"><b>25</b></td>
+                  <td class="mono">[AGAT]11</td>
+                  <td class="mono sequence-cell"><div class="sequence-scroll"><span class="repeat-highlight">AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT</span></div></td>
+                </tr>
+              
+                <tr class="ngs-row" data-row-id="TH01_LIKE:0" tabindex="0" role="button">
+                  <td class="allele-cell">12</td>
+                  <td class="num cov-cell" title="51.72% of locus reads"><b>30</b></td>
+                  <td class="mono">[AGAT]12</td>
+                  <td class="mono sequence-cell"><div class="sequence-scroll"><span class="repeat-highlight">AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT</span></div></td>
+                </tr>
+              
+              </tbody>
+            </table>
+            
+            <div class="ngs-chart-wrap">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 124" width="100%" height="124" role="img" aria-label="Allele coverage for TH01_LIKE"><line x1="44" x2="624" y1="88.0" y2="88.0" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="2 4"/><text x="38" y="91.0" text-anchor="end" font-size="10" fill="#37474f">0</text><line x1="44" x2="624" y1="69.5" y2="69.5" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="2 4"/><text x="38" y="72.5" text-anchor="end" font-size="10" fill="#37474f">10</text><line x1="44" x2="624" y1="51.0" y2="51.0" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="2 4"/><text x="38" y="54.0" text-anchor="end" font-size="10" fill="#37474f">20</text><line x1="44" x2="624" y1="32.5" y2="32.5" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="2 4"/><text x="38" y="35.5" text-anchor="end" font-size="10" fill="#37474f">30</text><line x1="44" x2="624" y1="14.0" y2="14.0" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="2 4"/><text x="38" y="17.0" text-anchor="end" font-size="10" fill="#37474f">40</text><line x1="44" x2="44" y1="14" y2="88" stroke="#90a4ae" stroke-width="1"/><line x1="44" x2="624" y1="88" y2="88" stroke="#90a4ae" stroke-width="1"/><text x="6" y="51.0" transform="rotate(-90 6,51.0)" font-size="11" fill="#37474f">Read coverage</text><text x="334.0" y="114.0" text-anchor="middle" font-size="11" fill="#37474f">Allele</text><rect class="ngs-segment" tabindex="0" role="button" data-row-id="TH01_LIKE:1" x="113.6" y="41.8" width="150.8" height="46.2" fill="#0d9488" opacity="1" rx="2" ry="2" stroke="#e2f8f5" stroke-width="0.6"><title>25 reads</title></rect><text x="189.0" y="114.0" text-anchor="middle" font-size="11" fill="#37474f">11</text><rect class="ngs-segment" tabindex="0" role="button" data-row-id="TH01_LIKE:0" x="403.6" y="32.5" width="150.8" height="55.5" fill="#0d9488" opacity="1" rx="2" ry="2" stroke="#e2f8f5" stroke-width="0.6"><title>30 reads</title></rect><text x="479.0" y="114.0" text-anchor="middle" font-size="11" fill="#37474f">12</text></svg>
+            </div>
+          </div>
+          
+        </div>
+        <div class="locus-split">
+          <div class="locus-split-main">
+          <details class="forensic-audit">
+            <summary><b>Forensic audit</b><span class="meta"> — all clusters</span></summary>
+            <table class="allele-table">
+            <thead>
+              <tr>
+                <th>#</th><th>ISFG</th><th>Motif runs</th><th class="num">CE</th><th class="num">len bp</th>
+                <th class="num">reads</th><th class="num">HP1/HP2</th><th class="num">+/-</th>
+                <th class="num">mean Q</th><th class="num">ES</th><th>status</th>
+              </tr>
+            </thead>
+            <tbody>
+            
+              <tr class="is-allele">
+                <td>0</td>
+                <td class="mono">[AGAT]12</td>
+                <td class="mono" style="font-size:11px;color:var(--text-soft);">AGATx12 (TR 48 bp)</td>
+                <td class="num">12.0</td>
+                <td class="num">48</td>
+                <td class="num"><b>30</b></td>
+                <td class="num">30/0</td>
+                <td class="num">30/0</td>
+                <td class="num">40.0</td>
+                <td class="num">1.25</td>
+                <td><span class="chip ok">allele</span>
+                  
+                </td>
+              </tr>
+            
+              <tr class="is-allele">
+                <td>1</td>
+                <td class="mono">[AGAT]11</td>
+                <td class="mono" style="font-size:11px;color:var(--text-soft);">AGATx11 (TR 44 bp)</td>
+                <td class="num">11.0</td>
+                <td class="num">44</td>
+                <td class="num"><b>25</b></td>
+                <td class="num">0/25</td>
+                <td class="num">25/0</td>
+                <td class="num">40.0</td>
+                <td class="num">3.0</td>
+                <td><span class="chip ok">allele</span>
+                  
+                </td>
+              </tr>
+            
+              <tr class="is-artefact">
+                <td>2</td>
+                <td class="mono">[AGAT]10</td>
+                <td class="mono" style="font-size:11px;color:var(--text-soft);">AGATx10 (TR 40 bp)</td>
+                <td class="num">10.0</td>
+                <td class="num">40</td>
+                <td class="num"><b>3</b></td>
+                <td class="num">0/0</td>
+                <td class="num">3/0</td>
+                <td class="num">40.0</td>
+                <td class="num">2.8</td>
+                <td><span class="chip no_data">artefact</span>
+                  
+                </td>
+              </tr>
+            
+            </tbody>
+          </table>
+          </details>
+          </div>
+          <aside class="locus-split-aside">
+          <div style="font-size:11px;color:var(--text-soft);margin-bottom:6px;">Haplotype split</div>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="100%" height="200" role="img" aria-label="Haplotype split"><line x1="44" x2="308" y1="164.0" y2="164.0" stroke="#e0e0e0" stroke-width="1"/><text x="38" y="167.0" text-anchor="end" font-size="10" fill="#37474f">0</text><line x1="44" x2="308" y1="128.0" y2="128.0" stroke="#e0e0e0" stroke-width="1"/><text x="38" y="131.0" text-anchor="end" font-size="10" fill="#37474f">8</text><line x1="44" x2="308" y1="92.0" y2="92.0" stroke="#e0e0e0" stroke-width="1"/><text x="38" y="95.0" text-anchor="end" font-size="10" fill="#37474f">15</text><line x1="44" x2="308" y1="56.0" y2="56.0" stroke="#e0e0e0" stroke-width="1"/><text x="38" y="59.0" text-anchor="end" font-size="10" fill="#37474f">22</text><line x1="44" x2="308" y1="20.0" y2="20.0" stroke="#e0e0e0" stroke-width="1"/><text x="38" y="23.0" text-anchor="end" font-size="10" fill="#37474f">30</text><line x1="44" x2="44" y1="20" y2="164" stroke="#90a4ae" stroke-width="1"/><line x1="44" x2="308" y1="164" y2="164" stroke="#90a4ae" stroke-width="1"/><text x="6" y="92.0" transform="rotate(-90 6,92.0)" font-size="11" fill="#37474f">reads</text><rect x="64.0" y="20.0" width="92" height="144.0" fill="#1976d2" rx="1"><title>HP1: 30</title></rect><text x="110.0" y="178.0" text-anchor="middle" font-size="11" fill="#37474f">CE12.0</text><rect x="196.0" y="44.0" width="92" height="120.0" fill="#9c27b0" rx="1"><title>HP2: 25</title></rect><text x="242.0" y="178.0" text-anchor="middle" font-size="11" fill="#37474f">CE11.0</text><rect x="250" y="24" width="10" height="10" fill="#2e7d32" rx="1"/><text x="264" y="33" font-size="10" fill="#37474f">HP1</text><rect x="274" y="24" width="10" height="10" fill="#9c27b0" rx="1"/><text x="288" y="33" font-size="10" fill="#37474f">HP2</text><rect x="298" y="24" width="10" height="10" fill="#cfd8dc" rx="1"/><text x="312" y="33" font-size="10" fill="#37474f">no HP</text></svg>
+          
+          <div style="margin-top:12px;font-size:12px;">
+            <div style="color:var(--text-soft);margin-bottom:4px;">LongTR concordance</div>
+            <div>GT: [0, 1] (Q=0.99)</div>
+            <div>DP: 58 · PDP: 30 / 25</div>
+            <div>ALT bp_diffs: [0, -4]</div>
+          </div>
+          
+          </aside>
+        </div>
+      </div>
+    </details>
+  
+    <details class="locus" id="locus-TPOX_LIKE"
+             open>
+      <summary>
+        <b>TPOX_LIKE</b>
+        <span class="chip tri">triallelic_type_II</span>
+        <span class="chip tri">tri_II_balanced</span>
+        
+        <span class="meta">chr1:301-332 · motif AATG · 62 reads</span>
+      </summary>
+      <div class="body locus-body">
+        <div class="locus-ngs-full">
+          <div class="locus-meta">
+            <span><b>Motif</b> AATG</span>
+            <span><b>Period</b> 4</span>
+            <span><b>Category</b> autosomal</span>
+            <span><b>Allow tri</b> yes</span>
+            <span><b>Reads</b> 62</span>
+          </div>
+          <div class="ngs-panel" data-marker="TPOX_LIKE">
+            <div class="ngs-panel-head">
+              <h3 class="ngs-panel-title">Next-Generation Sequencing Analysis</h3>
+              <p class="ngs-panel-sub">Allele haplotypes from ONT read clusters (FRONTStr evidence layer); coverage is read count per consensus sequence.</p>
+            </div>
+            
+            <table class="ngs-table">
+              <thead>
+                <tr>
+                  <th>Allele</th>
+                  <th class="num">Coverage <span class="th-hint">(reads)</span></th>
+                  <th>Repeat Sequence</th>
+                  <th>Full Sequence</th>
+                </tr>
+              </thead>
+              <tbody>
+              
+                <tr class="ngs-row" data-row-id="TPOX_LIKE:2" tabindex="0" role="button">
+                  <td class="allele-cell">7</td>
+                  <td class="num cov-cell" title="32.26% of locus reads"><b>20</b></td>
+                  <td class="mono">[AATG]7</td>
+                  <td class="mono sequence-cell"><div class="sequence-scroll"><span class="repeat-highlight">AATGAATGAATGAATGAATGAATGAATG</span></div></td>
+                </tr>
+              
+                <tr class="ngs-row" data-row-id="TPOX_LIKE:0" tabindex="0" role="button">
+                  <td class="allele-cell">8</td>
+                  <td class="num cov-cell" title="35.48% of locus reads"><b>22</b></td>
+                  <td class="mono">[AATG]8</td>
+                  <td class="mono sequence-cell"><div class="sequence-scroll"><span class="repeat-highlight">AATGAATGAATGAATGAATGAATGAATGAATG</span></div></td>
+                </tr>
+              
+                <tr class="ngs-row" data-row-id="TPOX_LIKE:1" tabindex="0" role="button">
+                  <td class="allele-cell">9</td>
+                  <td class="num cov-cell" title="32.26% of locus reads"><b>20</b></td>
+                  <td class="mono">[AATG]9</td>
+                  <td class="mono sequence-cell"><div class="sequence-scroll"><span class="repeat-highlight">AATGAATGAATGAATGAATGAATGAATGAATGAATG</span></div></td>
+                </tr>
+              
+              </tbody>
+            </table>
+            
+            <div class="ngs-chart-wrap">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 142" width="100%" height="142" role="img" aria-label="Allele coverage for TPOX_LIKE"><line x1="44" x2="624" y1="106.0" y2="106.0" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="2 4"/><text x="38" y="109.0" text-anchor="end" font-size="10" fill="#37474f">0</text><line x1="44" x2="624" y1="83.0" y2="83.0" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="2 4"/><text x="38" y="86.0" text-anchor="end" font-size="10" fill="#37474f">8</text><line x1="44" x2="624" y1="60.0" y2="60.0" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="2 4"/><text x="38" y="63.0" text-anchor="end" font-size="10" fill="#37474f">15</text><line x1="44" x2="624" y1="37.0" y2="37.0" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="2 4"/><text x="38" y="40.0" text-anchor="end" font-size="10" fill="#37474f">22</text><line x1="44" x2="624" y1="14.0" y2="14.0" stroke="#e0e0e0" stroke-width="1" stroke-dasharray="2 4"/><text x="38" y="17.0" text-anchor="end" font-size="10" fill="#37474f">30</text><line x1="44" x2="44" y1="14" y2="106" stroke="#90a4ae" stroke-width="1"/><line x1="44" x2="624" y1="106" y2="106" stroke="#90a4ae" stroke-width="1"/><text x="6" y="60.0" transform="rotate(-90 6,60.0)" font-size="11" fill="#37474f">Read coverage</text><text x="334.0" y="132.0" text-anchor="middle" font-size="11" fill="#37474f">Allele</text><rect class="ngs-segment" tabindex="0" role="button" data-row-id="TPOX_LIKE:2" x="90.4" y="44.7" width="100.5" height="61.3" fill="#0d9488" opacity="1" rx="2" ry="2" stroke="#e2f8f5" stroke-width="0.6"><title>20 reads</title></rect><text x="140.7" y="132.0" text-anchor="middle" font-size="11" fill="#37474f">7</text><rect class="ngs-segment" tabindex="0" role="button" data-row-id="TPOX_LIKE:0" x="283.7" y="38.5" width="100.5" height="67.5" fill="#0d9488" opacity="1" rx="2" ry="2" stroke="#e2f8f5" stroke-width="0.6"><title>22 reads</title></rect><text x="334.0" y="132.0" text-anchor="middle" font-size="11" fill="#37474f">8</text><rect class="ngs-segment" tabindex="0" role="button" data-row-id="TPOX_LIKE:1" x="477.1" y="44.7" width="100.5" height="61.3" fill="#0d9488" opacity="1" rx="2" ry="2" stroke="#e2f8f5" stroke-width="0.6"><title>20 reads</title></rect><text x="527.3" y="132.0" text-anchor="middle" font-size="11" fill="#37474f">9</text></svg>
+            </div>
+          </div>
+          
+        </div>
+        <div class="locus-split">
+          <div class="locus-split-main">
+          <details class="forensic-audit">
+            <summary><b>Forensic audit</b><span class="meta"> — all clusters</span></summary>
+            <table class="allele-table">
+            <thead>
+              <tr>
+                <th>#</th><th>ISFG</th><th>Motif runs</th><th class="num">CE</th><th class="num">len bp</th>
+                <th class="num">reads</th><th class="num">HP1/HP2</th><th class="num">+/-</th>
+                <th class="num">mean Q</th><th class="num">ES</th><th>status</th>
+              </tr>
+            </thead>
+            <tbody>
+            
+              <tr class="is-allele">
+                <td>0</td>
+                <td class="mono">[AATG]8</td>
+                <td class="mono" style="font-size:11px;color:var(--text-soft);">AATGx8 (TR 32 bp)</td>
+                <td class="num">8.0</td>
+                <td class="num">32</td>
+                <td class="num"><b>22</b></td>
+                <td class="num">22/0</td>
+                <td class="num">22/0</td>
+                <td class="num">40.0</td>
+                <td class="num">3.0</td>
+                <td><span class="chip ok">allele</span>
+                  
+                </td>
+              </tr>
+            
+              <tr class="is-allele">
+                <td>1</td>
+                <td class="mono">[AATG]9</td>
+                <td class="mono" style="font-size:11px;color:var(--text-soft);">AATGx9 (TR 36 bp)</td>
+                <td class="num">9.0</td>
+                <td class="num">36</td>
+                <td class="num"><b>20</b></td>
+                <td class="num">0/20</td>
+                <td class="num">20/0</td>
+                <td class="num">40.0</td>
+                <td class="num">1.1</td>
+                <td><span class="chip ok">allele</span>
+                  
+                </td>
+              </tr>
+            
+              <tr class="is-allele">
+                <td>2</td>
+                <td class="mono">[AATG]7</td>
+                <td class="mono" style="font-size:11px;color:var(--text-soft);">AATGx7 (TR 28 bp)</td>
+                <td class="num">7.0</td>
+                <td class="num">28</td>
+                <td class="num"><b>20</b></td>
+                <td class="num">0/0</td>
+                <td class="num">20/0</td>
+                <td class="num">40.0</td>
+                <td class="num">2.4</td>
+                <td><span class="chip ok">allele</span>
+                  
+                </td>
+              </tr>
+            
+            </tbody>
+          </table>
+          </details>
+          </div>
+          <aside class="locus-split-aside">
+          <div style="font-size:11px;color:var(--text-soft);margin-bottom:6px;">Haplotype split</div>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="100%" height="200" role="img" aria-label="Haplotype split"><line x1="44" x2="308" y1="164.0" y2="164.0" stroke="#e0e0e0" stroke-width="1"/><text x="38" y="167.0" text-anchor="end" font-size="10" fill="#37474f">0</text><line x1="44" x2="308" y1="128.0" y2="128.0" stroke="#e0e0e0" stroke-width="1"/><text x="38" y="131.0" text-anchor="end" font-size="10" fill="#37474f">6</text><line x1="44" x2="308" y1="92.0" y2="92.0" stroke="#e0e0e0" stroke-width="1"/><text x="38" y="95.0" text-anchor="end" font-size="10" fill="#37474f">11</text><line x1="44" x2="308" y1="56.0" y2="56.0" stroke="#e0e0e0" stroke-width="1"/><text x="38" y="59.0" text-anchor="end" font-size="10" fill="#37474f">16</text><line x1="44" x2="308" y1="20.0" y2="20.0" stroke="#e0e0e0" stroke-width="1"/><text x="38" y="23.0" text-anchor="end" font-size="10" fill="#37474f">22</text><line x1="44" x2="44" y1="20" y2="164" stroke="#90a4ae" stroke-width="1"/><line x1="44" x2="308" y1="164" y2="164" stroke="#90a4ae" stroke-width="1"/><text x="6" y="92.0" transform="rotate(-90 6,92.0)" font-size="11" fill="#37474f">reads</text><rect x="57.5" y="20.0" width="61" height="144.0" fill="#1976d2" rx="1"><title>HP1: 22</title></rect><text x="88.0" y="178.0" text-anchor="middle" font-size="11" fill="#37474f">CE8.0</text><rect x="145.5" y="33.1" width="61" height="130.9" fill="#9c27b0" rx="1"><title>HP2: 20</title></rect><text x="176.0" y="178.0" text-anchor="middle" font-size="11" fill="#37474f">CE9.0</text><rect x="233.5" y="33.1" width="61" height="130.9" fill="#cfd8dc" rx="1"><title>no HP: 20</title></rect><text x="264.0" y="178.0" text-anchor="middle" font-size="11" fill="#37474f">CE7.0</text><rect x="250" y="24" width="10" height="10" fill="#2e7d32" rx="1"/><text x="264" y="33" font-size="10" fill="#37474f">HP1</text><rect x="274" y="24" width="10" height="10" fill="#9c27b0" rx="1"/><text x="288" y="33" font-size="10" fill="#37474f">HP2</text><rect x="298" y="24" width="10" height="10" fill="#cfd8dc" rx="1"/><text x="312" y="33" font-size="10" fill="#37474f">no HP</text></svg>
+          
+          </aside>
+        </div>
+      </div>
+    </details>
+  
+</section>
+
+
+
+
+<section id="raw">
+  <h2>Raw / audit</h2>
+  <div class="card">
+    <h3 style="font-size:13px;margin:0 0 8px;color:var(--text-soft);">Chain of custody (SHA-256)</h3>
+    <dl class="raw-grid">
+      <dt>Sample</dt><dd>FRONTStr-Demo</dd>
+      
+      <dt>BAM</dt><dd><span class="hash">4354ae8b82229ae6a642eb64cf8d85b109778b15b1f066081016cc2e74ae8faa</span> <button class="mono" type="button" data-copy="4354ae8b82229ae6a642eb64cf8d85b109778b15b1f066081016cc2e74ae8faa" style="font-size:10px;cursor:pointer;">copy</button></dd>
+      <dt>BAM path</dt><dd>examples/.report-build/demo.bam</dd>
+      
+      
+      <dt>LongTR VCF</dt><dd><span class="hash">2e0b948cb116840173a21d6016e7367849c911bfb6863c4cf35384055519f118</span></dd>
+      
+      
+      <dt>Report</dt><dd><span class="hash" id="report-hash">b1ebba8de8869f54191dcd3a7c4c52e0d5d4cb2ec43e5213d85a5ee5b87949d7</span></dd>
+    </dl>
+    
+  </div>
+  <details class="locus" id="run-data-blob" style="margin-top:14px;">
+    <summary><b>Embedded run payload (JSON)</b><span class="meta">click to inspect</span></summary>
+    <pre class="argv" style="max-height:60vh;overflow:auto;">{
+  "meta": {
+    "app": "frontstr",
+    "app_version": "0.1.0.dev0",
+    "sample_name": "FRONTStr-Demo",
+    "operator": "demo@frontstr",
+    "run_id": "demo-001",
+    "started_at": "2026-05-18T17:17:57.102475+00:00",
+    "platform": "ont",
+    "reference_build": "GRCh38",
+    "panel_name": "demo-panel",
+    "panel_version": "0.1",
+    "panel_sha256": null,
+    "bam_path": "examples/.report-build/demo.bam",
+    "bam_sha256": "4354ae8b82229ae6a642eb64cf8d85b109778b15b1f066081016cc2e74ae8faa",
+    "longtr_vcf_path": "examples/.report-build/longtr.vcf",
+    "longtr_vcf_sha256": "2e0b948cb116840173a21d6016e7367849c911bfb6863c4cf35384055519f118",
+    "longtr_version": null,
+    "pipeline_argv": [],
+    "dropout_floor": 30
+  },
+  "summary": {
+    "loci_total": 2,
+    "loci_called": 2,
+    "tri_count": 1,
+    "mixture_count": 0,
+    "discordant_count": 0,
+    "dropouts": 0
+  },
+  "qc": {
+    "mean_coverage": 60.0,
+    "min_coverage": 58,
+    "max_coverage": 62,
+    "coverage_table": [
+      {
+        "marker": "TH01_LIKE",
+        "coverage": 58,
+        "chip": "ok"
+      },
+      {
+        "marker": "TPOX_LIKE",
+        "coverage": 62,
+        "chip": "tri"
+      }
+    ],
+    "status_breakdown": [
+      {
+        "status": "allele",
+        "count": 5
+      },
+      {
+        "status": "artefact",
+        "count": 1
+      }
+    ]
+  },
+  "profile_rows": [
+    {
+      "marker": "TH01_LIKE",
+      "call_rule": "heterozygous",
+      "tri_type": "",
+      "total_reads": 58,
+      "discordant": false,
+      "status_chip": "ok",
+      "allele1_isfg": "[AGAT]12",
+      "allele1_repeat_summary": "AGATx12 (TR 48 bp)",
+      "allele1_ce": 12.0,
+      "allele1_cov": 30,
+      "allele1_hp": "30/0",
+      "allele2_isfg": "[AGAT]11",
+      "allele2_repeat_summary": "AGATx11 (TR 44 bp)",
+      "allele2_ce": 11.0,
+      "allele2_cov": 25,
+      "allele2_hp": "0/25",
+      "allele3_isfg": null,
+      "allele3_repeat_summary": null,
+      "allele3_ce": null,
+      "allele3_cov": null,
+      "allele3_hp": null
+    },
+    {
+      "marker": "TPOX_LIKE",
+      "call_rule": "triallelic_type_II",
+      "tri_type": "tri_II_balanced",
+      "total_reads": 62,
+      "discordant": false,
+      "status_chip": "tri",
+      "allele1_isfg": "[AATG]8",
+      "allele1_repeat_summary": "AATGx8 (TR 32 bp)",
+      "allele1_ce": 8.0,
+      "allele1_cov": 22,
+      "allele1_hp": "22/0",
+      "allele2_isfg": "[AATG]9",
+      "allele2_repeat_summary": "AATGx9 (TR 36 bp)",
+      "allele2_ce": 9.0,
+      "allele2_cov": 20,
+      "allele2_hp": "0/20",
+      "allele3_isfg": "[AATG]7",
+      "allele3_repeat_summary": "AATGx7 (TR 28 bp)",
+      "allele3_ce": 7.0,
+      "allele3_cov": 20,
+      "allele3_hp": "0/0"
+    }
+  ],
+  "results": [
+    {
+      "marker_name": "TH01_LIKE",
+      "system": {
+        "name": "TH01_LIKE",
+        "codis_name": null,
+        "chromosome": "chr1",
+        "ref_start": 101,
+        "ref_end": 148,
+        "motif": "AGAT",
+        "period": 4,
+        "category": "autosomal",
+        "allow_triallelic": false
+      },
+      "call_rule": "heterozygous",
+      "tri_type": "",
+      "total_reads": 58,
+      "analytical_thresh": 0.02,
+      "calling_thresh": 0.1,
+      "discordant": false,
+      "warnings": [],
+      "alleles": [
+        {
+          "cluster_index": 0,
+          "consensus": "AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT",
+          "length_bp": 48,
+          "ce": 12.0,
+          "isfg": "[AGAT]12",
+          "motif_repeat_summary": "AGATx12 (TR 48 bp)",
+          "bp_diff": 0,
+          "is_deletion": false,
+          "n_reads_total": 30,
+          "n_reads_hp1": 30,
+          "n_reads_hp2": 0,
+          "n_reads_hp_none": 0,
+          "n_forward": 30,
+          "n_reverse": 0,
+          "mean_qual": 40.0,
+          "expected_stutter": 1.25,
+          "status": "allele",
+          "longtr_match": true,
+          "longtr_inexact": false,
+          "longtr_bp_diff": 0,
+          "fraction": 0.5172
+        },
+        {
+          "cluster_index": 1,
+          "consensus": "AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT",
+          "length_bp": 44,
+          "ce": 11.0,
+          "isfg": "[AGAT]11",
+          "motif_repeat_summary": "AGATx11 (TR 44 bp)",
+          "bp_diff": -4,
+          "is_deletion": false,
+          "n_reads_total": 25,
+          "n_reads_hp1": 0,
+          "n_reads_hp2": 25,
+          "n_reads_hp_none": 0,
+          "n_forward": 25,
+          "n_reverse": 0,
+          "mean_qual": 40.0,
+          "expected_stutter": 3.0,
+          "status": "allele",
+          "longtr_match": true,
+          "longtr_inexact": false,
+          "longtr_bp_diff": -4,
+          "fraction": 0.431
+        },
+        {
+          "cluster_index": 2,
+          "consensus": "AGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT",
+          "length_bp": 40,
+          "ce": 10.0,
+          "isfg": "[AGAT]10",
+          "motif_repeat_summary": "AGATx10 (TR 40 bp)",
+          "bp_diff": -8,
+          "is_deletion": false,
+          "n_reads_total": 3,
+          "n_reads_hp1": 0,
+          "n_reads_hp2": 0,
+          "n_reads_hp_none": 3,
+          "n_forward": 3,
+          "n_reverse": 0,
+          "mean_qual": 40.0,
+          "expected_stutter": 2.8,
+          "status": "artefact",
+          "longtr_match": false,
+          "longtr_inexact": false,
+          "longtr_bp_diff": null,
+          "fraction": 0.0517
+        }
+      ],
+      "alleles_called": [
+        {
+          "cluster_index": 0,
+          "consensus": "AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT",
+          "length_bp": 48,
+          "ce": 12.0,
+          "isfg": "[AGAT]12",
+          "motif_repeat_summary": "AGATx12 (TR 48 bp)",
+          "bp_diff": 0,
+          "is_deletion": false,
+          "n_reads_total": 30,
+          "n_reads_hp1": 30,
+          "n_reads_hp2": 0,
+          "n_reads_hp_none": 0,
+          "n_forward": 30,
+          "n_reverse": 0,
+          "mean_qual": 40.0,
+          "expected_stutter": 1.25,
+          "status": "allele",
+          "longtr_match": true,
+          "longtr_inexact": false,
+          "longtr_bp_diff": 0,
+          "fraction": 0.5172
+        },
+        {
+          "cluster_index": 1,
+          "consensus": "AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT",
+          "length_bp": 44,
+          "ce": 11.0,
+          "isfg": "[AGAT]11",
+          "motif_repeat_summary": "AGATx11 (TR 44 bp)",
+          "bp_diff": -4,
+          "is_deletion": false,
+          "n_reads_total": 25,
+          "n_reads_hp1": 0,
+          "n_reads_hp2": 25,
+          "n_reads_hp_none": 0,
+          "n_forward": 25,
+          "n_reverse": 0,
+          "mean_qual": 40.0,
+          "expected_stutter": 3.0,
+          "status": "allele",
+          "longtr_match": true,
+          "longtr_inexact": false,
+          "longtr_bp_diff": -4,
+          "fraction": 0.431
+        }
+      ],
+      "longtr": {
+        "marker_name": "TH01_LIKE",
+        "chrom": "chr1",
+        "pos": 101,
+        "motif": "AGAT",
+        "period": "4",
+        "alleles": [
+          {
+            "sequence": "AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT",
+            "bp_diff": 0,
+            "inexact": false,
+            "is_deletion": false
+          },
+          {
+            "sequence": "AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT",
+            "bp_diff": -4,
+            "inexact": false,
+            "is_deletion": false
+          }
+        ],
+        "gt_indices": [
+          0,
+          1
+        ],
+        "posterior": 0.99,
+        "depth": 58,
+        "pdp_hp1": 30,
+        "pdp_hp2": 25
+      },
+      "ngs_panel": {
+        "title": "Next-Generation Sequencing Analysis",
+        "subtitle": "Allele haplotypes from ONT read clusters (FRONTStr evidence layer); coverage is read count per consensus sequence.",
+        "rows": [
+          {
+            "id": "TH01_LIKE:1",
+            "allele_display": "11",
+            "repeat_group": 11,
+            "is_isoallele": false,
+            "iso_ordinal": 0,
+            "coverage_reads": 25,
+            "coverage_fraction_pct": 43.1,
+            "repeat_sequence": "[AGAT]11",
+            "full_sequence": "AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT",
+            "full_sequence_html": "<span class=\"repeat-highlight\">AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT</span>",
+            "status": "allele",
+            "cluster_index": 1,
+            "stack_index": 0
+          },
+          {
+            "id": "TH01_LIKE:0",
+            "allele_display": "12",
+            "repeat_group": 12,
+            "is_isoallele": false,
+            "iso_ordinal": 0,
+            "coverage_reads": 30,
+            "coverage_fraction_pct": 51.72,
+            "repeat_sequence": "[AGAT]12",
+            "full_sequence": "AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT",
+            "full_sequence_html": "<span class=\"repeat-highlight\">AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT</span>",
+            "status": "allele",
+            "cluster_index": 0,
+            "stack_index": 0
+          }
+        ],
+        "chart_groups": [
+          {
+            "repeat_group": 11,
+            "segments": [
+              {
+                "row_id": "TH01_LIKE:1",
+                "coverage_reads": 25,
+                "stack_index": 0,
+                "is_isoallele": false
+              }
+            ]
+          },
+          {
+            "repeat_group": 12,
+            "segments": [
+              {
+                "row_id": "TH01_LIKE:0",
+                "coverage_reads": 30,
+                "stack_index": 0,
+                "is_isoallele": false
+              }
+            ]
+          }
+        ]
+      },
+      "svg_allele_coverage": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 640 124\" width=\"100%\" height=\"124\" role=\"img\" aria-label=\"Allele coverage for TH01_LIKE\"><line x1=\"44\" x2=\"624\" y1=\"88.0\" y2=\"88.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"91.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">0</text><line x1=\"44\" x2=\"624\" y1=\"69.5\" y2=\"69.5\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"72.5\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">10</text><line x1=\"44\" x2=\"624\" y1=\"51.0\" y2=\"51.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"54.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">20</text><line x1=\"44\" x2=\"624\" y1=\"32.5\" y2=\"32.5\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"35.5\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">30</text><line x1=\"44\" x2=\"624\" y1=\"14.0\" y2=\"14.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"17.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">40</text><line x1=\"44\" x2=\"44\" y1=\"14\" y2=\"88\" stroke=\"#90a4ae\" stroke-width=\"1\"/><line x1=\"44\" x2=\"624\" y1=\"88\" y2=\"88\" stroke=\"#90a4ae\" stroke-width=\"1\"/><text x=\"6\" y=\"51.0\" transform=\"rotate(-90 6,51.0)\" font-size=\"11\" fill=\"#37474f\">Read coverage</text><text x=\"334.0\" y=\"114.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">Allele</text><rect class=\"ngs-segment\" tabindex=\"0\" role=\"button\" data-row-id=\"TH01_LIKE:1\" x=\"113.6\" y=\"41.8\" width=\"150.8\" height=\"46.2\" fill=\"#0d9488\" opacity=\"1\" rx=\"2\" ry=\"2\" stroke=\"#e2f8f5\" stroke-width=\"0.6\"><title>25 reads</title></rect><text x=\"189.0\" y=\"114.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">11</text><rect class=\"ngs-segment\" tabindex=\"0\" role=\"button\" data-row-id=\"TH01_LIKE:0\" x=\"403.6\" y=\"32.5\" width=\"150.8\" height=\"55.5\" fill=\"#0d9488\" opacity=\"1\" rx=\"2\" ry=\"2\" stroke=\"#e2f8f5\" stroke-width=\"0.6\"><title>30 reads</title></rect><text x=\"479.0\" y=\"114.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">12</text></svg>",
+      "svg_haplotype": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 200\" width=\"100%\" height=\"200\" role=\"img\" aria-label=\"Haplotype split\"><line x1=\"44\" x2=\"308\" y1=\"164.0\" y2=\"164.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"167.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">0</text><line x1=\"44\" x2=\"308\" y1=\"128.0\" y2=\"128.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"131.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">8</text><line x1=\"44\" x2=\"308\" y1=\"92.0\" y2=\"92.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"95.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">15</text><line x1=\"44\" x2=\"308\" y1=\"56.0\" y2=\"56.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"59.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">22</text><line x1=\"44\" x2=\"308\" y1=\"20.0\" y2=\"20.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"23.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">30</text><line x1=\"44\" x2=\"44\" y1=\"20\" y2=\"164\" stroke=\"#90a4ae\" stroke-width=\"1\"/><line x1=\"44\" x2=\"308\" y1=\"164\" y2=\"164\" stroke=\"#90a4ae\" stroke-width=\"1\"/><text x=\"6\" y=\"92.0\" transform=\"rotate(-90 6,92.0)\" font-size=\"11\" fill=\"#37474f\">reads</text><rect x=\"64.0\" y=\"20.0\" width=\"92\" height=\"144.0\" fill=\"#1976d2\" rx=\"1\"><title>HP1: 30</title></rect><text x=\"110.0\" y=\"178.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">CE12.0</text><rect x=\"196.0\" y=\"44.0\" width=\"92\" height=\"120.0\" fill=\"#9c27b0\" rx=\"1\"><title>HP2: 25</title></rect><text x=\"242.0\" y=\"178.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">CE11.0</text><rect x=\"250\" y=\"24\" width=\"10\" height=\"10\" fill=\"#2e7d32\" rx=\"1\"/><text x=\"264\" y=\"33\" font-size=\"10\" fill=\"#37474f\">HP1</text><rect x=\"274\" y=\"24\" width=\"10\" height=\"10\" fill=\"#9c27b0\" rx=\"1\"/><text x=\"288\" y=\"33\" font-size=\"10\" fill=\"#37474f\">HP2</text><rect x=\"298\" y=\"24\" width=\"10\" height=\"10\" fill=\"#cfd8dc\" rx=\"1\"/><text x=\"312\" y=\"33\" font-size=\"10\" fill=\"#37474f\">no HP</text></svg>"
+    },
+    {
+      "marker_name": "TPOX_LIKE",
+      "system": {
+        "name": "TPOX_LIKE",
+        "codis_name": null,
+        "chromosome": "chr1",
+        "ref_start": 301,
+        "ref_end": 332,
+        "motif": "AATG",
+        "period": 4,
+        "category": "autosomal",
+        "allow_triallelic": true
+      },
+      "call_rule": "triallelic_type_II",
+      "tri_type": "tri_II_balanced",
+      "total_reads": 62,
+      "analytical_thresh": 0.02,
+      "calling_thresh": 0.1,
+      "discordant": false,
+      "warnings": [],
+      "alleles": [
+        {
+          "cluster_index": 0,
+          "consensus": "AATGAATGAATGAATGAATGAATGAATGAATG",
+          "length_bp": 32,
+          "ce": 8.0,
+          "isfg": "[AATG]8",
+          "motif_repeat_summary": "AATGx8 (TR 32 bp)",
+          "bp_diff": 0,
+          "is_deletion": false,
+          "n_reads_total": 22,
+          "n_reads_hp1": 22,
+          "n_reads_hp2": 0,
+          "n_reads_hp_none": 0,
+          "n_forward": 22,
+          "n_reverse": 0,
+          "mean_qual": 40.0,
+          "expected_stutter": 3.0,
+          "status": "allele",
+          "longtr_match": false,
+          "longtr_inexact": false,
+          "longtr_bp_diff": null,
+          "fraction": 0.3548
+        },
+        {
+          "cluster_index": 1,
+          "consensus": "AATGAATGAATGAATGAATGAATGAATGAATGAATG",
+          "length_bp": 36,
+          "ce": 9.0,
+          "isfg": "[AATG]9",
+          "motif_repeat_summary": "AATGx9 (TR 36 bp)",
+          "bp_diff": 0,
+          "is_deletion": false,
+          "n_reads_total": 20,
+          "n_reads_hp1": 0,
+          "n_reads_hp2": 20,
+          "n_reads_hp_none": 0,
+          "n_forward": 20,
+          "n_reverse": 0,
+          "mean_qual": 40.0,
+          "expected_stutter": 1.1,
+          "status": "allele",
+          "longtr_match": false,
+          "longtr_inexact": false,
+          "longtr_bp_diff": null,
+          "fraction": 0.3226
+        },
+        {
+          "cluster_index": 2,
+          "consensus": "AATGAATGAATGAATGAATGAATGAATG",
+          "length_bp": 28,
+          "ce": 7.0,
+          "isfg": "[AATG]7",
+          "motif_repeat_summary": "AATGx7 (TR 28 bp)",
+          "bp_diff": 0,
+          "is_deletion": false,
+          "n_reads_total": 20,
+          "n_reads_hp1": 0,
+          "n_reads_hp2": 0,
+          "n_reads_hp_none": 20,
+          "n_forward": 20,
+          "n_reverse": 0,
+          "mean_qual": 40.0,
+          "expected_stutter": 2.4,
+          "status": "allele",
+          "longtr_match": false,
+          "longtr_inexact": false,
+          "longtr_bp_diff": null,
+          "fraction": 0.3226
+        }
+      ],
+      "alleles_called": [
+        {
+          "cluster_index": 0,
+          "consensus": "AATGAATGAATGAATGAATGAATGAATGAATG",
+          "length_bp": 32,
+          "ce": 8.0,
+          "isfg": "[AATG]8",
+          "motif_repeat_summary": "AATGx8 (TR 32 bp)",
+          "bp_diff": 0,
+          "is_deletion": false,
+          "n_reads_total": 22,
+          "n_reads_hp1": 22,
+          "n_reads_hp2": 0,
+          "n_reads_hp_none": 0,
+          "n_forward": 22,
+          "n_reverse": 0,
+          "mean_qual": 40.0,
+          "expected_stutter": 3.0,
+          "status": "allele",
+          "longtr_match": false,
+          "longtr_inexact": false,
+          "longtr_bp_diff": null,
+          "fraction": 0.3548
+        },
+        {
+          "cluster_index": 1,
+          "consensus": "AATGAATGAATGAATGAATGAATGAATGAATGAATG",
+          "length_bp": 36,
+          "ce": 9.0,
+          "isfg": "[AATG]9",
+          "motif_repeat_summary": "AATGx9 (TR 36 bp)",
+          "bp_diff": 0,
+          "is_deletion": false,
+          "n_reads_total": 20,
+          "n_reads_hp1": 0,
+          "n_reads_hp2": 20,
+          "n_reads_hp_none": 0,
+          "n_forward": 20,
+          "n_reverse": 0,
+          "mean_qual": 40.0,
+          "expected_stutter": 1.1,
+          "status": "allele",
+          "longtr_match": false,
+          "longtr_inexact": false,
+          "longtr_bp_diff": null,
+          "fraction": 0.3226
+        },
+        {
+          "cluster_index": 2,
+          "consensus": "AATGAATGAATGAATGAATGAATGAATG",
+          "length_bp": 28,
+          "ce": 7.0,
+          "isfg": "[AATG]7",
+          "motif_repeat_summary": "AATGx7 (TR 28 bp)",
+          "bp_diff": 0,
+          "is_deletion": false,
+          "n_reads_total": 20,
+          "n_reads_hp1": 0,
+          "n_reads_hp2": 0,
+          "n_reads_hp_none": 20,
+          "n_forward": 20,
+          "n_reverse": 0,
+          "mean_qual": 40.0,
+          "expected_stutter": 2.4,
+          "status": "allele",
+          "longtr_match": false,
+          "longtr_inexact": false,
+          "longtr_bp_diff": null,
+          "fraction": 0.3226
+        }
+      ],
+      "longtr": null,
+      "ngs_panel": {
+        "title": "Next-Generation Sequencing Analysis",
+        "subtitle": "Allele haplotypes from ONT read clusters (FRONTStr evidence layer); coverage is read count per consensus sequence.",
+        "rows": [
+          {
+            "id": "TPOX_LIKE:2",
+            "allele_display": "7",
+            "repeat_group": 7,
+            "is_isoallele": false,
+            "iso_ordinal": 0,
+            "coverage_reads": 20,
+            "coverage_fraction_pct": 32.26,
+            "repeat_sequence": "[AATG]7",
+            "full_sequence": "AATGAATGAATGAATGAATGAATGAATG",
+            "full_sequence_html": "<span class=\"repeat-highlight\">AATGAATGAATGAATGAATGAATGAATG</span>",
+            "status": "allele",
+            "cluster_index": 2,
+            "stack_index": 0
+          },
+          {
+            "id": "TPOX_LIKE:0",
+            "allele_display": "8",
+            "repeat_group": 8,
+            "is_isoallele": false,
+            "iso_ordinal": 0,
+            "coverage_reads": 22,
+            "coverage_fraction_pct": 35.48,
+            "repeat_sequence": "[AATG]8",
+            "full_sequence": "AATGAATGAATGAATGAATGAATGAATGAATG",
+            "full_sequence_html": "<span class=\"repeat-highlight\">AATGAATGAATGAATGAATGAATGAATGAATG</span>",
+            "status": "allele",
+            "cluster_index": 0,
+            "stack_index": 0
+          },
+          {
+            "id": "TPOX_LIKE:1",
+            "allele_display": "9",
+            "repeat_group": 9,
+            "is_isoallele": false,
+            "iso_ordinal": 0,
+            "coverage_reads": 20,
+            "coverage_fraction_pct": 32.26,
+            "repeat_sequence": "[AATG]9",
+            "full_sequence": "AATGAATGAATGAATGAATGAATGAATGAATGAATG",
+            "full_sequence_html": "<span class=\"repeat-highlight\">AATGAATGAATGAATGAATGAATGAATGAATGAATG</span>",
+            "status": "allele",
+            "cluster_index": 1,
+            "stack_index": 0
+          }
+        ],
+        "chart_groups": [
+          {
+            "repeat_group": 7,
+            "segments": [
+              {
+                "row_id": "TPOX_LIKE:2",
+                "coverage_reads": 20,
+                "stack_index": 0,
+                "is_isoallele": false
+              }
+            ]
+          },
+          {
+            "repeat_group": 8,
+            "segments": [
+              {
+                "row_id": "TPOX_LIKE:0",
+                "coverage_reads": 22,
+                "stack_index": 0,
+                "is_isoallele": false
+              }
+            ]
+          },
+          {
+            "repeat_group": 9,
+            "segments": [
+              {
+                "row_id": "TPOX_LIKE:1",
+                "coverage_reads": 20,
+                "stack_index": 0,
+                "is_isoallele": false
+              }
+            ]
+          }
+        ]
+      },
+      "svg_allele_coverage": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 640 142\" width=\"100%\" height=\"142\" role=\"img\" aria-label=\"Allele coverage for TPOX_LIKE\"><line x1=\"44\" x2=\"624\" y1=\"106.0\" y2=\"106.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"109.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">0</text><line x1=\"44\" x2=\"624\" y1=\"83.0\" y2=\"83.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"86.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">8</text><line x1=\"44\" x2=\"624\" y1=\"60.0\" y2=\"60.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"63.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">15</text><line x1=\"44\" x2=\"624\" y1=\"37.0\" y2=\"37.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"40.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">22</text><line x1=\"44\" x2=\"624\" y1=\"14.0\" y2=\"14.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"17.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">30</text><line x1=\"44\" x2=\"44\" y1=\"14\" y2=\"106\" stroke=\"#90a4ae\" stroke-width=\"1\"/><line x1=\"44\" x2=\"624\" y1=\"106\" y2=\"106\" stroke=\"#90a4ae\" stroke-width=\"1\"/><text x=\"6\" y=\"60.0\" transform=\"rotate(-90 6,60.0)\" font-size=\"11\" fill=\"#37474f\">Read coverage</text><text x=\"334.0\" y=\"132.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">Allele</text><rect class=\"ngs-segment\" tabindex=\"0\" role=\"button\" data-row-id=\"TPOX_LIKE:2\" x=\"90.4\" y=\"44.7\" width=\"100.5\" height=\"61.3\" fill=\"#0d9488\" opacity=\"1\" rx=\"2\" ry=\"2\" stroke=\"#e2f8f5\" stroke-width=\"0.6\"><title>20 reads</title></rect><text x=\"140.7\" y=\"132.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">7</text><rect class=\"ngs-segment\" tabindex=\"0\" role=\"button\" data-row-id=\"TPOX_LIKE:0\" x=\"283.7\" y=\"38.5\" width=\"100.5\" height=\"67.5\" fill=\"#0d9488\" opacity=\"1\" rx=\"2\" ry=\"2\" stroke=\"#e2f8f5\" stroke-width=\"0.6\"><title>22 reads</title></rect><text x=\"334.0\" y=\"132.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">8</text><rect class=\"ngs-segment\" tabindex=\"0\" role=\"button\" data-row-id=\"TPOX_LIKE:1\" x=\"477.1\" y=\"44.7\" width=\"100.5\" height=\"61.3\" fill=\"#0d9488\" opacity=\"1\" rx=\"2\" ry=\"2\" stroke=\"#e2f8f5\" stroke-width=\"0.6\"><title>20 reads</title></rect><text x=\"527.3\" y=\"132.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">9</text></svg>",
+      "svg_haplotype": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 200\" width=\"100%\" height=\"200\" role=\"img\" aria-label=\"Haplotype split\"><line x1=\"44\" x2=\"308\" y1=\"164.0\" y2=\"164.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"167.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">0</text><line x1=\"44\" x2=\"308\" y1=\"128.0\" y2=\"128.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"131.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">6</text><line x1=\"44\" x2=\"308\" y1=\"92.0\" y2=\"92.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"95.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">11</text><line x1=\"44\" x2=\"308\" y1=\"56.0\" y2=\"56.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"59.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">16</text><line x1=\"44\" x2=\"308\" y1=\"20.0\" y2=\"20.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"23.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">22</text><line x1=\"44\" x2=\"44\" y1=\"20\" y2=\"164\" stroke=\"#90a4ae\" stroke-width=\"1\"/><line x1=\"44\" x2=\"308\" y1=\"164\" y2=\"164\" stroke=\"#90a4ae\" stroke-width=\"1\"/><text x=\"6\" y=\"92.0\" transform=\"rotate(-90 6,92.0)\" font-size=\"11\" fill=\"#37474f\">reads</text><rect x=\"57.5\" y=\"20.0\" width=\"61\" height=\"144.0\" fill=\"#1976d2\" rx=\"1\"><title>HP1: 22</title></rect><text x=\"88.0\" y=\"178.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">CE8.0</text><rect x=\"145.5\" y=\"33.1\" width=\"61\" height=\"130.9\" fill=\"#9c27b0\" rx=\"1\"><title>HP2: 20</title></rect><text x=\"176.0\" y=\"178.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">CE9.0</text><rect x=\"233.5\" y=\"33.1\" width=\"61\" height=\"130.9\" fill=\"#cfd8dc\" rx=\"1\"><title>no HP: 20</title></rect><text x=\"264.0\" y=\"178.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">CE7.0</text><rect x=\"250\" y=\"24\" width=\"10\" height=\"10\" fill=\"#2e7d32\" rx=\"1\"/><text x=\"264\" y=\"33\" font-size=\"10\" fill=\"#37474f\">HP1</text><rect x=\"274\" y=\"24\" width=\"10\" height=\"10\" fill=\"#9c27b0\" rx=\"1\"/><text x=\"288\" y=\"33\" font-size=\"10\" fill=\"#37474f\">HP2</text><rect x=\"298\" y=\"24\" width=\"10\" height=\"10\" fill=\"#cfd8dc\" rx=\"1\"/><text x=\"312\" y=\"33\" font-size=\"10\" fill=\"#37474f\">no HP</text></svg>"
+    }
+  ],
+  "strhub": {
+    "schema": "strhub.ngs_panel/v1",
+    "source": "frontstr",
+    "app_version": "0.1.0.dev0",
+    "sample": "FRONTStr-Demo",
+    "markers": [
+      {
+        "locus": "TH01_LIKE",
+        "rows": [
+          {
+            "allele": "11",
+            "allele_iso": false,
+            "iso_ordinal": 0,
+            "coverage_reads": 25,
+            "coverage_fraction": 43.1,
+            "repeat_sequence": "[AGAT]11",
+            "full_sequence": "AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT"
+          },
+          {
+            "allele": "12",
+            "allele_iso": false,
+            "iso_ordinal": 0,
+            "coverage_reads": 30,
+            "coverage_fraction": 51.72,
+            "repeat_sequence": "[AGAT]12",
+            "full_sequence": "AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT"
+          }
+        ]
+      },
+      {
+        "locus": "TPOX_LIKE",
+        "rows": [
+          {
+            "allele": "7",
+            "allele_iso": false,
+            "iso_ordinal": 0,
+            "coverage_reads": 20,
+            "coverage_fraction": 32.26,
+            "repeat_sequence": "[AATG]7",
+            "full_sequence": "AATGAATGAATGAATGAATGAATGAATG"
+          },
+          {
+            "allele": "8",
+            "allele_iso": false,
+            "iso_ordinal": 0,
+            "coverage_reads": 22,
+            "coverage_fraction": 35.48,
+            "repeat_sequence": "[AATG]8",
+            "full_sequence": "AATGAATGAATGAATGAATGAATGAATGAATG"
+          },
+          {
+            "allele": "9",
+            "allele_iso": false,
+            "iso_ordinal": 0,
+            "coverage_reads": 20,
+            "coverage_fraction": 32.26,
+            "repeat_sequence": "[AATG]9",
+            "full_sequence": "AATGAATGAATGAATGAATGAATGAATGAATGAATG"
+          }
+        ]
+      }
+    ]
+  }
+}</pre>
+  </details>
+</section>
+
+<footer class="report-footer">
+  <span>FRONTStr 0.1.0.dev0</span>
+  <span>Sample <b>FRONTStr-Demo</b></span>
+  <span class="hash">sha256 <span id="report-hash-footer">b1ebba8de8869f54191dcd3a7c4c52e0d5d4cb2ec43e5213d85a5ee5b87949d7</span></span>
+</footer>
+
+
+<script type="application/json" id="run-data">{"meta":{"app":"frontstr","app_version":"0.1.0.dev0","sample_name":"FRONTStr-Demo","operator":"demo@frontstr","run_id":"demo-001","started_at":"2026-05-18T17:17:57.102475+00:00","platform":"ont","reference_build":"GRCh38","panel_name":"demo-panel","panel_version":"0.1","panel_sha256":null,"bam_path":"examples/.report-build/demo.bam","bam_sha256":"4354ae8b82229ae6a642eb64cf8d85b109778b15b1f066081016cc2e74ae8faa","longtr_vcf_path":"examples/.report-build/longtr.vcf","longtr_vcf_sha256":"2e0b948cb116840173a21d6016e7367849c911bfb6863c4cf35384055519f118","longtr_version":null,"pipeline_argv":[],"dropout_floor":30},"summary":{"loci_total":2,"loci_called":2,"tri_count":1,"mixture_count":0,"discordant_count":0,"dropouts":0},"qc":{"mean_coverage":60.0,"min_coverage":58,"max_coverage":62,"coverage_table":[{"marker":"TH01_LIKE","coverage":58,"chip":"ok"},{"marker":"TPOX_LIKE","coverage":62,"chip":"tri"}],"status_breakdown":[{"status":"allele","count":5},{"status":"artefact","count":1}]},"profile_rows":[{"marker":"TH01_LIKE","call_rule":"heterozygous","tri_type":"","total_reads":58,"discordant":false,"status_chip":"ok","allele1_isfg":"[AGAT]12","allele1_repeat_summary":"AGATx12 (TR 48 bp)","allele1_ce":12.0,"allele1_cov":30,"allele1_hp":"30/0","allele2_isfg":"[AGAT]11","allele2_repeat_summary":"AGATx11 (TR 44 bp)","allele2_ce":11.0,"allele2_cov":25,"allele2_hp":"0/25","allele3_isfg":null,"allele3_repeat_summary":null,"allele3_ce":null,"allele3_cov":null,"allele3_hp":null},{"marker":"TPOX_LIKE","call_rule":"triallelic_type_II","tri_type":"tri_II_balanced","total_reads":62,"discordant":false,"status_chip":"tri","allele1_isfg":"[AATG]8","allele1_repeat_summary":"AATGx8 (TR 32 bp)","allele1_ce":8.0,"allele1_cov":22,"allele1_hp":"22/0","allele2_isfg":"[AATG]9","allele2_repeat_summary":"AATGx9 (TR 36 bp)","allele2_ce":9.0,"allele2_cov":20,"allele2_hp":"0/20","allele3_isfg":"[AATG]7","allele3_repeat_summary":"AATGx7 (TR 28 bp)","allele3_ce":7.0,"allele3_cov":20,"allele3_hp":"0/0"}],"results":[{"marker_name":"TH01_LIKE","system":{"name":"TH01_LIKE","codis_name":null,"chromosome":"chr1","ref_start":101,"ref_end":148,"motif":"AGAT","period":4,"category":"autosomal","allow_triallelic":false},"call_rule":"heterozygous","tri_type":"","total_reads":58,"analytical_thresh":0.02,"calling_thresh":0.1,"discordant":false,"warnings":[],"alleles":[{"cluster_index":0,"consensus":"AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT","length_bp":48,"ce":12.0,"isfg":"[AGAT]12","motif_repeat_summary":"AGATx12 (TR 48 bp)","bp_diff":0,"is_deletion":false,"n_reads_total":30,"n_reads_hp1":30,"n_reads_hp2":0,"n_reads_hp_none":0,"n_forward":30,"n_reverse":0,"mean_qual":40.0,"expected_stutter":1.25,"status":"allele","longtr_match":true,"longtr_inexact":false,"longtr_bp_diff":0,"fraction":0.5172},{"cluster_index":1,"consensus":"AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT","length_bp":44,"ce":11.0,"isfg":"[AGAT]11","motif_repeat_summary":"AGATx11 (TR 44 bp)","bp_diff":-4,"is_deletion":false,"n_reads_total":25,"n_reads_hp1":0,"n_reads_hp2":25,"n_reads_hp_none":0,"n_forward":25,"n_reverse":0,"mean_qual":40.0,"expected_stutter":3.0,"status":"allele","longtr_match":true,"longtr_inexact":false,"longtr_bp_diff":-4,"fraction":0.431},{"cluster_index":2,"consensus":"AGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT","length_bp":40,"ce":10.0,"isfg":"[AGAT]10","motif_repeat_summary":"AGATx10 (TR 40 bp)","bp_diff":-8,"is_deletion":false,"n_reads_total":3,"n_reads_hp1":0,"n_reads_hp2":0,"n_reads_hp_none":3,"n_forward":3,"n_reverse":0,"mean_qual":40.0,"expected_stutter":2.8,"status":"artefact","longtr_match":false,"longtr_inexact":false,"longtr_bp_diff":null,"fraction":0.0517}],"alleles_called":[{"cluster_index":0,"consensus":"AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT","length_bp":48,"ce":12.0,"isfg":"[AGAT]12","motif_repeat_summary":"AGATx12 (TR 48 bp)","bp_diff":0,"is_deletion":false,"n_reads_total":30,"n_reads_hp1":30,"n_reads_hp2":0,"n_reads_hp_none":0,"n_forward":30,"n_reverse":0,"mean_qual":40.0,"expected_stutter":1.25,"status":"allele","longtr_match":true,"longtr_inexact":false,"longtr_bp_diff":0,"fraction":0.5172},{"cluster_index":1,"consensus":"AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT","length_bp":44,"ce":11.0,"isfg":"[AGAT]11","motif_repeat_summary":"AGATx11 (TR 44 bp)","bp_diff":-4,"is_deletion":false,"n_reads_total":25,"n_reads_hp1":0,"n_reads_hp2":25,"n_reads_hp_none":0,"n_forward":25,"n_reverse":0,"mean_qual":40.0,"expected_stutter":3.0,"status":"allele","longtr_match":true,"longtr_inexact":false,"longtr_bp_diff":-4,"fraction":0.431}],"longtr":{"marker_name":"TH01_LIKE","chrom":"chr1","pos":101,"motif":"AGAT","period":"4","alleles":[{"sequence":"AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT","bp_diff":0,"inexact":false,"is_deletion":false},{"sequence":"AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT","bp_diff":-4,"inexact":false,"is_deletion":false}],"gt_indices":[0,1],"posterior":0.99,"depth":58,"pdp_hp1":30,"pdp_hp2":25},"ngs_panel":{"title":"Next-Generation Sequencing Analysis","subtitle":"Allele haplotypes from ONT read clusters (FRONTStr evidence layer); coverage is read count per consensus sequence.","rows":[{"id":"TH01_LIKE:1","allele_display":"11","repeat_group":11,"is_isoallele":false,"iso_ordinal":0,"coverage_reads":25,"coverage_fraction_pct":43.1,"repeat_sequence":"[AGAT]11","full_sequence":"AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT","full_sequence_html":"<span class=\"repeat-highlight\">AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT</span>","status":"allele","cluster_index":1,"stack_index":0},{"id":"TH01_LIKE:0","allele_display":"12","repeat_group":12,"is_isoallele":false,"iso_ordinal":0,"coverage_reads":30,"coverage_fraction_pct":51.72,"repeat_sequence":"[AGAT]12","full_sequence":"AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT","full_sequence_html":"<span class=\"repeat-highlight\">AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT</span>","status":"allele","cluster_index":0,"stack_index":0}],"chart_groups":[{"repeat_group":11,"segments":[{"row_id":"TH01_LIKE:1","coverage_reads":25,"stack_index":0,"is_isoallele":false}]},{"repeat_group":12,"segments":[{"row_id":"TH01_LIKE:0","coverage_reads":30,"stack_index":0,"is_isoallele":false}]}]},"svg_allele_coverage":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 640 124\" width=\"100%\" height=\"124\" role=\"img\" aria-label=\"Allele coverage for TH01_LIKE\"><line x1=\"44\" x2=\"624\" y1=\"88.0\" y2=\"88.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"91.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">0</text><line x1=\"44\" x2=\"624\" y1=\"69.5\" y2=\"69.5\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"72.5\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">10</text><line x1=\"44\" x2=\"624\" y1=\"51.0\" y2=\"51.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"54.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">20</text><line x1=\"44\" x2=\"624\" y1=\"32.5\" y2=\"32.5\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"35.5\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">30</text><line x1=\"44\" x2=\"624\" y1=\"14.0\" y2=\"14.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"17.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">40</text><line x1=\"44\" x2=\"44\" y1=\"14\" y2=\"88\" stroke=\"#90a4ae\" stroke-width=\"1\"/><line x1=\"44\" x2=\"624\" y1=\"88\" y2=\"88\" stroke=\"#90a4ae\" stroke-width=\"1\"/><text x=\"6\" y=\"51.0\" transform=\"rotate(-90 6,51.0)\" font-size=\"11\" fill=\"#37474f\">Read coverage</text><text x=\"334.0\" y=\"114.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">Allele</text><rect class=\"ngs-segment\" tabindex=\"0\" role=\"button\" data-row-id=\"TH01_LIKE:1\" x=\"113.6\" y=\"41.8\" width=\"150.8\" height=\"46.2\" fill=\"#0d9488\" opacity=\"1\" rx=\"2\" ry=\"2\" stroke=\"#e2f8f5\" stroke-width=\"0.6\"><title>25 reads</title></rect><text x=\"189.0\" y=\"114.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">11</text><rect class=\"ngs-segment\" tabindex=\"0\" role=\"button\" data-row-id=\"TH01_LIKE:0\" x=\"403.6\" y=\"32.5\" width=\"150.8\" height=\"55.5\" fill=\"#0d9488\" opacity=\"1\" rx=\"2\" ry=\"2\" stroke=\"#e2f8f5\" stroke-width=\"0.6\"><title>30 reads</title></rect><text x=\"479.0\" y=\"114.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">12</text></svg>","svg_haplotype":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 200\" width=\"100%\" height=\"200\" role=\"img\" aria-label=\"Haplotype split\"><line x1=\"44\" x2=\"308\" y1=\"164.0\" y2=\"164.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"167.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">0</text><line x1=\"44\" x2=\"308\" y1=\"128.0\" y2=\"128.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"131.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">8</text><line x1=\"44\" x2=\"308\" y1=\"92.0\" y2=\"92.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"95.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">15</text><line x1=\"44\" x2=\"308\" y1=\"56.0\" y2=\"56.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"59.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">22</text><line x1=\"44\" x2=\"308\" y1=\"20.0\" y2=\"20.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"23.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">30</text><line x1=\"44\" x2=\"44\" y1=\"20\" y2=\"164\" stroke=\"#90a4ae\" stroke-width=\"1\"/><line x1=\"44\" x2=\"308\" y1=\"164\" y2=\"164\" stroke=\"#90a4ae\" stroke-width=\"1\"/><text x=\"6\" y=\"92.0\" transform=\"rotate(-90 6,92.0)\" font-size=\"11\" fill=\"#37474f\">reads</text><rect x=\"64.0\" y=\"20.0\" width=\"92\" height=\"144.0\" fill=\"#1976d2\" rx=\"1\"><title>HP1: 30</title></rect><text x=\"110.0\" y=\"178.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">CE12.0</text><rect x=\"196.0\" y=\"44.0\" width=\"92\" height=\"120.0\" fill=\"#9c27b0\" rx=\"1\"><title>HP2: 25</title></rect><text x=\"242.0\" y=\"178.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">CE11.0</text><rect x=\"250\" y=\"24\" width=\"10\" height=\"10\" fill=\"#2e7d32\" rx=\"1\"/><text x=\"264\" y=\"33\" font-size=\"10\" fill=\"#37474f\">HP1</text><rect x=\"274\" y=\"24\" width=\"10\" height=\"10\" fill=\"#9c27b0\" rx=\"1\"/><text x=\"288\" y=\"33\" font-size=\"10\" fill=\"#37474f\">HP2</text><rect x=\"298\" y=\"24\" width=\"10\" height=\"10\" fill=\"#cfd8dc\" rx=\"1\"/><text x=\"312\" y=\"33\" font-size=\"10\" fill=\"#37474f\">no HP</text></svg>"},{"marker_name":"TPOX_LIKE","system":{"name":"TPOX_LIKE","codis_name":null,"chromosome":"chr1","ref_start":301,"ref_end":332,"motif":"AATG","period":4,"category":"autosomal","allow_triallelic":true},"call_rule":"triallelic_type_II","tri_type":"tri_II_balanced","total_reads":62,"analytical_thresh":0.02,"calling_thresh":0.1,"discordant":false,"warnings":[],"alleles":[{"cluster_index":0,"consensus":"AATGAATGAATGAATGAATGAATGAATGAATG","length_bp":32,"ce":8.0,"isfg":"[AATG]8","motif_repeat_summary":"AATGx8 (TR 32 bp)","bp_diff":0,"is_deletion":false,"n_reads_total":22,"n_reads_hp1":22,"n_reads_hp2":0,"n_reads_hp_none":0,"n_forward":22,"n_reverse":0,"mean_qual":40.0,"expected_stutter":3.0,"status":"allele","longtr_match":false,"longtr_inexact":false,"longtr_bp_diff":null,"fraction":0.3548},{"cluster_index":1,"consensus":"AATGAATGAATGAATGAATGAATGAATGAATGAATG","length_bp":36,"ce":9.0,"isfg":"[AATG]9","motif_repeat_summary":"AATGx9 (TR 36 bp)","bp_diff":0,"is_deletion":false,"n_reads_total":20,"n_reads_hp1":0,"n_reads_hp2":20,"n_reads_hp_none":0,"n_forward":20,"n_reverse":0,"mean_qual":40.0,"expected_stutter":1.1,"status":"allele","longtr_match":false,"longtr_inexact":false,"longtr_bp_diff":null,"fraction":0.3226},{"cluster_index":2,"consensus":"AATGAATGAATGAATGAATGAATGAATG","length_bp":28,"ce":7.0,"isfg":"[AATG]7","motif_repeat_summary":"AATGx7 (TR 28 bp)","bp_diff":0,"is_deletion":false,"n_reads_total":20,"n_reads_hp1":0,"n_reads_hp2":0,"n_reads_hp_none":20,"n_forward":20,"n_reverse":0,"mean_qual":40.0,"expected_stutter":2.4,"status":"allele","longtr_match":false,"longtr_inexact":false,"longtr_bp_diff":null,"fraction":0.3226}],"alleles_called":[{"cluster_index":0,"consensus":"AATGAATGAATGAATGAATGAATGAATGAATG","length_bp":32,"ce":8.0,"isfg":"[AATG]8","motif_repeat_summary":"AATGx8 (TR 32 bp)","bp_diff":0,"is_deletion":false,"n_reads_total":22,"n_reads_hp1":22,"n_reads_hp2":0,"n_reads_hp_none":0,"n_forward":22,"n_reverse":0,"mean_qual":40.0,"expected_stutter":3.0,"status":"allele","longtr_match":false,"longtr_inexact":false,"longtr_bp_diff":null,"fraction":0.3548},{"cluster_index":1,"consensus":"AATGAATGAATGAATGAATGAATGAATGAATGAATG","length_bp":36,"ce":9.0,"isfg":"[AATG]9","motif_repeat_summary":"AATGx9 (TR 36 bp)","bp_diff":0,"is_deletion":false,"n_reads_total":20,"n_reads_hp1":0,"n_reads_hp2":20,"n_reads_hp_none":0,"n_forward":20,"n_reverse":0,"mean_qual":40.0,"expected_stutter":1.1,"status":"allele","longtr_match":false,"longtr_inexact":false,"longtr_bp_diff":null,"fraction":0.3226},{"cluster_index":2,"consensus":"AATGAATGAATGAATGAATGAATGAATG","length_bp":28,"ce":7.0,"isfg":"[AATG]7","motif_repeat_summary":"AATGx7 (TR 28 bp)","bp_diff":0,"is_deletion":false,"n_reads_total":20,"n_reads_hp1":0,"n_reads_hp2":0,"n_reads_hp_none":20,"n_forward":20,"n_reverse":0,"mean_qual":40.0,"expected_stutter":2.4,"status":"allele","longtr_match":false,"longtr_inexact":false,"longtr_bp_diff":null,"fraction":0.3226}],"longtr":null,"ngs_panel":{"title":"Next-Generation Sequencing Analysis","subtitle":"Allele haplotypes from ONT read clusters (FRONTStr evidence layer); coverage is read count per consensus sequence.","rows":[{"id":"TPOX_LIKE:2","allele_display":"7","repeat_group":7,"is_isoallele":false,"iso_ordinal":0,"coverage_reads":20,"coverage_fraction_pct":32.26,"repeat_sequence":"[AATG]7","full_sequence":"AATGAATGAATGAATGAATGAATGAATG","full_sequence_html":"<span class=\"repeat-highlight\">AATGAATGAATGAATGAATGAATGAATG</span>","status":"allele","cluster_index":2,"stack_index":0},{"id":"TPOX_LIKE:0","allele_display":"8","repeat_group":8,"is_isoallele":false,"iso_ordinal":0,"coverage_reads":22,"coverage_fraction_pct":35.48,"repeat_sequence":"[AATG]8","full_sequence":"AATGAATGAATGAATGAATGAATGAATGAATG","full_sequence_html":"<span class=\"repeat-highlight\">AATGAATGAATGAATGAATGAATGAATGAATG</span>","status":"allele","cluster_index":0,"stack_index":0},{"id":"TPOX_LIKE:1","allele_display":"9","repeat_group":9,"is_isoallele":false,"iso_ordinal":0,"coverage_reads":20,"coverage_fraction_pct":32.26,"repeat_sequence":"[AATG]9","full_sequence":"AATGAATGAATGAATGAATGAATGAATGAATGAATG","full_sequence_html":"<span class=\"repeat-highlight\">AATGAATGAATGAATGAATGAATGAATGAATGAATG</span>","status":"allele","cluster_index":1,"stack_index":0}],"chart_groups":[{"repeat_group":7,"segments":[{"row_id":"TPOX_LIKE:2","coverage_reads":20,"stack_index":0,"is_isoallele":false}]},{"repeat_group":8,"segments":[{"row_id":"TPOX_LIKE:0","coverage_reads":22,"stack_index":0,"is_isoallele":false}]},{"repeat_group":9,"segments":[{"row_id":"TPOX_LIKE:1","coverage_reads":20,"stack_index":0,"is_isoallele":false}]}]},"svg_allele_coverage":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 640 142\" width=\"100%\" height=\"142\" role=\"img\" aria-label=\"Allele coverage for TPOX_LIKE\"><line x1=\"44\" x2=\"624\" y1=\"106.0\" y2=\"106.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"109.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">0</text><line x1=\"44\" x2=\"624\" y1=\"83.0\" y2=\"83.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"86.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">8</text><line x1=\"44\" x2=\"624\" y1=\"60.0\" y2=\"60.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"63.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">15</text><line x1=\"44\" x2=\"624\" y1=\"37.0\" y2=\"37.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"40.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">22</text><line x1=\"44\" x2=\"624\" y1=\"14.0\" y2=\"14.0\" stroke=\"#e0e0e0\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><text x=\"38\" y=\"17.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">30</text><line x1=\"44\" x2=\"44\" y1=\"14\" y2=\"106\" stroke=\"#90a4ae\" stroke-width=\"1\"/><line x1=\"44\" x2=\"624\" y1=\"106\" y2=\"106\" stroke=\"#90a4ae\" stroke-width=\"1\"/><text x=\"6\" y=\"60.0\" transform=\"rotate(-90 6,60.0)\" font-size=\"11\" fill=\"#37474f\">Read coverage</text><text x=\"334.0\" y=\"132.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">Allele</text><rect class=\"ngs-segment\" tabindex=\"0\" role=\"button\" data-row-id=\"TPOX_LIKE:2\" x=\"90.4\" y=\"44.7\" width=\"100.5\" height=\"61.3\" fill=\"#0d9488\" opacity=\"1\" rx=\"2\" ry=\"2\" stroke=\"#e2f8f5\" stroke-width=\"0.6\"><title>20 reads</title></rect><text x=\"140.7\" y=\"132.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">7</text><rect class=\"ngs-segment\" tabindex=\"0\" role=\"button\" data-row-id=\"TPOX_LIKE:0\" x=\"283.7\" y=\"38.5\" width=\"100.5\" height=\"67.5\" fill=\"#0d9488\" opacity=\"1\" rx=\"2\" ry=\"2\" stroke=\"#e2f8f5\" stroke-width=\"0.6\"><title>22 reads</title></rect><text x=\"334.0\" y=\"132.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">8</text><rect class=\"ngs-segment\" tabindex=\"0\" role=\"button\" data-row-id=\"TPOX_LIKE:1\" x=\"477.1\" y=\"44.7\" width=\"100.5\" height=\"61.3\" fill=\"#0d9488\" opacity=\"1\" rx=\"2\" ry=\"2\" stroke=\"#e2f8f5\" stroke-width=\"0.6\"><title>20 reads</title></rect><text x=\"527.3\" y=\"132.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">9</text></svg>","svg_haplotype":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 320 200\" width=\"100%\" height=\"200\" role=\"img\" aria-label=\"Haplotype split\"><line x1=\"44\" x2=\"308\" y1=\"164.0\" y2=\"164.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"167.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">0</text><line x1=\"44\" x2=\"308\" y1=\"128.0\" y2=\"128.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"131.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">6</text><line x1=\"44\" x2=\"308\" y1=\"92.0\" y2=\"92.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"95.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">11</text><line x1=\"44\" x2=\"308\" y1=\"56.0\" y2=\"56.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"59.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">16</text><line x1=\"44\" x2=\"308\" y1=\"20.0\" y2=\"20.0\" stroke=\"#e0e0e0\" stroke-width=\"1\"/><text x=\"38\" y=\"23.0\" text-anchor=\"end\" font-size=\"10\" fill=\"#37474f\">22</text><line x1=\"44\" x2=\"44\" y1=\"20\" y2=\"164\" stroke=\"#90a4ae\" stroke-width=\"1\"/><line x1=\"44\" x2=\"308\" y1=\"164\" y2=\"164\" stroke=\"#90a4ae\" stroke-width=\"1\"/><text x=\"6\" y=\"92.0\" transform=\"rotate(-90 6,92.0)\" font-size=\"11\" fill=\"#37474f\">reads</text><rect x=\"57.5\" y=\"20.0\" width=\"61\" height=\"144.0\" fill=\"#1976d2\" rx=\"1\"><title>HP1: 22</title></rect><text x=\"88.0\" y=\"178.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">CE8.0</text><rect x=\"145.5\" y=\"33.1\" width=\"61\" height=\"130.9\" fill=\"#9c27b0\" rx=\"1\"><title>HP2: 20</title></rect><text x=\"176.0\" y=\"178.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">CE9.0</text><rect x=\"233.5\" y=\"33.1\" width=\"61\" height=\"130.9\" fill=\"#cfd8dc\" rx=\"1\"><title>no HP: 20</title></rect><text x=\"264.0\" y=\"178.0\" text-anchor=\"middle\" font-size=\"11\" fill=\"#37474f\">CE7.0</text><rect x=\"250\" y=\"24\" width=\"10\" height=\"10\" fill=\"#2e7d32\" rx=\"1\"/><text x=\"264\" y=\"33\" font-size=\"10\" fill=\"#37474f\">HP1</text><rect x=\"274\" y=\"24\" width=\"10\" height=\"10\" fill=\"#9c27b0\" rx=\"1\"/><text x=\"288\" y=\"33\" font-size=\"10\" fill=\"#37474f\">HP2</text><rect x=\"298\" y=\"24\" width=\"10\" height=\"10\" fill=\"#cfd8dc\" rx=\"1\"/><text x=\"312\" y=\"33\" font-size=\"10\" fill=\"#37474f\">no HP</text></svg>"}],"strhub":{"schema":"strhub.ngs_panel/v1","source":"frontstr","app_version":"0.1.0.dev0","sample":"FRONTStr-Demo","markers":[{"locus":"TH01_LIKE","rows":[{"allele":"11","allele_iso":false,"iso_ordinal":0,"coverage_reads":25,"coverage_fraction":43.1,"repeat_sequence":"[AGAT]11","full_sequence":"AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT"},{"allele":"12","allele_iso":false,"iso_ordinal":0,"coverage_reads":30,"coverage_fraction":51.72,"repeat_sequence":"[AGAT]12","full_sequence":"AGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT"}]},{"locus":"TPOX_LIKE","rows":[{"allele":"7","allele_iso":false,"iso_ordinal":0,"coverage_reads":20,"coverage_fraction":32.26,"repeat_sequence":"[AATG]7","full_sequence":"AATGAATGAATGAATGAATGAATGAATG"},{"allele":"8","allele_iso":false,"iso_ordinal":0,"coverage_reads":22,"coverage_fraction":35.48,"repeat_sequence":"[AATG]8","full_sequence":"AATGAATGAATGAATGAATGAATGAATGAATG"},{"allele":"9","allele_iso":false,"iso_ordinal":0,"coverage_reads":20,"coverage_fraction":32.26,"repeat_sequence":"[AATG]9","full_sequence":"AATGAATGAATGAATGAATGAATGAATGAATGAATG"}]}]}}</script>
+<script>/* FRONTStr report — minimal vanilla interactivity.
+ * Profile table: sort + free-text filter + status filter.
+ * Per-locus details: keep state on open/close so anchor navigation works.
+ *
+ * No frameworks. No fetches. Works on a file:// URL.
+ */
+(() => {
+  "use strict";
+
+  /* ---------- profile table: sort + filter ---------- */
+  const profile = document.querySelector("table.profile");
+  const searchInput = document.querySelector("#profile-search");
+  const statusSelect = document.querySelector("#profile-status");
+  const countPill = document.querySelector("#profile-count");
+
+  if (profile) {
+    const tbody = profile.tBodies[0];
+    const allRows = Array.from(tbody.rows);
+
+    const visibleCount = () => allRows.filter((r) => r.style.display !== "none").length;
+    const updatePill = () => {
+      if (countPill) countPill.textContent = `${visibleCount()} / ${allRows.length} markers`;
+    };
+
+    const applyFilters = () => {
+      const q = (searchInput?.value || "").trim().toLowerCase();
+      const status = statusSelect?.value || "";
+      for (const tr of allRows) {
+        const text = tr.dataset.search || "";
+        const chip = tr.dataset.chip || "";
+        const matchesText = !q || text.includes(q);
+        const matchesStatus = !status || chip === status;
+        tr.style.display = matchesText && matchesStatus ? "" : "none";
+      }
+      updatePill();
+    };
+    searchInput?.addEventListener("input", applyFilters);
+    statusSelect?.addEventListener("change", applyFilters);
+
+    const headers = profile.tHead.querySelectorAll("th[data-sortable]");
+    headers.forEach((th, idx) => {
+      th.addEventListener("click", () => {
+        const dir = th.dataset.sortDir === "asc" ? "desc" : "asc";
+        headers.forEach((h) => h.removeAttribute("data-sort-dir"));
+        th.dataset.sortDir = dir;
+        const type = th.dataset.sortable;
+        const sorted = [...allRows].sort((a, b) => {
+          let av = a.cells[idx]?.dataset.sortValue ?? a.cells[idx]?.textContent?.trim() ?? "";
+          let bv = b.cells[idx]?.dataset.sortValue ?? b.cells[idx]?.textContent?.trim() ?? "";
+          if (type === "num") {
+            av = parseFloat(av) || -Infinity;
+            bv = parseFloat(bv) || -Infinity;
+          }
+          if (av < bv) return dir === "asc" ? -1 : 1;
+          if (av > bv) return dir === "asc" ? 1 : -1;
+          return 0;
+        });
+        for (const r of sorted) tbody.appendChild(r);
+      });
+    });
+
+    updatePill();
+  }
+
+  /* ---------- locus jump-anchor smooth scroll ---------- */
+  document.querySelectorAll("a[href^='#locus-']").forEach((a) => {
+    a.addEventListener("click", (e) => {
+      const id = a.getAttribute("href").slice(1);
+      const tgt = document.getElementById(id);
+      if (tgt && tgt.tagName === "DETAILS") {
+        e.preventDefault();
+        tgt.open = true;
+        tgt.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+  });
+
+  /* ---------- expand/collapse all loci ---------- */
+  const expandAll = document.querySelector("#expand-all");
+  const collapseAll = document.querySelector("#collapse-all");
+  const allLoci = document.querySelectorAll("details.locus");
+  expandAll?.addEventListener("click", () => allLoci.forEach((d) => (d.open = true)));
+  collapseAll?.addEventListener("click", () => allLoci.forEach((d) => (d.open = false)));
+
+  /* ---------- "Copy hash" buttons in audit page ---------- */
+  document.querySelectorAll("[data-copy]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(btn.dataset.copy);
+        const t = btn.textContent;
+        btn.textContent = "copied";
+        setTimeout(() => (btn.textContent = t), 1200);
+      } catch (_) {}
+    });
+  });
+
+  /* ---------- NGS panel: sync table rows ↔ stacked chart segments ---------- */
+  document.querySelectorAll(".ngs-panel").forEach((panel) => {
+    const rows = panel.querySelectorAll("tr.ngs-row[data-row-id]");
+    const segments = panel.querySelectorAll("rect.ngs-segment[data-row-id]");
+
+    const clear = () => {
+      panel.querySelectorAll(".is-selected").forEach((el) => el.classList.remove("is-selected"));
+    };
+
+    const selectRowId = (id) => {
+      clear();
+      rows.forEach((tr) => {
+        if (tr.dataset.rowId === id) tr.classList.add("is-selected");
+      });
+      segments.forEach((seg) => {
+        if (seg.dataset.rowId === id) seg.classList.add("is-selected");
+      });
+    };
+
+    segments.forEach((seg) => {
+      seg.addEventListener("click", () => selectRowId(seg.dataset.rowId || ""));
+      seg.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectRowId(seg.dataset.rowId || "");
+        }
+      });
+    });
+
+    rows.forEach((tr) => {
+      tr.addEventListener("click", () => selectRowId(tr.dataset.rowId || ""));
+      tr.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectRowId(tr.dataset.rowId || "");
+        }
+      });
+    });
+  });
+})();
+</script>
+
+</div>
+</body></html>
