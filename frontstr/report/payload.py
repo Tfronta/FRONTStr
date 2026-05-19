@@ -136,9 +136,9 @@ def _serialize_marker(r: MarkerResult) -> dict[str, Any]:
         "calling_thresh": r.calling_thresh,
         "discordant": r.discordant,
         "warnings": list(r.warnings),
-        "alleles": [_serialize_allele(a, r.total_reads, r.system.motif) for a in r.alleles],
+        "alleles": [_serialize_allele(a, r.total_reads, r.system.motif, r.system.strand) for a in r.alleles],
         "alleles_called": [
-            _serialize_allele(a, r.total_reads, r.system.motif) for a in r.alleles_called
+            _serialize_allele(a, r.total_reads, r.system.motif, r.system.strand) for a in r.alleles_called
         ],
         "longtr": _serialize_longtr(r),
     }
@@ -146,14 +146,14 @@ def _serialize_marker(r: MarkerResult) -> dict[str, Any]:
     return marker_dict
 
 
-def _serialize_allele(a: Allele, total_reads: int, motif: str) -> dict[str, Any]:
+def _serialize_allele(a: Allele, total_reads: int, motif: str, strand: str = "+") -> dict[str, Any]:
     return {
         "cluster_index": a.cluster_index,
         "consensus": a.consensus,
         "length_bp": a.length_bp,
         "ce": a.ce,
         "isfg": a.isfg,
-        "motif_repeat_summary": motif_repeat_summary(a.consensus, motif),
+        "motif_repeat_summary": motif_repeat_summary(a.consensus, motif, strand=strand),
         "bp_diff": a.bp_diff,
         "is_deletion": a.is_deletion,
         "n_reads_total": a.n_reads_total,
@@ -220,7 +220,7 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
         if slot is not None:
             row[f"allele{i + 1}_isfg"] = slot.isfg
             row[f"allele{i + 1}_repeat_summary"] = motif_repeat_summary(
-                slot.consensus, r.system.motif
+                slot.consensus, r.system.motif, strand=r.system.strand
             )
             row[f"allele{i + 1}_ce"] = slot.ce
             row[f"allele{i + 1}_cov"] = slot.n_reads_total

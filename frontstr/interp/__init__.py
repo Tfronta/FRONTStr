@@ -8,12 +8,13 @@ Public surface:
 - :func:`build_expected_stutter`, :func:`classify_allele`,
   :func:`call_profile`, :func:`cross_check` — building blocks for tests
   and advanced callers.
-- :func:`compress_isfg`, :func:`motif_repeat_summary`, :func:`ce_from_length` — nomenclature helpers.
+- :func:`compress_isfg`, :func:`motif_repeat_summary`, :func:`ce_from_length`,
+  :func:`ce_from_brackets` — nomenclature helpers.
 """
 
 from frontstr.interp.classify import classify_allele
 from frontstr.interp.concordance import cross_check
-from frontstr.interp.isfg import ce_from_length, compress_isfg, motif_repeat_summary
+from frontstr.interp.isfg import ce_from_brackets, ce_from_length, compress_isfg, motif_repeat_summary
 from frontstr.interp.models import (
     Allele,
     AlleleStatus,
@@ -44,6 +45,7 @@ __all__ = [
     "TriType",
     "build_expected_stutter",
     "call_profile",
+    "ce_from_brackets",
     "ce_from_length",
     "classify_allele",
     "compress_isfg",
