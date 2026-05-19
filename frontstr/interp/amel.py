@@ -29,6 +29,7 @@ def interpret_amel(
     *,
     min_mapq: int = 20,
     min_reads: int = _DEFAULT_MIN_READS,
+    reference_fasta: Path | None = None,
 ) -> MarkerResult:
     """Sex-type one sample from AMELX and AMELY read counts.
 
@@ -36,19 +37,22 @@ def interpret_amel(
         system: The AMEL System. Should have ``y_chromosome``, ``y_ref_start``,
             and ``y_ref_end`` set for Y pileup. Without them only chrX is
             checked, producing a female-only call.
-        bam: Indexed sample BAM aligned to a GRCh38 reference that includes
-            both chrX and chrY (pseudo-autosomal regions masked).
+        bam: Indexed sample BAM or CRAM aligned to a GRCh38 reference that
+            includes both chrX and chrY (pseudo-autosomal regions masked).
         min_mapq: Minimum mapping quality for pileup reads.
         min_reads: Minimum reads on a chromosome to call that allele present.
+        reference_fasta: Reference FASTA path; required when ``bam`` is a CRAM.
     """
     x_count = len(
-        _safe_pileup(bam, system.chromosome, system.ref_start - 1, system.ref_end, min_mapq)
+        _safe_pileup(bam, system.chromosome, system.ref_start - 1, system.ref_end, min_mapq,
+                     reference_fasta=reference_fasta)
     )
     y_count = 0
     if system.y_chromosome and system.y_ref_start and system.y_ref_end:
         y_count = len(
             _safe_pileup(
-                bam, system.y_chromosome, system.y_ref_start - 1, system.y_ref_end, min_mapq
+                bam, system.y_chromosome, system.y_ref_start - 1, system.y_ref_end, min_mapq,
+                reference_fasta=reference_fasta,
             )
         )
 
@@ -109,8 +113,12 @@ def _no_data(system: System) -> MarkerResult:
     )
 
 
-def _safe_pileup(bam: Path, chrom: str, start: int, end: int, min_mapq: int) -> list:
+def _safe_pileup(
+    bam: Path, chrom: str, start: int, end: int, min_mapq: int,
+    *, reference_fasta: Path | None = None,
+) -> list:
     try:
-        return pileup_locus(bam, chrom, start, end, min_mapq=min_mapq)
+        return pileup_locus(bam, chrom, start, end, min_mapq=min_mapq,
+                            reference_fasta=reference_fasta)
     except Exception:
         return []

@@ -12,6 +12,28 @@ from frontstr.evidence.pileup import pileup_locus
 from tests.conftest import SYNTH_CHROM, SYNTH_CHR_LEN, SYNTH_FLANK_LEN, SYNTH_TR_END, SYNTH_TR_START
 
 
+# ---------------------------------------------------------------------------
+# Helpers for CRAM tests
+# ---------------------------------------------------------------------------
+
+def _write_synth_fasta(path: Path) -> Path:
+    """Write a minimal FASTA for SYNTH_CHROM and index it with pysam.faidx."""
+    seq = "A" * SYNTH_CHR_LEN
+    path.write_text(f">{SYNTH_CHROM}\n{seq}\n")
+    pysam.faidx(str(path))
+    return path
+
+
+def _bam_to_cram(bam_path: Path, cram_path: Path, fasta_path: Path) -> Path:
+    """Convert an existing sorted+indexed BAM to CRAM using the given reference."""
+    pysam.view(
+        "-C", "-T", str(fasta_path), "-o", str(cram_path), str(bam_path),
+        catch_stdout=False,
+    )
+    pysam.index(str(cram_path))
+    return cram_path
+
+
 def _make_boundary_bam(out_path: Path, cigartuples: list[tuple[int, int]], seq: str) -> Path:
     """Write a single-read BAM with the given CIGAR, starting at ref pos 0."""
     header_dict = {
@@ -164,3 +186,32 @@ def test_deletion_at_tr_end_not_dropped(tmp_path: Path) -> None:
     obs = pileup_locus(bam, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END)
     assert len(obs) == 1, "read with deletion at TR end must not be dropped"
     assert len(obs[0].sequence) == full_tr
+
+
+# ---------------------------------------------------------------------------
+# CRAM support tests
+# ---------------------------------------------------------------------------
+
+def test_cram_requires_reference_fasta(tmp_path: Path) -> None:
+    """pileup_locus on a .cram file without reference_fasta raises EvidenceError."""
+    cram = tmp_path / "dummy.cram"
+    cram.write_bytes(b"")
+    with pytest.raises(EvidenceError, match="reference FASTA"):
+        pileup_locus(cram, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END)
+
+
+def test_cram_pileup_returns_same_observations(
+    synth_bam_heterozygous: Path, tmp_path: Path
+) -> None:
+    """A CRAM converted from the synthetic BAM must yield identical observations."""
+    fasta = _write_synth_fasta(tmp_path / "ref.fa")
+    cram = _bam_to_cram(synth_bam_heterozygous, tmp_path / "het.cram", fasta)
+
+    obs_bam = pileup_locus(synth_bam_heterozygous, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END)
+    obs_cram = pileup_locus(cram, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END,
+                            reference_fasta=fasta)
+
+    assert len(obs_cram) == len(obs_bam)
+    bam_lengths = sorted(len(o.sequence) for o in obs_bam)
+    cram_lengths = sorted(len(o.sequence) for o in obs_cram)
+    assert cram_lengths == bam_lengths
