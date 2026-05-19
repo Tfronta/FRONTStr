@@ -110,15 +110,17 @@ def interpret_run(
     len_tolerance_bp: int = 0,
     analytical_thresh: float = DEFAULT_ANALYTICAL_THRESH,
     calling_thresh: float = DEFAULT_CALLING_THRESH,
+    reference_fasta: Path | None = None,
 ) -> list[MarkerResult]:
     """End-to-end: for each marker in ``panel``, pileup → cluster → interpret.
 
     Args:
-        bam: Indexed sample BAM.
+        bam: Indexed sample BAM or CRAM.
         panel: Panel definition.
         longtr_results: Optional dict ``{marker_name: LongTRResult}`` for
             concordance checks. Markers without an entry are interpreted
             from evidence alone.
+        reference_fasta: Reference FASTA path; required when ``bam`` is a CRAM.
 
     Returns:
         One :class:`MarkerResult` per marker in panel order. Empty pileups
@@ -128,11 +130,13 @@ def interpret_run(
     out: list[MarkerResult] = []
     for system in panel.systems:
         if system.marker_type == "amel":
-            out.append(interpret_amel(system, bam, min_mapq=min_mapq))
+            out.append(interpret_amel(system, bam, min_mapq=min_mapq,
+                                      reference_fasta=reference_fasta))
             continue
         clusters = _safe_pileup_and_cluster(
             bam=bam, system=system, min_mapq=min_mapq,
             identity_threshold=identity_threshold, len_tolerance_bp=len_tolerance_bp,
+            reference_fasta=reference_fasta,
         )
         out.append(
             interpret_marker(
@@ -149,12 +153,13 @@ def interpret_run(
 def _safe_pileup_and_cluster(
     *, bam: Path, system: System, min_mapq: int,
     identity_threshold: float, len_tolerance_bp: int,
+    reference_fasta: Path | None = None,
 ) -> list[Cluster]:
     """Pileup+cluster wrapper that returns ``[]`` instead of raising on empty loci."""
     try:
         obs = pileup_locus(
             bam, system.chromosome, system.ref_start - 1, system.ref_end,
-            min_mapq=min_mapq,
+            min_mapq=min_mapq, reference_fasta=reference_fasta,
         )
     except Exception:
         return []
