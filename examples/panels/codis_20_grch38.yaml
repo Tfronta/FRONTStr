@@ -1,5 +1,11 @@
 # FRONTStr panel: CODIS 20 core forensic loci on GRCh38.
 #
+# Allele numbers on compound markers (motif lists, period: -1) need a panel
+# field ``reference_ce``: the kit/str allele associated with the genome REF in
+# this interval — see STRBase / your ladder calibration. Δbp vs the REF-window
+# length is then scaled by ``allele_bp_step`` (default 4) and added for each
+# called consensus (LongTR-style). Simple tetramers continue to use ``period``.
+#
 # Coordinates and motifs follow the consensus from the STRBase project and
 # the published forensic literature. Values may need adjustment after lab
 # validation; this is a starting template, not a certified panel.

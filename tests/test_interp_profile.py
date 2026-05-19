@@ -70,6 +70,8 @@ def test_interpret_marker_homozygous(synth_bam_homozygous: Path) -> None:
     assert result.call_rule == CallRule.HOMOZYGOUS
     assert len(result.alleles_called) == 1
     assert result.alleles_called[0].ce == 12.0
+    assert result.alleles_called[0].allele_numeric == 12.0
+    assert result.alleles_called[0].allele_numeric_source == "period_ce"
     # Strand balance preserved in the called allele
     assert result.alleles_called[0].n_forward + result.alleles_called[0].n_reverse == 8
 

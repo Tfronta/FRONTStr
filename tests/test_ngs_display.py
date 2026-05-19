@@ -13,10 +13,16 @@ def test_highlight_repeat_spans_wraps_longest_run() -> None:
     seq = "AAA" + "TAGA" * 4 + "CCC"
     html = highlight_repeat_spans(seq, "TAGA")
     assert "repeat-highlight" in html
-    assert "AAA" in html
-    assert "<span class=\"repeat-highlight\">" + "TAGA" * 4 + "</span>" in html
+    assert "seq-flank" in html
+    assert '<span class="seq-flank">AAA</span>' in html
+    assert '<span class="repeat-highlight">' + "TAGA" * 4 + "</span>" in html
+    assert '<span class="seq-flank">CCC</span>' in html
 
 
+def test_highlight_repeat_spans_all_flank_when_no_motif_match() -> None:
+    html = highlight_repeat_spans("ACGTACGT", "TAGA")
+    assert "seq-flank" in html
+    assert "repeat-highlight" not in html
 def test_build_ngs_panel_isoallele_order_and_stack() -> None:
     marker = {
         "marker_name": "vWA",

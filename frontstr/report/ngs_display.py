@@ -25,29 +25,44 @@ def _xml_escape(s: str) -> str:
 
 
 def highlight_repeat_spans(consensus: str, motif_field: str) -> str:
-    """Wrap contiguous motif runs in ``consensus`` with ``repeat-highlight`` spans."""
+    """Render sequence with STRhub-style flank (muted) + repeat (teal pill) spans."""
     motifs = [m for m in motif_field.split(",") if m]
     if not consensus or not motifs:
-        return _xml_escape(consensus)
+        return f'<span class="seq-flank">{_xml_escape(consensus)}</span>' if consensus else ""
+
+    def _flank(s: str) -> str:
+        return f'<span class="seq-flank">{_xml_escape(s)}</span>' if s else ""
+
     runs = find_motif_runs(consensus, motifs)
     if not runs:
-        return _xml_escape(consensus)
+        return _flank(consensus)
+
     runs_sorted = sorted(runs, key=lambda r: r.start)
     parts: list[str] = []
     pos = 0
     for run in runs_sorted:
         if run.start > pos:
-            parts.append(_xml_escape(consensus[pos : run.start]))
+            parts.append(_flank(consensus[pos : run.start]))
         chunk = consensus[run.start : run.end]
         parts.append(f'<span class="repeat-highlight">{_xml_escape(chunk)}</span>')
         pos = run.end
     if pos < len(consensus):
-        parts.append(_xml_escape(consensus[pos:]))
+        parts.append(_flank(consensus[pos:]))
     return "".join(parts)
+
+
+def _format_numeric_label(value: float, source: str) -> str:
+    s = f"{value:.4f}".rstrip("0").rstrip(".")
+    if source == "delta_only" and abs(value) > 1e-9:
+        return f"Δ{s}"
+    return s
 
 
 def repeat_group_int(allele: dict[str, Any], period: int) -> int:
     """Repeat-count bin for chart X-axis and isoallele grouping."""
+    an = allele.get("allele_numeric")
+    if an is not None:
+        return int(round(float(an)))
     ce = allele.get("ce")
     if ce is not None:
         return int(round(float(ce)))
@@ -145,11 +160,19 @@ def build_ngs_panel(marker: dict[str, Any]) -> dict[str, Any]:
 
             frac = float(a.get("fraction") or 0.0)
             pct = round(frac * 100, 2) if total_reads > 0 else 0.0
+            allele_num = a.get("allele_numeric")
+            src = str(a.get("allele_numeric_source") or "")
+            if allele_num is not None and src not in {"", "deletion", "unavailable"}:
+                display = _format_numeric_label(float(allele_num), src)
+            elif a.get("ce") is not None:
+                display = _format_numeric_label(float(a["ce"]), "period_ce")
+            else:
+                display = str(rg)
 
             rows.append(
                 {
                     "id": row_id,
-                    "allele_display": str(rg),
+                    "allele_display": display,
                     "repeat_group": rg,
                     "is_isoallele": not is_canonical,
                     "iso_ordinal": iso_ord,

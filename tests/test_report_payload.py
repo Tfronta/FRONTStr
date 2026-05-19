@@ -74,7 +74,58 @@ def test_serialize_run_minimal() -> None:
     assert row["allele1_cov"] == 60
     assert row["allele2_cov"] == 55
     assert row["allele3_cov"] is None
+    assert row["allele1_ce_label"] == "9"
+    assert row["allele1_ce_sort"] == 9
+    assert row["allele1_ce_is_kit_ce"] is True
     assert row["status_chip"] == "ok"
+
+
+def test_profile_row_compound_manual_delta_numeric() -> None:
+    """Synthetic compound row: Δ-only allele index from cluster (no YAML ref_ce)."""
+    comp = Allele(
+        cluster_index=0,
+        consensus="A" * 65,
+        length_bp=65,
+        n_reads_total=33,
+        n_reads_hp1=17,
+        n_reads_hp2=16,
+        n_reads_hp_none=0,
+        n_forward=20,
+        n_reverse=13,
+        mean_qual=30.0,
+        ce=None,
+        allele_numeric=1.0,
+        allele_numeric_source="delta_only",
+        isfg="",
+        bp_diff=4,
+        is_deletion=False,
+        status=AlleleStatus.ALLELE,
+    )
+    results = [
+        MarkerResult(
+            marker_name="VWA_LIKE",
+            system=System(
+                name="VWA_LIKE",
+                chromosome="chr12",
+                ref_start=1,
+                ref_end=61,
+                motif="TCTA,TCTG",
+                period=-1,
+                corr_value=0,
+            ),
+            alleles=[comp],
+            alleles_called=[comp],
+            call_rule=CallRule.HOMOZYGOUS,
+            tri_type=TriType.NONE,
+            total_reads=33,
+        ),
+    ]
+    payload = serialize_run(results, RunContext(sample_name="c", panel_name="p"))
+    row = payload["profile_rows"][0]
+    assert row["allele1_ce"] is None
+    assert row["allele1_ce_label"] == "Δ1"
+    assert row["allele1_ce_sort"] == 1.0
+    assert row["allele1_ce_is_kit_ce"] is False
 
 
 def test_serialize_run_is_json_safe() -> None:
