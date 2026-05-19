@@ -16,7 +16,7 @@ from frontstr.evidence.pileup import pileup_locus
 from frontstr.interp.amel import interpret_amel
 from frontstr.interp.classify import classify_allele
 from frontstr.interp.concordance import cross_check
-from frontstr.interp.isfg import ce_from_length, compress_isfg
+from frontstr.interp.isfg import ce_from_brackets, ce_from_length, compress_isfg
 from frontstr.interp.models import Allele, MarkerResult
 from frontstr.interp.stutter import build_expected_stutter
 from frontstr.interp.triallelic import call_profile
@@ -173,8 +173,11 @@ def _allele_from_cluster(
     """Build an unclassified :class:`Allele` from one :class:`Cluster`."""
     consensus = c.consensus
     is_deletion = len(consensus) == 0
-    ce = ce_from_length(len(consensus), system.period, system.corr_value)
-    isfg = compress_isfg(consensus, motif=system.motif) if consensus else ""
+    isfg = compress_isfg(consensus, motif=system.motif, strand=system.strand) if consensus else ""
+    if system.period == -1:
+        ce = ce_from_brackets(isfg) if isfg else None
+    else:
+        ce = ce_from_length(len(consensus), system.period, system.corr_value)
     bp_diff = (
         len(consensus) - ref_length_bp
         if ref_length_bp is not None

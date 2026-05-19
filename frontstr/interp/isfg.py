@@ -10,6 +10,16 @@ Phase 1.5 of ROADMAP.md. See research-toastr.md §15 and §8 step 4.
 
 from __future__ import annotations
 
+import re
+
+_COMPLEMENT = str.maketrans("ACGTacgt", "TGCAtgca")
+_BRACKET_RE = re.compile(r"\[([A-Z]+)\](\d+)")
+
+
+def _rc(seq: str) -> str:
+    """Reverse-complement a nucleotide sequence (case-preserving)."""
+    return seq.translate(_COMPLEMENT)[::-1]
+
 
 def _collapse_single_nt_tokens(tokens: list[str]) -> list[str]:
     """Merge consecutive single-base tokens so we do not emit ``C T C`` spacing.
@@ -21,7 +31,7 @@ def _collapse_single_nt_tokens(tokens: list[str]) -> list[str]:
     out: list[str] = []
     buf: list[str] = []
     for tok in tokens:
-        if len(tok) == 1 and tok in "ACGT":
+        if len(tok) == 1 and tok in "ACGTacgt":
             buf.append(tok)
         else:
             if buf:
@@ -33,7 +43,7 @@ def _collapse_single_nt_tokens(tokens: list[str]) -> list[str]:
     return out
 
 
-def motif_repeat_summary(sequence: str, motif: str) -> str:
+def motif_repeat_summary(sequence: str, motif: str, *, strand: str = "+") -> str:
     """Human-readable repeat counts for multi-motif STRs (e.g. D3S1358).
 
     Returns a string like ``TCTAx4 + TCTGx1 + TCTAx3 (TR 64 bp)`` listing each
@@ -42,6 +52,8 @@ def motif_repeat_summary(sequence: str, motif: str) -> str:
     structure read from the consensus.
 
     When no motif run is found, falls back to total length only.
+    Pass ``strand="-"`` for markers whose canonical ISFG motif is on the
+    reverse complement strand (e.g. D5S818, vWA, CSF1PO).
     """
     from frontstr.interp.stutter import find_motif_runs
 
@@ -50,20 +62,24 @@ def motif_repeat_summary(sequence: str, motif: str) -> str:
         return ""
     if not motifs:
         return f"{len(sequence)} bp"
-    runs = find_motif_runs(sequence, motifs)
+    scan_seq = _rc(sequence) if strand == "-" else sequence
+    runs = find_motif_runs(scan_seq, motifs)
     if not runs:
         return f"no motif match, {len(sequence)} bp TR"
     parts = [f"{r.motif}x{r.n_copies}" for r in runs]
     return " + ".join(parts) + f" (TR {len(sequence)} bp)"
 
 
-def compress_isfg(sequence: str, *, motif: str) -> str:
+def compress_isfg(sequence: str, *, motif: str, strand: str = "+") -> str:
     """Compress ``sequence`` to ISFG bracketed notation using ``motif`` (or motifs).
 
     Args:
         sequence: Raw nucleotide sequence (uppercase, no whitespace).
         motif: Single motif (e.g. ``"AGAT"``) or comma-separated list
             (e.g. ``"TCTA,TCTG"`` for D3S1358).
+        strand: ``"+"`` (default) or ``"-"``. For reverse-strand markers the
+            consensus is RC'd before scanning so the output is in the
+            canonical ISFG orientation.
 
     Returns:
         Bracketed display string. Returns the input verbatim if no motif matches.
@@ -71,6 +87,8 @@ def compress_isfg(sequence: str, *, motif: str) -> str:
     motifs = [m for m in motif.split(",") if m] if motif else []
     if not motifs or not sequence:
         return sequence
+    if strand == "-":
+        sequence = _rc(sequence)
 
     out: list[str] = []
     n = len(sequence)
@@ -94,7 +112,7 @@ def compress_isfg(sequence: str, *, motif: str) -> str:
             if run_bp > best_run_bp:
                 best_motif, best_count, best_run_bp = m, cnt, run_bp
         if best_motif is None:
-            out.append(sequence[i])
+            out.append(sequence[i].lower())
             i += 1
         else:
             if best_count >= 2:
@@ -106,13 +124,40 @@ def compress_isfg(sequence: str, *, motif: str) -> str:
     return " ".join(out)
 
 
+def ce_from_brackets(isfg: str) -> float | None:
+    """Compute CE for compound-motif markers by summing repeat units in the ISFG string.
+
+    Used for ``period == -1`` markers (vWA, FGA, D21S11, etc.) where a direct
+    length/period calculation is undefined.
+
+    Counting rules (Phillips 2018):
+    - ``[MOTIF]n`` blocks contribute ``n`` units each.
+    - Bare uppercase motif tokens (single occurrences, not bracketed) contribute 1.
+    - Lowercase tokens (uncounted nucleotides) are ignored.
+
+    Returns None for an empty string or when no motif units are found.
+    """
+    if not isfg:
+        return None
+    total = 0
+    for m in _BRACKET_RE.finditer(isfg):
+        total += int(m.group(2))
+    # Bare uppercase runs left after removing bracket tokens = single motif copies
+    remaining = _BRACKET_RE.sub(" ", isfg)
+    for m in re.finditer(r"[A-Z]{2,}", remaining):
+        total += 1
+    return float(total) if total > 0 else None
+
+
 def ce_from_length(length_bp: int, period: int, corr_value: int) -> float | None:
     """Compute forensic CE allele number from raw TR length.
 
-    ``CE = (length - corr_value) / period``
+    Uses the ISFG divmod convention: full repeats are the integer part and
+    extra bases are the fractional part (e.g. 9 full + 3 extra = 9.3, not 9.75).
 
     For multi-motif loci where ``period <= 0``, returns None (CE undefined).
     """
     if period <= 0:
         return None
-    return round((length_bp - corr_value) / period, 1)
+    q, r = divmod(length_bp - corr_value, period)
+    return round(q + r / 10, 1)
