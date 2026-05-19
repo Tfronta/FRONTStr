@@ -78,6 +78,14 @@ def test_serialize_run_minimal() -> None:
     assert row["allele1_ce_sort"] == 9
     assert row["allele1_ce_is_kit_ce"] is True
     assert row["status_chip"] == "ok"
+    # HP counts must be separate integers, not a combined "hp1/hp2" string.
+    assert row["allele1_hp1"] == 30
+    assert row["allele1_hp2"] == 30
+    assert row["allele2_hp1"] == 27
+    assert row["allele2_hp2"] == 27
+    assert row["allele3_hp1"] is None
+    assert row["allele3_hp2"] is None
+    assert "allele1_hp" not in row
 
 
 def test_profile_row_compound_manual_delta_numeric() -> None:

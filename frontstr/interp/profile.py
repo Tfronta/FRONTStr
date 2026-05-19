@@ -13,6 +13,7 @@ from pathlib import Path
 from frontstr.caller.vcf import LongTRResult
 from frontstr.evidence.cluster import Cluster, cluster_observations
 from frontstr.evidence.pileup import pileup_locus
+from frontstr.interp.amel import interpret_amel
 from frontstr.interp.classify import classify_allele
 from frontstr.interp.concordance import cross_check
 from frontstr.interp.allele_numeric import compute_allele_numeric, resolve_ref_anchor_bp
@@ -131,6 +132,9 @@ def interpret_run(
     longtr_results = longtr_results or {}
     out: list[MarkerResult] = []
     for system in panel.systems:
+        if system.marker_type == "amel":
+            out.append(interpret_amel(system, bam, min_mapq=min_mapq))
+            continue
         clusters = _safe_pileup_and_cluster(
             bam=bam, system=system, min_mapq=min_mapq,
             identity_threshold=identity_threshold, len_tolerance_bp=len_tolerance_bp,
