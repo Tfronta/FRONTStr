@@ -4,11 +4,38 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pysam
 import pytest
 
 from frontstr.errors import EvidenceError
 from frontstr.evidence.pileup import pileup_locus
-from tests.conftest import SYNTH_CHROM, SYNTH_TR_END, SYNTH_TR_START
+from tests.conftest import SYNTH_CHROM, SYNTH_CHR_LEN, SYNTH_FLANK_LEN, SYNTH_TR_END, SYNTH_TR_START
+
+
+def _make_boundary_bam(out_path: Path, cigartuples: list[tuple[int, int]], seq: str) -> Path:
+    """Write a single-read BAM with the given CIGAR, starting at ref pos 0."""
+    header_dict = {
+        "HD": {"VN": "1.6", "SO": "coordinate"},
+        "SQ": [{"SN": SYNTH_CHROM, "LN": SYNTH_CHR_LEN}],
+        "RG": [{"ID": "rg1", "SM": "s", "LB": "l", "PL": "ONT"}],
+    }
+    raw = out_path.with_suffix(".unsorted.bam")
+    with pysam.AlignmentFile(str(raw), "wb", header=header_dict) as bam:
+        a = pysam.AlignedSegment(header=bam.header)
+        a.query_name = "del_read"
+        a.query_sequence = seq
+        a.query_qualities = pysam.qualitystring_to_array("I" * len(seq))
+        a.reference_id = 0
+        a.reference_start = 0
+        a.mapping_quality = 60
+        a.flag = 0
+        a.cigartuples = cigartuples
+        a.set_tag("RG", "rg1")
+        bam.write(a)
+    pysam.sort("-o", str(out_path), str(raw))
+    pysam.index(str(out_path))
+    raw.unlink(missing_ok=True)
+    return out_path
 
 
 def test_pileup_heterozygous_counts(synth_bam_heterozygous: Path) -> None:
@@ -88,3 +115,52 @@ def test_pileup_rejects_invalid_window(tmp_path: Path) -> None:
 def test_pileup_missing_bam(tmp_path: Path) -> None:
     with pytest.raises(EvidenceError, match="not found"):
         pileup_locus(tmp_path / "nope.bam", "chr1", 100, 200)
+
+
+# ---------------------------------------------------------------------------
+# Bug #3 regression tests: deletion exactly at the TR boundary
+# ---------------------------------------------------------------------------
+
+def test_deletion_at_tr_start_not_dropped(tmp_path: Path) -> None:
+    """A read with a deletion at rpos==start must not be silently dropped.
+
+    CIGAR: 100M 4D 44M 100M
+    The first 4 bp of the TR (ref 100-103) are deleted in this read.
+    The read should be returned with a 44-bp sequence (11 AGAT repeats).
+    """
+    del_bp = 4
+    kept_tr = SYNTH_TR_END - SYNTH_TR_START - del_bp  # 44
+    seq = "A" * SYNTH_FLANK_LEN + "AGAT" * (kept_tr // 4) + "T" * SYNTH_FLANK_LEN
+    cigar = [
+        (0, SYNTH_FLANK_LEN),   # 100M left flank
+        (2, del_bp),             # 4D — deletion at rpos == SYNTH_TR_START
+        (0, kept_tr),            # 44M — rest of TR
+        (0, SYNTH_FLANK_LEN),   # 100M right flank
+    ]
+    bam = _make_boundary_bam(tmp_path / "del_start.bam", cigar, seq)
+    obs = pileup_locus(bam, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END)
+    assert len(obs) == 1, "read with deletion at TR start must not be dropped"
+    assert len(obs[0].sequence) == kept_tr
+
+
+def test_deletion_at_tr_end_not_dropped(tmp_path: Path) -> None:
+    """A read with a deletion at rpos==end must not be silently dropped.
+
+    CIGAR: 100M 48M 4D 96M
+    Ref positions 148-151 are deleted (148 == SYNTH_TR_END, the exclusive end).
+    The full TR (48 bp) is present in the read; the deletion is in the right flank.
+    """
+    del_bp = 4
+    full_tr = SYNTH_TR_END - SYNTH_TR_START   # 48
+    right_flank = SYNTH_FLANK_LEN - del_bp    # 96
+    seq = "A" * SYNTH_FLANK_LEN + "AGAT" * (full_tr // 4) + "T" * right_flank
+    cigar = [
+        (0, SYNTH_FLANK_LEN),  # 100M left flank
+        (0, full_tr),           # 48M full TR
+        (2, del_bp),            # 4D — deletion at rpos == SYNTH_TR_END
+        (0, right_flank),       # 96M right flank (shortened by deletion)
+    ]
+    bam = _make_boundary_bam(tmp_path / "del_end.bam", cigar, seq)
+    obs = pileup_locus(bam, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END)
+    assert len(obs) == 1, "read with deletion at TR end must not be dropped"
+    assert len(obs[0].sequence) == full_tr

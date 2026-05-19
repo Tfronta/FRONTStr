@@ -32,6 +32,21 @@ class System(BaseModel):
     ont_len_tolerance: int = 0
     stutter_overrides: dict[str, float] = Field(default_factory=dict)
 
+    # "str" for normal TR markers; "amel" for Amelogenin sex typing.
+    marker_type: str = "str"
+    # AMELY region on chrY (AMEL markers only).
+    y_chromosome: str | None = None
+    y_ref_start: int | None = None
+    y_ref_end: int | None = None
+
+    @field_validator("marker_type")
+    @classmethod
+    def _marker_type_is_known(cls, v: str) -> str:
+        allowed = {"str", "amel"}
+        if v not in allowed:
+            raise ValueError(f"unknown marker_type {v!r}; expected one of {sorted(allowed)}")
+        return v
+
     @field_validator("motif")
     @classmethod
     def _motif_is_nucleotide(cls, v: str) -> str:
