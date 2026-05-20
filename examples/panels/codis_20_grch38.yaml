@@ -7,202 +7,230 @@
 # called consensus (LongTR-style). Simple tetramers continue to use ``period``.
 #
 # Coordinates and motifs follow the consensus from the STRBase project and
-# the published forensic literature. Values may need adjustment after lab
-# validation; this is a starting template, not a certified panel.
+# the published forensic literature.
+#
+# corr_value interpretation depends on period:
+#   period > 0 : flanking bp (non-repeat) in the window.
+#                CE = (extracted_length_bp - corr_value) / period
+#   period = -1: flanking motif units in the window (units outside the core
+#                repeat block). CE = ce_from_brackets(isfg) - corr_value.
+#                Calibrated from GRCh38 reference FASTA: core block identified
+#                as the maximal group of motif tokens separated by ≤12 non-motif
+#                chars (legitimate spacers: ta/tca/tccata/tcg/tccag are ≤6 bp).
+#                Exception: D19S433 uses corr_value=1 because the reference has
+#                a pre-repeat AAGG immediately before a 4-bp imperfect spacer
+#                (aaag), which marks the boundary of the structured repeat array.
+#
+# Coordinate expansion (2026-05): windows widened to LongTR repeat
+# boundaries ± 100 bp flanking on each side. This ensures longer alleles
+# are never truncated on ONT long reads.
+#
+# strand = "-" for markers whose published ISFG motif reads on the minus
+# strand; the consensus is RC'd before bracket compression (P2).
 #
 # WARNING: Triallelic propensity flags are set conservatively. Adjust per
 # laboratory experience. See plan-longtr-improved.md §6.4.
 
 name: CODIS 20
-version: 2026.05-draft
+version: 2026.05-ont-wide
 reference_build: GRCh38
 description: |
   Core CODIS 20 autosomal markers + Amelogenin. ONT R10-friendly defaults.
+  Windows cover LongTR repeat boundaries ± 100 bp for long-read safety.
+  corr_values calibrated against GRCh38 reference, May 2026.
 
 systems:
   - name: D3S1358
     chromosome: chr3
-    ref_start: 45582231
-    ref_end: 45582294
+    ref_start: 45540634
+    ref_end: 45540907
     motif: TCTA,TCTG
     period: -1
-    corr_value: 11
+    corr_value: 4  # 3 left-flank + 1 right-flank TCTG/TCTA from GRCh38 reference
     category: autosomal
 
   - name: vWA
     chromosome: chr12
-    ref_start: 5983977
-    ref_end: 5984049
+    ref_start: 5983877
+    ref_end: 5984149
     motif: TCTA,TCTG
     period: -1
-    corr_value: 0
+    corr_value: 8  # 1 left-flank + 7 right-flank TCTA/TCTG from GRCh38 reference
+    strand: "-"
     category: autosomal
 
   - name: FGA
     chromosome: chr4
-    ref_start: 154587735
-    ref_end: 154587823
+    ref_start: 154587635
+    ref_end: 154587923
     motif: CTTT,TTCC,CTCC
     period: -1
     corr_value: 0
+    strand: "-"
     category: autosomal
     allow_triallelic: true
 
   - name: D8S1179
     chromosome: chr8
-    ref_start: 124894865
-    ref_end: 124894916
+    ref_start: 124894765
+    ref_end: 124895016
     motif: TCTA,TCTG
     period: -1
-    corr_value: 0
+    corr_value: 2  # 1 left-flank TCTG + 1 right-flank TCTA from GRCh38 reference
     category: autosomal
 
   - name: D21S11
     chromosome: chr21
-    ref_start: 19181972
-    ref_end: 19182099
+    ref_start: 19181872
+    ref_end: 19182199
     motif: TCTA,TCTG
     period: -1
-    corr_value: 0
+    corr_value: 3  # 1 left-flank TCTG + 2 right-flank TCTG from GRCh38 reference
     category: autosomal
     allow_triallelic: true
 
   - name: D18S51
     chromosome: chr18
-    ref_start: 63281669
-    ref_end: 63281731
+    ref_start: 63281568
+    ref_end: 63281838
     motif: AGAA
     period: 4
-    corr_value: 0
+    corr_value: 199
     category: autosomal
 
   - name: D5S818
     chromosome: chr5
-    ref_start: 123775556
-    ref_end: 123775594
+    ref_start: 123775456
+    ref_end: 123775699
     motif: AGAT
     period: 4
-    corr_value: 0
+    corr_value: 200
+    strand: "-"
     category: autosomal
 
   - name: D13S317
     chromosome: chr13
-    ref_start: 82148025
-    ref_end: 82148071
+    ref_start: 82147925
+    ref_end: 82148171
     motif: TATC
     period: 4
-    corr_value: 0
+    corr_value: 203
     category: autosomal
 
   - name: D7S820
     chromosome: chr7
-    ref_start: 84160226
-    ref_end: 84160266
+    ref_start: 84160126
+    ref_end: 84160377
     motif: GATA
     period: 4
-    corr_value: 0
+    corr_value: 200
+    strand: "-"
     category: autosomal
     allow_triallelic: true
 
   - name: D16S539
     chromosome: chr16
-    ref_start: 86352703
-    ref_end: 86352747
+    ref_start: 86352603
+    ref_end: 86352847
     motif: GATA
     period: 4
-    corr_value: 0
+    corr_value: 201
     category: autosomal
 
   - name: TH01
     chromosome: chr11
-    ref_start: 2171088
-    ref_end: 2171115
+    ref_start: 2170988
+    ref_end: 2171215
     motif: AATG
     period: 4
-    corr_value: 4
+    corr_value: 200
     category: autosomal
 
   - name: TPOX
     chromosome: chr2
-    ref_start: 1489651
-    ref_end: 1489684
+    ref_start: 1489551
+    ref_end: 1489784
     motif: AATG
     period: 4
-    corr_value: 0
+    corr_value: 202
     category: autosomal
     allow_triallelic: true
     tri_balanced_thr: 0.5  # TPOX type II can fall to ~0.5 PHR
 
   - name: CSF1PO
     chromosome: chr5
-    ref_start: 150076323
-    ref_end: 150076367
+    ref_start: 150076223
+    ref_end: 150076475
     motif: AGAT
     period: 4
-    corr_value: 0
+    corr_value: 201
+    strand: "-"
     category: autosomal
 
   - name: D2S1338
     chromosome: chr2
-    ref_start: 218014847
-    ref_end: 218014916
+    ref_start: 218014747
+    ref_end: 218015050
     motif: TGCC,TTCC
     period: -1
-    corr_value: 0
+    corr_value: 1  # 1 left-flank TTCC from GRCh38 reference
+    strand: "-"
     category: autosomal
 
   - name: D19S433
     chromosome: chr19
-    ref_start: 29926234
-    ref_end: 29926293
+    ref_start: 29926134
+    ref_end: 29926398
     motif: AAGG,TAGG
     period: -1
-    corr_value: 0
+    corr_value: 1  # 1 pre-repeat AAGG before 4-bp imperfect spacer (aaag) in GRCh38 reference
+    strand: "-"
     category: autosomal
 
   - name: D10S1248
     chromosome: chr10
-    ref_start: 129294241
-    ref_end: 129294285
+    ref_start: 129294141
+    ref_end: 129294395
     motif: GGAA
     period: 4
-    corr_value: 0
+    corr_value: 203
     category: autosomal
 
   - name: D1S1656
     chromosome: chr1
-    ref_start: 230769616
-    ref_end: 230769683
+    ref_start: 230769516
+    ref_end: 230769783
     motif: TAGA,CAGA
     period: -1
-    corr_value: 0
+    corr_value: 1  # 1 left-flank TAGA from GRCh38 reference
+    strand: "-"
     category: autosomal
 
   - name: D2S441
     chromosome: chr2
-    ref_start: 68011946
-    ref_end: 68011990
+    ref_start: 68011846
+    ref_end: 68012094
     motif: TCTA,TCAA
     period: -1
-    corr_value: 0
+    corr_value: 1
     category: autosomal
 
   - name: D12S391
     chromosome: chr12
-    ref_start: 12297038
-    ref_end: 12297113
+    ref_start: 12296921
+    ref_end: 12297213
     motif: AGAT,AGAC
     period: -1
-    corr_value: 0
+    corr_value: 3  # 2 left-flank + 1 right-flank AGAT/AGAC from GRCh38 reference
     category: autosomal
 
   - name: D22S1045
     chromosome: chr22
-    ref_start: 37140287
-    ref_end: 37140338
+    ref_start: 37140187
+    ref_end: 37140438
     motif: ATT
     period: 3
-    corr_value: 0
+    corr_value: 201
     category: autosomal
 
   - name: AMEL

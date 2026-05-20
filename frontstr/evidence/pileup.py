@@ -67,11 +67,13 @@ def pileup_locus(
     min_mapq: int = 20,
     flank_anchor: int = _DEFAULT_FLANK_ANCHOR,
     fetch_margin: int = _DEFAULT_FETCH_MARGIN,
+    reference_fasta: Path | None = None,
 ) -> list[Observation]:
     """Extract one :class:`Observation` per read that fully spans ``[start, end)``.
 
     Args:
-        bam_path: Indexed BAM (``.bai`` or ``.csi`` next to it).
+        bam_path: Indexed BAM (``.bai`` or ``.csi`` next to it), or an indexed
+            CRAM (``.crai`` next to it).
         chrom: Chromosome name as it appears in the BAM ``@SQ`` header.
         start: 0-based inclusive start of the TR.
         end: 0-based exclusive end of the TR.
@@ -82,26 +84,36 @@ def pileup_locus(
             alignment extends beyond ``start - fetch_margin`` to ``end +
             fetch_margin`` are inspected; the actual gating is by alignment
             boundary checks below.
+        reference_fasta: Path to the reference FASTA (with ``.fai`` index).
+            Required for CRAM input; ignored for BAM.
 
     Returns:
         A list of :class:`Observation`, possibly empty. Order matches the BAM
         iteration order (which is coordinate-sorted for sorted BAMs).
 
     Raises:
-        EvidenceError: If the BAM cannot be opened or fetch fails.
+        EvidenceError: If the BAM/CRAM cannot be opened or fetch fails.
     """
     if start < 0 or end <= start:
         raise EvidenceError(f"Invalid locus window: start={start}, end={end}")
     if not bam_path.exists():
         raise EvidenceError(f"BAM not found: {bam_path}")
 
+    is_cram = bam_path.suffix.lower() == ".cram"
+    if is_cram and reference_fasta is None:
+        raise EvidenceError(
+            f"CRAM file requires a reference FASTA — "
+            f"pass reference_fasta= to pileup_locus (or --reference on the CLI)"
+        )
+
     try:
         import pysam
     except ImportError as exc:
         raise EvidenceError("pysam is required for pileup_locus") from exc
 
+    open_kwargs: dict = {"reference_filename": str(reference_fasta)} if is_cram else {}
     try:
-        bam = pysam.AlignmentFile(str(bam_path), "rb")
+        bam = pysam.AlignmentFile(str(bam_path), "rc" if is_cram else "rb", **open_kwargs)
     except (ValueError, OSError) as exc:
         raise EvidenceError(f"Cannot open BAM {bam_path}: {exc}") from exc
 

@@ -42,10 +42,21 @@ class System(BaseModel):
 
     # "str" for normal TR markers; "amel" for Amelogenin sex typing.
     marker_type: str = "str"
+    # Strand of the canonical ISFG motif relative to the reference (+/-).
+    # Set to "-" for markers whose published motif is on the reverse strand
+    # (e.g. D5S818, vWA, CSF1PO). The consensus is RC'd before ISFG compression.
+    strand: str = "+"
     # AMELY region on chrY (AMEL markers only).
     y_chromosome: str | None = None
     y_ref_start: int | None = None
     y_ref_end: int | None = None
+
+    @field_validator("strand")
+    @classmethod
+    def _strand_is_valid(cls, v: str) -> str:
+        if v not in ("+", "-"):
+            raise ValueError(f"strand must be '+' or '-', got {v!r}")
+        return v
 
     @field_validator("marker_type")
     @classmethod
