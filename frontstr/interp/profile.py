@@ -17,7 +17,7 @@ from frontstr.interp.amel import interpret_amel
 from frontstr.interp.classify import classify_allele
 from frontstr.interp.concordance import cross_check
 from frontstr.interp.allele_numeric import compute_allele_numeric, resolve_ref_anchor_bp
-from frontstr.interp.isfg import ce_from_length, compress_isfg
+from frontstr.interp.isfg import ce_from_brackets, ce_from_length, compress_isfg
 from frontstr.interp.models import Allele, MarkerResult
 from frontstr.interp.stutter import build_expected_stutter
 from frontstr.interp.triallelic import call_profile
@@ -115,15 +115,17 @@ def interpret_run(
     len_tolerance_bp: int = 0,
     analytical_thresh: float = DEFAULT_ANALYTICAL_THRESH,
     calling_thresh: float = DEFAULT_CALLING_THRESH,
+    reference_fasta: Path | None = None,
 ) -> list[MarkerResult]:
     """End-to-end: for each marker in ``panel``, pileup → cluster → interpret.
 
     Args:
-        bam: Indexed sample BAM.
+        bam: Indexed sample BAM or CRAM.
         panel: Panel definition.
         longtr_results: Optional dict ``{marker_name: LongTRResult}`` for
             concordance checks. Markers without an entry are interpreted
             from evidence alone.
+        reference_fasta: Reference FASTA path; required when ``bam`` is a CRAM.
 
     Returns:
         One :class:`MarkerResult` per marker in panel order. Empty pileups
@@ -133,11 +135,13 @@ def interpret_run(
     out: list[MarkerResult] = []
     for system in panel.systems:
         if system.marker_type == "amel":
-            out.append(interpret_amel(system, bam, min_mapq=min_mapq))
+            out.append(interpret_amel(system, bam, min_mapq=min_mapq,
+                                      reference_fasta=reference_fasta))
             continue
         clusters = _safe_pileup_and_cluster(
             bam=bam, system=system, min_mapq=min_mapq,
             identity_threshold=identity_threshold, len_tolerance_bp=len_tolerance_bp,
+            reference_fasta=reference_fasta,
         )
         out.append(
             interpret_marker(
@@ -154,12 +158,13 @@ def interpret_run(
 def _safe_pileup_and_cluster(
     *, bam: Path, system: System, min_mapq: int,
     identity_threshold: float, len_tolerance_bp: int,
+    reference_fasta: Path | None = None,
 ) -> list[Cluster]:
     """Pileup+cluster wrapper that returns ``[]`` instead of raising on empty loci."""
     try:
         obs = pileup_locus(
             bam, system.chromosome, system.ref_start - 1, system.ref_end,
-            min_mapq=min_mapq,
+            min_mapq=min_mapq, reference_fasta=reference_fasta,
         )
     except Exception:
         return []
@@ -178,9 +183,17 @@ def _allele_from_cluster(
     """Build an unclassified :class:`Allele` from one :class:`Cluster`."""
     consensus = c.consensus
     is_deletion = len(consensus) == 0
-    ce = ce_from_length(len(consensus), system.period, system.corr_value)
-    isfg = compress_isfg(consensus, motif=system.motif) if consensus else ""
-    bp_diff = len(consensus) - ref_length_bp
+    isfg = compress_isfg(consensus, motif=system.motif, strand=system.strand) if consensus else ""
+    if system.period == -1:
+        raw_ce = ce_from_brackets(isfg) if isfg else None
+        ce = (raw_ce - system.corr_value) if raw_ce is not None else None
+    else:
+        ce = ce_from_length(len(consensus), system.period, system.corr_value)
+    bp_diff = (
+        len(consensus) - ref_length_bp
+        if ref_length_bp is not None
+        else 0
+    )
     allele_num, allele_src = compute_allele_numeric(
         len(consensus), system, ref_length_bp
     )

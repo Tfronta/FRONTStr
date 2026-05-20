@@ -143,16 +143,116 @@ def run(
 @app.command("batch")
 def batch(
     manifest: Annotated[Path, typer.Option("--manifest", help="Batch manifest TSV.")],
-    panel: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
-    reference: Annotated[Path, typer.Option("--reference", "-r", help="Reference FASTA.")],
+    panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
     out: Annotated[Path, typer.Option("--out", "-o", help="Output directory.")],
+    reference: Annotated[
+        Path | None,
+        typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
+    ] = None,
+    formats: Annotated[
+        str,
+        typer.Option(
+            "--formats",
+            help=(
+                "Comma-separated list. One or more of: "
+                "profile,evidence,seqs,json,html."
+            ),
+        ),
+    ] = "profile,evidence,seqs,json,html",
+    workers: Annotated[
+        int, typer.Option("--workers", "-j", help="Parallel processes (default: 1).")
+    ] = 1,
+    platform: Annotated[str, typer.Option("--platform")] = "ont",
+    operator: Annotated[str | None, typer.Option("--operator")] = None,
+    run_id: Annotated[str | None, typer.Option("--run-id")] = None,
+    min_mapq: Annotated[int, typer.Option("--min-mapq")] = 20,
+    identity: Annotated[float, typer.Option("--identity")] = 0.97,
+    analytical_thresh: Annotated[float, typer.Option("--analytical-thresh")] = 0.02,
+    calling_thresh: Annotated[float, typer.Option("--calling-thresh")] = 0.10,
 ) -> None:
-    """Run FRONTStr on a multi-sample batch (Phase 4)."""
-    _ = manifest, panel, reference, out
+    """Run FRONTStr on a multi-sample batch from a manifest TSV.
+
+    The manifest is a tab-separated file with columns ``sample_id``, ``bam``
+    and optionally ``role`` (sample|positive_ctrl|negative_ctrl|reagent_blank).
+    Lines starting with ``#`` are ignored. Example::
+
+        # FRONTStr batch manifest
+        sample_id\\tbam\\trole
+        HG00113\\t/data/HG00113.bam\\tsample
+        CTRL_POS\\t/data/ctrl_pos.bam\\tpositive_ctrl
+
+    Per-sample outputs are written under ``<out>/<sample_id>/``.
+    A ``batch_summary.csv`` with all called CEs is written to ``<out>/``.
+    """
+    import os
+
+    from frontstr.batch import parse_manifest, run_batch
+    from frontstr.panel.loader import load_panel
+
+    wanted = frozenset(f.strip().lower() for f in formats.split(",") if f.strip())
+    unknown = wanted - {"profile", "evidence", "seqs", "json", "html"}
+    if unknown:
+        console.print(f"[red]Unknown formats:[/red] {sorted(unknown)}")
+        raise typer.Exit(code=2)
+
+    try:
+        entries = parse_manifest(manifest)
+        panel = load_panel(panel_path)
+    except FrontstrError as exc:
+        console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+
+    n = len(entries)
+    effective_workers = max(1, min(workers, n, os.cpu_count() or 1))
     console.print(
-        "[yellow]not implemented yet[/yellow] — Phase 4 of ROADMAP.md."
+        f"[bold]FRONTStr batch[/bold] — {n} sample(s), "
+        f"{effective_workers} worker(s), panel: [cyan]{panel.name}[/cyan]"
     )
-    raise typer.Exit(code=64)
+
+    completed: list[str] = []
+
+    def _tick(sample_id: str) -> None:
+        completed.append(sample_id)
+        console.print(f"  [{len(completed)}/{n}] {sample_id}")
+
+    try:
+        results = run_batch(
+            entries=entries,
+            panel=panel,
+            out_dir=out,
+            reference_fasta=reference,
+            formats=wanted,
+            min_mapq=min_mapq,
+            identity=identity,
+            analytical_thresh=analytical_thresh,
+            calling_thresh=calling_thresh,
+            platform=platform,
+            operator=operator,
+            run_id=run_id,
+            workers=effective_workers,
+            progress_callback=_tick,
+        )
+    except FrontstrError as exc:
+        console.print(f"[red]batch error:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+
+    ok = sum(1 for r in results if r.status == "ok")
+    errors = [r for r in results if r.status == "error"]
+
+    console.print(f"\n[green]✓ {ok}/{n} samples succeeded[/green]")
+    if errors:
+        console.print(f"[red]✗ {len(errors)} error(s):[/red]")
+        for r in errors:
+            first_line = r.error.splitlines()[0] if r.error else "unknown"
+            console.print(f"  [red]{r.sample_id}[/red]: {first_line}")
+
+    summary = out / "batch_summary.csv"
+    if summary.exists():
+        size_kb = summary.stat().st_size / 1024
+        console.print(f"[green]wrote[/green] {summary}  ({size_kb:.1f} KB)")
+
+    if errors:
+        raise typer.Exit(code=1)
 
 
 @app.command("call")
@@ -226,9 +326,13 @@ def call(
 
 @app.command("doctor")
 def doctor(
-    bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM.")],
+    bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM or CRAM.")],
     panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
     min_mapq: Annotated[int, typer.Option("--min-mapq")] = 20,
+    reference: Annotated[
+        Path | None,
+        typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
+    ] = None,
 ) -> None:
     """Pre-flight sanity check: BAM ↔ panel compatibility.
 
@@ -250,8 +354,13 @@ def doctor(
         console.print(f"[red]panel error:[/red] {exc}")
         raise typer.Exit(code=2) from exc
 
+    is_cram = bam.suffix.lower() == ".cram"
+    if is_cram and reference is None:
+        console.print("[red]error:[/red] CRAM input requires --reference <fasta>")
+        raise typer.Exit(code=2)
+    open_kwargs: dict = {"reference_filename": str(reference)} if is_cram else {}
     try:
-        af = pysam.AlignmentFile(str(bam), "rb")
+        af = pysam.AlignmentFile(str(bam), "rc" if is_cram else "rb", **open_kwargs)
     except (OSError, ValueError) as exc:
         console.print(f"[red]BAM error:[/red] {exc}")
         raise typer.Exit(code=2) from exc
@@ -288,9 +397,11 @@ def doctor(
             try:
                 obs_raw = pileup_locus(
                     bam, s.chromosome, s.ref_start - 1, s.ref_end, min_mapq=0,
+                    reference_fasta=reference,
                 )
                 obs_filt = pileup_locus(
                     bam, s.chromosome, s.ref_start - 1, s.ref_end, min_mapq=min_mapq,
+                    reference_fasta=reference,
                 )
                 n_raw, n_filtered = len(obs_raw), len(obs_filt)
             except FrontstrError as exc:
@@ -319,7 +430,7 @@ def doctor(
 
 @app.command("export")
 def export_cmd(
-    bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM.")],
+    bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM or CRAM.")],
     panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
     out_dir: Annotated[Path, typer.Option("--out-dir", "-o", help="Output directory.")],
     formats: Annotated[
@@ -345,6 +456,10 @@ def export_cmd(
     identity: Annotated[float, typer.Option("--identity")] = 0.97,
     analytical_thresh: Annotated[float, typer.Option("--analytical-thresh")] = 0.02,
     calling_thresh: Annotated[float, typer.Option("--calling-thresh")] = 0.10,
+    reference: Annotated[
+        Path | None,
+        typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
+    ] = None,
 ) -> None:
     """Run the full pipeline and write one or more export files.
 
@@ -379,6 +494,7 @@ def export_cmd(
             bam=bam, panel=panel, longtr_results=longtr_map,
             min_mapq=min_mapq, identity_threshold=identity,
             analytical_thresh=analytical_thresh, calling_thresh=calling_thresh,
+            reference_fasta=reference,
         )
         context = RunContext(
             sample_name=sample_name or bam.stem,
@@ -421,7 +537,7 @@ def export_cmd(
 
 @app.command("report")
 def report(
-    bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM.")],
+    bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM or CRAM.")],
     panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
     out: Annotated[Path, typer.Option("--out", "-o", help="Output HTML path.")],
     sample_name: Annotated[
@@ -437,6 +553,10 @@ def report(
     identity: Annotated[float, typer.Option("--identity")] = 0.97,
     analytical_thresh: Annotated[float, typer.Option("--analytical-thresh")] = 0.02,
     calling_thresh: Annotated[float, typer.Option("--calling-thresh")] = 0.10,
+    reference: Annotated[
+        Path | None,
+        typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
+    ] = None,
 ) -> None:
     """Run the full pipeline and emit a self-contained HTML report.
 
@@ -458,6 +578,7 @@ def report(
             bam=bam, panel=panel, longtr_results=longtr_map,
             min_mapq=min_mapq, identity_threshold=identity,
             analytical_thresh=analytical_thresh, calling_thresh=calling_thresh,
+            reference_fasta=reference,
         )
         context = RunContext(
             sample_name=sample_name or bam.stem,
@@ -481,7 +602,7 @@ def report(
 
 @app.command("interpret")
 def interpret(
-    bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM.")],
+    bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM or CRAM.")],
     panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
     longtr_vcf: Annotated[
         Path | None, typer.Option("--longtr-vcf", help="Optional LongTR VCF for concordance.")
@@ -495,6 +616,10 @@ def interpret(
     calling_thresh: Annotated[
         float, typer.Option("--calling-thresh", help="Fraction below = artefact.")
     ] = 0.10,
+    reference: Annotated[
+        Path | None,
+        typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
+    ] = None,
 ) -> None:
     """End-to-end forensic call: pileup → cluster → ISFG → classify → call.
 
@@ -516,6 +641,7 @@ def interpret(
             min_mapq=min_mapq, identity_threshold=identity,
             len_tolerance_bp=len_tolerance,
             analytical_thresh=analytical_thresh, calling_thresh=calling_thresh,
+            reference_fasta=reference,
         )
     except FrontstrError as exc:
         console.print(f"[red]interpret error:[/red] {exc}")
@@ -547,7 +673,7 @@ def interpret(
 
 @app.command("evidence")
 def evidence(
-    bam: Annotated[Path, typer.Option("--bam", help="Indexed BAM file.")],
+    bam: Annotated[Path, typer.Option("--bam", help="Indexed BAM or CRAM file.")],
     chrom: Annotated[str, typer.Option("--chrom", help="Chromosome (matches BAM @SQ).")],
     start: Annotated[int, typer.Option("--start", help="1-based inclusive TR start.")],
     end: Annotated[int, typer.Option("--end", help="1-based inclusive TR end.")],
@@ -558,6 +684,10 @@ def evidence(
     len_tolerance: Annotated[
         int, typer.Option("--len-tolerance", help="bp tolerance for length binning.")
     ] = 0,
+    reference: Annotated[
+        Path | None,
+        typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
+    ] = None,
 ) -> None:
     """Per-locus sequence pileup → clusters. Debug helper for the evidence layer.
 
@@ -569,7 +699,8 @@ def evidence(
     from frontstr.evidence.pileup import pileup_locus
 
     try:
-        obs = pileup_locus(bam, chrom, start - 1, end, min_mapq=min_mapq)
+        obs = pileup_locus(bam, chrom, start - 1, end, min_mapq=min_mapq,
+                           reference_fasta=reference)
     except FrontstrError as exc:
         console.print(f"[red]pileup error:[/red] {exc}")
         raise typer.Exit(code=2) from exc
