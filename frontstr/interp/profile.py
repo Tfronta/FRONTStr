@@ -180,7 +180,8 @@ def _allele_from_cluster(
     is_deletion = len(consensus) == 0
     isfg = compress_isfg(consensus, motif=system.motif, strand=system.strand) if consensus else ""
     if system.period == -1:
-        ce = ce_from_brackets(isfg) if isfg else None
+        raw_ce = ce_from_brackets(isfg) if isfg else None
+        ce = (raw_ce - system.corr_value) if raw_ce is not None else None
     else:
         ce = ce_from_length(len(consensus), system.period, system.corr_value)
     bp_diff = (
