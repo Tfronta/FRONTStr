@@ -3,15 +3,21 @@
 # Coordinates and motifs follow the consensus from the STRBase project and
 # the published forensic literature.
 #
-# corr_value = number of non-repeat flanking bases within the extraction
-# window. Used by ce_from_length (period > 0) so that CE equals the
-# repeat-unit count. Calibrated against GRCh38_full_analysis_set_plus_decoy_hla.fa,
-# May 2026. Period = -1 markers use ce_from_brackets and ignore corr_value.
+# corr_value interpretation depends on period:
+#   period > 0 : flanking bp (non-repeat) in the window.
+#                CE = (extracted_length_bp - corr_value) / period
+#   period = -1: flanking motif units in the window (units outside the core
+#                repeat block). CE = ce_from_brackets(isfg) - corr_value.
+#                Calibrated from GRCh38 reference FASTA: core block identified
+#                as the maximal group of motif tokens separated by ≤12 non-motif
+#                chars (legitimate spacers: ta/tca/tccata/tcg/tccag are ≤6 bp).
+#                Exception: D19S433 uses corr_value=1 because the reference has
+#                a pre-repeat AAGG immediately before a 4-bp imperfect spacer
+#                (aaag), which marks the boundary of the structured repeat array.
 #
 # Coordinate expansion (2026-05): windows widened to LongTR repeat
 # boundaries ± 100 bp flanking on each side. This ensures longer alleles
-# are never truncated on ONT long reads. corr_value updated accordingly
-# (old_corr + window_expansion) to preserve CE calibration.
+# are never truncated on ONT long reads.
 #
 # strand = "-" for markers whose published ISFG motif reads on the minus
 # strand; the consensus is RC'd before bracket compression (P2).
@@ -34,7 +40,7 @@ systems:
     ref_end: 45540907
     motif: TCTA,TCTG
     period: -1
-    corr_value: 10
+    corr_value: 4  # 3 left-flank + 1 right-flank TCTG/TCTA from GRCh38 reference
     category: autosomal
 
   - name: vWA
@@ -43,7 +49,7 @@ systems:
     ref_end: 5984149
     motif: TCTA,TCTG
     period: -1
-    corr_value: 5
+    corr_value: 8  # 1 left-flank + 7 right-flank TCTA/TCTG from GRCh38 reference
     strand: "-"
     category: autosomal
 
@@ -64,7 +70,7 @@ systems:
     ref_end: 124895016
     motif: TCTA,TCTG
     period: -1
-    corr_value: 0
+    corr_value: 2  # 1 left-flank TCTG + 1 right-flank TCTA from GRCh38 reference
     category: autosomal
 
   - name: D21S11
@@ -73,7 +79,7 @@ systems:
     ref_end: 19182199
     motif: TCTA,TCTG
     period: -1
-    corr_value: 0
+    corr_value: 3  # 1 left-flank TCTG + 2 right-flank TCTG from GRCh38 reference
     category: autosomal
     allow_triallelic: true
 
@@ -161,7 +167,7 @@ systems:
     ref_end: 218015050
     motif: TGCC,TTCC
     period: -1
-    corr_value: 18
+    corr_value: 1  # 1 left-flank TTCC from GRCh38 reference
     strand: "-"
     category: autosomal
 
@@ -171,7 +177,7 @@ systems:
     ref_end: 29926398
     motif: AAGG,TAGG
     period: -1
-    corr_value: 4
+    corr_value: 1  # 1 pre-repeat AAGG before 4-bp imperfect spacer (aaag) in GRCh38 reference
     strand: "-"
     category: autosomal
 
@@ -190,7 +196,7 @@ systems:
     ref_end: 230769783
     motif: TAGA,CAGA
     period: -1
-    corr_value: 4
+    corr_value: 1  # 1 left-flank TAGA from GRCh38 reference
     strand: "-"
     category: autosomal
 
@@ -209,7 +215,7 @@ systems:
     ref_end: 12297213
     motif: AGAT,AGAC
     period: -1
-    corr_value: 20
+    corr_value: 3  # 2 left-flank + 1 right-flank AGAT/AGAC from GRCh38 reference
     category: autosomal
 
   - name: D22S1045
