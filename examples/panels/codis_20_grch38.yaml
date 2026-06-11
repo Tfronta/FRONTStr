@@ -31,13 +31,15 @@
 # WARNING: Triallelic propensity flags are set conservatively. Adjust per
 # laboratory experience. See plan-longtr-improved.md §6.4.
 
-name: CODIS 20
-version: 2026.05-ont-wide
+name: CODIS 20 + sex
+version: 2026.06-ont-wide-sex
 reference_build: GRCh38
 description: |
-  Core CODIS 20 autosomal markers + Amelogenin. ONT R10-friendly defaults.
-  Windows cover LongTR repeat boundaries ± 100 bp for long-read safety.
-  corr_values calibrated against GRCh38 reference, May 2026.
+  Core CODIS 20 autosomal markers + Amelogenin + sex-validation STRs
+  (DYS391, DYS393 on chrY; DXS7132, DXS8378 on chrX). ONT R10-friendly
+  defaults. Windows cover LongTR repeat boundaries ± 100 bp for long-read
+  safety. corr_values calibrated against GRCh38 reference (May 2026 for
+  CODIS 20, June 2026 for the four sex STRs).
 
 systems:
   - name: D3S1358
@@ -246,3 +248,47 @@ systems:
     corr_value: 0
     category: x_chromosomal
     ont_len_tolerance: 0
+
+  # ------------------------------------------------------------------
+  # Sex-validation STRs (added 2026-06). Complement AMEL for ONT runs:
+  # Y-STRs amplify only in male samples; X-STRs surface heterozygosity
+  # in females vs hemizygosity in males. Coordinates from leapdna.org
+  # (GRCh38), corr_value calibrated against the UCSC GRCh38 FASTA.
+  # ------------------------------------------------------------------
+
+  - name: DYS391
+    chromosome: chrY
+    ref_start: 11981989
+    ref_end: 11982232
+    motif: TCTA
+    period: 4
+    corr_value: 200  # 244 bp window − 11 × TCTA (CTAT on plus strand) = 200 bp flanking
+    category: y_chromosomal
+
+  - name: DYS393
+    chromosome: chrY
+    ref_start: 3263011
+    ref_end: 3263258
+    motif: AGAT
+    period: 4
+    corr_value: 196  # 248 bp window − 13 × AGAT = 196 bp flanking
+    category: y_chromosomal
+
+  - name: DXS7132
+    chromosome: chrX
+    ref_start: 65435547
+    ref_end: 65435802
+    motif: TAGA
+    period: 4
+    corr_value: 196  # 256 bp window − 15 × TAGA (ATAG on plus strand, frame-shift) = 196 bp flanking
+    category: x_chromosomal
+
+  - name: DXS8378
+    chromosome: chrX
+    ref_start: 9402162
+    ref_end: 9402401
+    motif: CTAT
+    period: 4
+    corr_value: 200  # 240 bp window − 10 × CTAT (ATAG on plus strand = reverse complement) = 200 bp flanking
+    strand: "-"
+    category: x_chromosomal

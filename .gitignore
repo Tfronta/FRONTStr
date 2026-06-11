@@ -53,3 +53,7 @@ scratch/
 .env.*
 secrets/
 .claude/
+
+# ONT R10 BAM slices for development (not versioned)
+tests/data/ont_slices/*.bam
+tests/data/ont_slices/*.bai
