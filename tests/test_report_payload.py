@@ -136,6 +136,51 @@ def test_profile_row_compound_manual_delta_numeric() -> None:
     assert row["allele1_ce_is_kit_ce"] is False
 
 
+def test_profile_row_compound_shows_bracket_count_not_delta() -> None:
+    """Compound marker with a bracket-derived ``ce`` shows the absolute repeat
+    count as the allele number, never the relative Δ offset."""
+    comp = Allele(
+        cluster_index=0,
+        consensus="TCTA" * 13,
+        length_bp=261,
+        n_reads_total=16,
+        n_reads_hp1=8,
+        n_reads_hp2=8,
+        n_reads_hp_none=0,
+        n_forward=10,
+        n_reverse=6,
+        mean_qual=30.0,
+        ce=13.0,
+        allele_numeric=-3.0,
+        allele_numeric_source="delta_only",
+        isfg="[TCTA]13",
+        bp_diff=-12,
+        is_deletion=False,
+        status=AlleleStatus.ALLELE,
+    )
+    results = [
+        MarkerResult(
+            marker_name="vWA",
+            system=System(
+                name="vWA", chromosome="chr12", ref_start=5_983_877,
+                ref_end=5_984_149, motif="TCTA,TCTG", period=-1, corr_value=8,
+            ),
+            alleles=[comp],
+            alleles_called=[comp],
+            call_rule=CallRule.HOMOZYGOUS,
+            tri_type=TriType.NONE,
+            total_reads=16,
+        ),
+    ]
+    payload = serialize_run(results, RunContext(sample_name="c", panel_name="p"))
+    row = payload["profile_rows"][0]
+    # Absolute repeat count from the sequence, not the Δ-3 offset.
+    assert row["allele1_ce_label"] == "13"
+    assert row["allele1_ce_sort"] == 13.0
+    assert row["allele1_ce_is_kit_ce"] is True
+    assert "Δ" not in row["allele1_ce_label"]
+
+
 def test_serialize_run_is_json_safe() -> None:
     results = [
         _marker_result(

@@ -238,20 +238,25 @@ def _profile_forensic_display(
 ) -> tuple[float | None, str | None, bool]:
     """(sort key, table cell, confident_absolute_scale).
 
-    Prefer :class:`Allele.allele_numeric`; fall back to CE / bp TR strings.
+    Precedence for the headline allele number:
+
+    1. ``period_ce`` / ``reference_offset`` — a calibrated absolute allele
+       number (length-based CE, or a curated ``reference_ce`` + offset).
+    2. ``delta_only`` compound markers — show the **sequence-derived repeat
+       count** (``ce_from_brackets``, the ``ce`` field) when available, so the
+       reported number is an absolute, cross-comparable allele designation
+       instead of a relative Δ offset. We only fall back to the Δ offset when
+       no bracket count exists (e.g. an empty/structureless consensus).
+    3. Otherwise fall back to CE / bp-TR sizing strings.
     """
-    if (
-        allele_numeric is not None
-        and allele_src
-        and allele_src not in {"unavailable", "deletion"}
-    ):
+    if allele_numeric is not None and allele_src in {"period_ce", "reference_offset"}:
+        return float(allele_numeric), _trim_ce_display(float(allele_numeric)), True
+    if allele_src == "delta_only" and ce is not None:
+        return float(ce), _trim_ce_display(float(ce)), True
+    if allele_numeric is not None and allele_src == "delta_only":
         base = _trim_ce_display(float(allele_numeric))
-        if allele_src == "delta_only" and abs(float(allele_numeric)) > 1e-9:
-            label = f"Δ{base}"
-        else:
-            label = base
-        confident = allele_src in {"period_ce", "reference_offset"}
-        return float(allele_numeric), label, confident
+        label = f"Δ{base}" if abs(float(allele_numeric)) > 1e-9 else base
+        return float(allele_numeric), label, False
     return _profile_allele_ce_sort_and_label(ce, length_bp)
 
 
@@ -286,6 +291,7 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
             row[f"allele{i + 1}_cov"] = slot.n_reads_total
             row[f"allele{i + 1}_hp1"] = slot.n_reads_hp1
             row[f"allele{i + 1}_hp2"] = slot.n_reads_hp2
+            row[f"allele{i + 1}_seq"] = slot.consensus
         else:
             row[f"allele{i + 1}_isfg"] = None
             row[f"allele{i + 1}_repeat_summary"] = None
@@ -296,6 +302,7 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
             row[f"allele{i + 1}_cov"] = None
             row[f"allele{i + 1}_hp1"] = None
             row[f"allele{i + 1}_hp2"] = None
+            row[f"allele{i + 1}_seq"] = None
     return row
 
 
