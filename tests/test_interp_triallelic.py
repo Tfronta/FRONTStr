@@ -110,6 +110,43 @@ def test_third_below_calling_thresh_drops_to_het() -> None:
     assert len(a) == 2 and rule == CallRule.HETEROZYGOUS
 
 
+def test_third_below_read_floor_drops_to_het() -> None:
+    """Bug #6: a 3rd candidate above calling_thresh fraction but below the
+    absolute read floor (default 5) is an ONT phantom — call het, no mixture."""
+    sys = _system(allow_tri=False)  # default min_reads_third = 5
+    a1, a2, a3 = _allele(0, 30), _allele(1, 28), _allele(2, 4)
+    # phr_13 = 4/30 = 0.133 >= 0.10 (passes the fractional gate) but 4 < 5 floor
+    a, rule, tri = call_profile([a1, a2, a3], sys, calling_thresh=0.10)
+    assert a == [a1, a2]
+    assert rule == CallRule.HETEROZYGOUS
+    assert tri == TriType.NONE
+
+
+def test_read_floor_configurable_via_system() -> None:
+    """A higher per-marker min_reads_third floor suppresses larger phantoms."""
+    sys = System(
+        name="D8S1179", chromosome="chr8", ref_start=1, ref_end=40,
+        motif="TCTA", period=4, allow_triallelic=False, min_reads_third=10,
+    )
+    a1, a2, a3 = _allele(0, 60), _allele(1, 55), _allele(2, 8)
+    # 8/60 = 0.133 passes fraction, but 8 < 10 floor → het, not mixture
+    a, rule, tri = call_profile([a1, a2, a3], sys, calling_thresh=0.10)
+    assert a == [a1, a2]
+    assert rule == CallRule.HETEROZYGOUS
+    assert tri == TriType.NONE
+
+
+def test_real_third_above_floor_still_flags_mixture() -> None:
+    """A 3rd allele clearing both the fraction and the read floor still flags."""
+    sys = _system(allow_tri=False)
+    a, rule, tri = call_profile(
+        [_allele(0, 60), _allele(1, 55), _allele(2, 50)], sys
+    )
+    assert len(a) == 2
+    assert rule == CallRule.TWO_CALLED_THREE_PRESENT
+    assert tri == TriType.MIXTURE_SUSPECTED
+
+
 def test_only_allele_status_considered() -> None:
     """Stutter/noise candidates are excluded before counting."""
     sys = _system(allow_tri=True)
