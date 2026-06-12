@@ -13,14 +13,16 @@ from pathlib import Path
 from frontstr.caller.vcf import LongTRResult
 from frontstr.evidence.cluster import Cluster, cluster_observations
 from frontstr.evidence.pileup import pileup_locus
+from frontstr.interp.allele_numeric import compute_allele_numeric, resolve_ref_anchor_bp
 from frontstr.interp.amel import interpret_amel
+from frontstr.interp.catalog import annotate_alleles
 from frontstr.interp.classify import classify_allele
 from frontstr.interp.concordance import cross_check
-from frontstr.interp.allele_numeric import compute_allele_numeric, resolve_ref_anchor_bp
 from frontstr.interp.isfg import ce_from_brackets, ce_from_length, compress_isfg
 from frontstr.interp.models import Allele, MarkerResult
 from frontstr.interp.stutter import build_expected_stutter
 from frontstr.interp.triallelic import call_profile
+from frontstr.panel.catalog import AlleleCatalog
 from frontstr.panel.models import Panel, System
 
 DEFAULT_ANALYTICAL_THRESH = 0.02
@@ -37,6 +39,7 @@ def interpret_marker(
     calling_thresh: float = DEFAULT_CALLING_THRESH,
     parent_fraction: float = DEFAULT_PARENT_FRACTION,
     ref_length_bp: int | None = None,
+    catalog: AlleleCatalog | None = None,
 ) -> MarkerResult:
     """Interpret one marker's evidence + LongTR call into a :class:`MarkerResult`.
 
@@ -85,6 +88,9 @@ def interpret_marker(
             longtr_inexact_seqs=inexact_seqs,
         )
 
+    # Enrich ISFG / CE / iso-allele suffix from the curated catalog (no-op if None).
+    annotate_alleles(alleles, system, catalog)
+
     alleles_called, call_rule, tri_type = call_profile(
         alleles, system, calling_thresh=calling_thresh
     )
@@ -116,6 +122,7 @@ def interpret_run(
     analytical_thresh: float = DEFAULT_ANALYTICAL_THRESH,
     calling_thresh: float = DEFAULT_CALLING_THRESH,
     reference_fasta: Path | None = None,
+    catalog: AlleleCatalog | None = None,
 ) -> list[MarkerResult]:
     """End-to-end: for each marker in ``panel``, pileup → cluster → interpret.
 
@@ -150,6 +157,7 @@ def interpret_run(
                 longtr=longtr_results.get(system.name),
                 analytical_thresh=analytical_thresh,
                 calling_thresh=calling_thresh,
+                catalog=catalog,
             )
         )
     return out

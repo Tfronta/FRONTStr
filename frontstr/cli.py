@@ -620,6 +620,10 @@ def interpret(
         Path | None,
         typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
     ] = None,
+    catalog_path: Annotated[
+        Path | None,
+        typer.Option("--catalog", help="Optional allele catalog JSON for ISFG/iso-allele annotation."),
+    ] = None,
 ) -> None:
     """End-to-end forensic call: pileup → cluster → ISFG → classify → call.
 
@@ -629,10 +633,12 @@ def interpret(
     """
     from frontstr.caller import parse_longtr_vcf
     from frontstr.interp import index_longtr_results, interpret_run
+    from frontstr.panel.catalog import load_catalog
     from frontstr.panel.loader import load_panel
 
     try:
         panel = load_panel(panel_path)
+        catalog = load_catalog(catalog_path) if catalog_path else None
         longtr_map = (
             index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
         )
@@ -641,7 +647,7 @@ def interpret(
             min_mapq=min_mapq, identity_threshold=identity,
             len_tolerance_bp=len_tolerance,
             analytical_thresh=analytical_thresh, calling_thresh=calling_thresh,
-            reference_fasta=reference,
+            reference_fasta=reference, catalog=catalog,
         )
     except FrontstrError as exc:
         console.print(f"[red]interpret error:[/red] {exc}")

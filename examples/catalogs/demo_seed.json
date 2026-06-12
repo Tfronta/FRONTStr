@@ -1,0 +1,40 @@
+{
+  "version": "demo-0.1",
+  "reference_build": "GRCh38",
+  "source": "manual",
+  "description": "Small hand-curated demonstration seed (NOT the full STRSeq import). Built from canonical ISFG iso-allele structures to exercise the catalog annotation path. Replace with strseq_*.json from seed_strseq.",
+  "entries": [
+    {
+      "marker": "D3S1358",
+      "ce": 14,
+      "suffix": "a",
+      "source": "manual",
+      "sequence": "TCTATCTGTCTATCTATCTATCTATCTATCTATCTATCTATCTATCTATCTATCTA",
+      "isfg": "TCTA TCTG [TCTA]12"
+    },
+    {
+      "marker": "D3S1358",
+      "ce": 14,
+      "suffix": "b",
+      "source": "manual",
+      "sequence": "TCTATCTGTCTGTCTATCTATCTATCTATCTATCTATCTATCTATCTATCTATCTA",
+      "isfg": "TCTA [TCTG]2 [TCTA]11"
+    },
+    {
+      "marker": "TH01",
+      "ce": 7,
+      "suffix": "a",
+      "source": "manual",
+      "sequence": "AATGAATGAATGAATGAATGAATGAATG",
+      "isfg": "[AATG]7"
+    },
+    {
+      "marker": "TH01",
+      "ce": 9.3,
+      "suffix": "a",
+      "source": "manual",
+      "sequence": "AATGAATGAATGAATGAATGAATGATGAATGAATGAATG",
+      "isfg": "[AATG]6 ATG [AATG]3"
+    }
+  ]
+}

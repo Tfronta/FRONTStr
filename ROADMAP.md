@@ -114,11 +114,17 @@ science with real labs in week 4.
 
 ### 2.1 Allele catalog (3 days)
 
-- [ ] `panel/catalog.py` — `AlleleCatalog` model
-- [ ] `panel/seed_strseq.py` — STRSeq GenBank importer (PRJNA380345 + PRJNA380347)
-- [ ] `interp/catalog.py` — `annotate_with_catalog` (sequence → ISFG via DB)
-- [ ] `examples/catalogs/strseq_2024_06.json` — pre‑computed catalog (committable)
-- [ ] Tests: known D3S1358 14a vs 14b sequences → distinct catalog hits
+- [x] `panel/catalog.py` — `AlleleCatalog` + `CatalogEntry` models, JSON load/dump
+- [~] `panel/seed_strseq.py` — STRSeq importer: `build_catalog` (assembly, tested)
+      done; `fetch_strseq_records` (NCBI Entrez network/curation) still a stub
+- [x] `interp/catalog.py` — `annotate_with_catalog` (edlib NW; exact/approx/none)
+      + `extract_repeat_core` (gap-grouped core extraction so flank-inclusive
+      consensus matches core-only catalog entries)
+- [x] Wired into `interpret_marker`/`interpret_run` + CLI `--catalog` flag
+- [~] `examples/catalogs/demo_seed.json` — hand-curated demo seed (D3S1358 14a/14b,
+      TH01 7/9.3); full `strseq_2024_06.json` GenBank pull still pending
+- [x] Tests: D3S1358 14a vs 14b → distinct catalog hits; verified end-to-end on
+      HG00113 (real D3S1358 resolved to iso-allele **14b**, TH01 9.3/7 exact)
 
 ### 2.2 Tri‑allelic robustness (2 days)
 

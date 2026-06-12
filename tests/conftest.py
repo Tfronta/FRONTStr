@@ -50,6 +50,13 @@ def codis_panel_yaml() -> Path:
     return here.parent / "examples" / "panels" / "codis_20_grch38.yaml"
 
 
+@pytest.fixture
+def demo_catalog_json() -> Path:
+    """Path to the demonstration allele catalog shipped with the repo."""
+    here = Path(__file__).resolve().parent
+    return here.parent / "examples" / "catalogs" / "demo_seed.json"
+
+
 # ---------------------------------------------------------------------------
 # Synthetic BAM helpers for evidence-layer tests
 # ---------------------------------------------------------------------------
