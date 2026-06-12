@@ -113,6 +113,10 @@ def test_profile_csv_headers_stable(small_payload: dict, tmp_path: Path) -> None
     assert th01["allele1_cov"] == "60"
     assert th01["allele2_cov"] == "55"
     assert th01["allele3_cov"] == ""
+    # Per-allele consensus sequence must travel alongside coverage.
+    assert th01["allele1_seq"] != ""
+    assert th01["allele2_seq"] != ""
+    assert th01["allele3_seq"] == ""
     assert th01["call_rule"] == "heterozygous"
     assert th01["tri_type"] == ""
     tpox = by_marker["TPOX"]

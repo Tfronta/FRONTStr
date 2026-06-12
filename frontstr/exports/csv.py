@@ -4,7 +4,10 @@ Three flavors, all driven by the same ``payload`` dict that
 :func:`frontstr.report.payload.serialize_run` produces:
 
 - :func:`write_profile_csv` — **one row per marker**, wide format with up
-  to 3 alleles. Ideal for LIMS import and quick spreadsheet review.
+  to 3 alleles. Each allele slot carries its own ISFG, CE, integer coverage
+  (``alleleN_cov`` plus haplotype split ``alleleN_hp1``/``alleleN_hp2``) and
+  consensus sequence (``alleleN_seq``) side by side. Ideal for LIMS import
+  and quick spreadsheet review.
 - :func:`write_evidence_csv` — **one row per cluster** across all markers,
   long format. Ideal for re-analysis, plotting, and per-allele filtering.
 - :func:`write_seqs_csv` — **one row per called allele** with its ISFG
@@ -42,6 +45,7 @@ PROFILE_HEADERS: tuple[str, ...] = (
     "allele1_cov",
     "allele1_hp1",
     "allele1_hp2",
+    "allele1_seq",
     "allele2_isfg",
     "allele2_repeat_summary",
     "allele2_ce",
@@ -49,6 +53,7 @@ PROFILE_HEADERS: tuple[str, ...] = (
     "allele2_cov",
     "allele2_hp1",
     "allele2_hp2",
+    "allele2_seq",
     "allele3_isfg",
     "allele3_repeat_summary",
     "allele3_ce",
@@ -56,6 +61,7 @@ PROFILE_HEADERS: tuple[str, ...] = (
     "allele3_cov",
     "allele3_hp1",
     "allele3_hp2",
+    "allele3_seq",
     "longtr_gt",
     "longtr_q",
 )
@@ -138,6 +144,7 @@ def write_profile_csv(payload: dict[str, Any], out_path: Path) -> Path:
                 "allele1_cov": prow.get("allele1_cov") or "",
                 "allele1_hp1": _allele_hp(r, 0, "n_reads_hp1"),
                 "allele1_hp2": _allele_hp(r, 0, "n_reads_hp2"),
+                "allele1_seq": prow.get("allele1_seq") or "",
                 "allele2_isfg": prow.get("allele2_isfg") or "",
                 "allele2_repeat_summary": prow.get("allele2_repeat_summary") or "",
                 "allele2_ce": prow.get("allele2_ce_label") or _fmt_number(prow.get("allele2_ce")),
@@ -145,6 +152,7 @@ def write_profile_csv(payload: dict[str, Any], out_path: Path) -> Path:
                 "allele2_cov": prow.get("allele2_cov") or "",
                 "allele2_hp1": _allele_hp(r, 1, "n_reads_hp1"),
                 "allele2_hp2": _allele_hp(r, 1, "n_reads_hp2"),
+                "allele2_seq": prow.get("allele2_seq") or "",
                 "allele3_isfg": prow.get("allele3_isfg") or "",
                 "allele3_repeat_summary": prow.get("allele3_repeat_summary") or "",
                 "allele3_ce": prow.get("allele3_ce_label") or _fmt_number(prow.get("allele3_ce")),
@@ -152,6 +160,7 @@ def write_profile_csv(payload: dict[str, Any], out_path: Path) -> Path:
                 "allele3_cov": prow.get("allele3_cov") or "",
                 "allele3_hp1": _allele_hp(r, 2, "n_reads_hp1"),
                 "allele3_hp2": _allele_hp(r, 2, "n_reads_hp2"),
+                "allele3_seq": prow.get("allele3_seq") or "",
                 "longtr_gt": "|".join(str(x) for x in gt) if gt else "",
                 "longtr_q": _fmt_number(longtr.get("posterior")),
             }

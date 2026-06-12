@@ -226,6 +226,14 @@ table.profile td.mono.repeat-line {
   word-break: break-word;
   white-space: normal;
 }
+table.profile td.mono.seq-cell {
+  font-size: 10px;
+  color: var(--text-soft);
+  max-width: 200px;
+  word-break: break-all;
+  white-space: normal;
+  letter-spacing: 0.2px;
+}
 table.profile td.marker { font-weight: 600; }
 table.profile td.dim { color: var(--text-faint); }
 table.profile tr.row-discordant td { background: rgba(239, 108, 0, 0.06); }

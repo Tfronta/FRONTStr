@@ -74,15 +74,18 @@
           <th data-sortable="text">Motif runs 1</th>
           <th data-sortable="num">Allele idx 1 <span class="th-hint">CE / bp</span></th>
           <th data-sortable="num">Reads 1</th>
+          <th data-sortable="text">Sequence 1</th>
           <th data-sortable="text">Allele 2 (ISFG)</th>
           <th data-sortable="text">Motif runs 2</th>
           <th data-sortable="num">Allele idx 2 <span class="th-hint">CE / bp</span></th>
           <th data-sortable="num">Reads 2</th>
+          <th data-sortable="text">Sequence 2</th>
           {% if profile_show_tri %}
           <th data-sortable="text">Allele 3 (ISFG)</th>
           <th data-sortable="text">Motif runs 3</th>
           <th data-sortable="num">Allele idx 3 <span class="th-hint">CE / bp</span></th>
           <th data-sortable="num">Reads 3</th>
+          <th data-sortable="text">Sequence 3</th>
           {% endif %}
           <th data-sortable="num">Total</th>
           <th data-sortable="text">Status</th>
@@ -100,32 +103,35 @@
           <td class="num{% if row.allele1_ce_is_kit_ce %} ce-kit-ce{% endif %}"
               data-sort-value="{{ row.allele1_ce_sort if row.allele1_ce_sort is not none else '' }}"
               {% if row.allele1_ce_label %}
-                {% if row.allele1_ce_is_kit_ce %}title="CE from panel: (repeat length − corr) / period."
+                {% if row.allele1_ce_is_kit_ce %}title="Allele number = repeat units counted from the called sequence: length-based CE for simple loci, ISFG bracket count for compound (period −1) loci."
                 {% else %}title="Sizing only: tandem-repeat span within the marker window (compound motif; not a CODIS ladder allele)."
                 {% endif %}
               {% endif %}>{{ row.allele1_ce_label if row.allele1_ce_label else '–' }}</td>
           <td class="num" data-sort-value="{{ row.allele1_cov or 0 }}">{{ row.allele1_cov if row.allele1_cov is not none else '–' }}</td>
+          <td class="mono seq-cell">{{ row.allele1_seq or '–' }}</td>
           <td class="mono">{{ row.allele2_isfg or '' }}</td>
           <td class="mono repeat-line">{{ row.allele2_repeat_summary or '' }}</td>
           <td class="num{% if row.allele2_ce_is_kit_ce %} ce-kit-ce{% endif %}"
               data-sort-value="{{ row.allele2_ce_sort if row.allele2_ce_sort is not none else '' }}"
               {% if row.allele2_ce_label %}
-                {% if row.allele2_ce_is_kit_ce %}title="CE from panel: (repeat length − corr) / period."
+                {% if row.allele2_ce_is_kit_ce %}title="Allele number = repeat units counted from the called sequence: length-based CE for simple loci, ISFG bracket count for compound (period −1) loci."
                 {% else %}title="Sizing only: tandem-repeat span within the marker window (compound motif; not a CODIS ladder allele)."
                 {% endif %}
               {% endif %}>{{ row.allele2_ce_label if row.allele2_ce_label else '–' }}</td>
           <td class="num" data-sort-value="{{ row.allele2_cov or 0 }}">{{ row.allele2_cov if row.allele2_cov is not none else '–' }}</td>
+          <td class="mono seq-cell">{{ row.allele2_seq or '–' }}</td>
           {% if profile_show_tri %}
           <td class="mono">{{ row.allele3_isfg or '' }}</td>
           <td class="mono repeat-line">{{ row.allele3_repeat_summary or '' }}</td>
           <td class="num{% if row.allele3_ce_is_kit_ce %} ce-kit-ce{% endif %}"
               data-sort-value="{{ row.allele3_ce_sort if row.allele3_ce_sort is not none else '' }}"
               {% if row.allele3_ce_label %}
-                {% if row.allele3_ce_is_kit_ce %}title="CE from panel: (repeat length − corr) / period."
+                {% if row.allele3_ce_is_kit_ce %}title="Allele number = repeat units counted from the called sequence: length-based CE for simple loci, ISFG bracket count for compound (period −1) loci."
                 {% else %}title="Sizing only: tandem-repeat span within the marker window (compound motif; not a CODIS ladder allele)."
                 {% endif %}
               {% endif %}>{{ row.allele3_ce_label if row.allele3_ce_label else '–' }}</td>
           <td class="num" data-sort-value="{{ row.allele3_cov or 0 }}">{{ row.allele3_cov if row.allele3_cov is not none else '–' }}</td>
+          <td class="mono seq-cell">{{ row.allele3_seq or '–' }}</td>
           {% endif %}
           <td class="num">{{ row.total_reads }}</td>
           <td>
@@ -136,7 +142,7 @@
       {% endfor %}
       </tbody>
     </table>
-    <p class="profile-note"><strong>Coverage vs reads:</strong> each <em>Reads N</em> column counts evidence reads for that consensus. <strong>Total</strong> is all spanning reads (includes stutter / noise peaks not genotype-called). <strong>Allele idx</strong> uses panel CE when <code>period ≥ 1</code>. Compound loci (<code>period: -1</code>) use LongTR-style math: Δbp versus the REF anchor length (panel span when no caller VCF, else LongTR REF allele length), scaled by <code>allele_bp_step</code> (default 4), plus optional <code>reference_ce</code> in the YAML — the CODIS/str number for the genome reference haplotype in that window. Without <code>reference_ce</code>, values prefixed <strong>Δ</strong> are repeat-unit offset from that anchor only; set lab-curated <code>reference_ce</code> per marker for CODIS-scale output alongside sequence.</p>
+    <p class="profile-note"><strong>Coverage vs reads:</strong> each <em>Reads N</em> column counts evidence reads for that consensus. <strong>Total</strong> is all spanning reads (includes stutter / noise peaks not genotype-called). <strong>Allele idx</strong> is an absolute allele number computed by counting repeat units in the called sequence: for simple loci (<code>period ≥ 1</code>) the length-based CE <code>(length − corr) / period</code>; for compound loci (<code>period: -1</code>: vWA, FGA, D21S11, D3S1358 …) the ISFG bracket count (<code>ce_from_brackets</code>), i.e. how many times the motif repeats in the consensus. This is sequence-derived and cross-comparable with other callers — no <code>reference_ce</code> curation required. <strong>Caveat:</strong> for vWA and D21S11 the forensic CE-kit nomenclature does not map 1:1 to the bracket count (documented convention quirks); always interpret these alongside the full ISFG string. A <strong>Δ</strong>-prefixed value appears only as a last-resort offset when a compound allele has no countable repeat structure.</p>
   </div>
 </section>
 
@@ -241,7 +247,7 @@
               <tr>
                 <th>#</th><th>ISFG</th><th>Motif runs</th><th class="num">CE</th><th class="num">len bp</th>
                 <th class="num">reads</th><th class="num">HP1/HP2</th><th class="num">+/-</th>
-                <th class="num">mean Q</th><th class="num">ES</th><th>status</th>
+                <th class="num">mean Q</th><th class="num">ES</th><th>status</th><th>Sequence</th>
               </tr>
             </thead>
             <tbody>
@@ -260,6 +266,7 @@
                 <td><span class="chip {{ 'ok' if a.status == 'allele' else 'no_data' }}">{{ a.status }}</span>
                   {% if a.longtr_inexact %} <span class="chip discordant">inexact</span>{% endif %}
                 </td>
+                <td class="mono seq-cell" style="font-size:11px;color:var(--text-soft);word-break:break-all;">{{ a.consensus or '–' }}</td>
               </tr>
             {% endfor %}
             </tbody>
