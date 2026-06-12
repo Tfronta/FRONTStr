@@ -37,6 +37,11 @@ class System(BaseModel):
 
     allow_triallelic: bool = False
     tri_balanced_thr: float | None = None
+    #: Absolute read-count floor a 3rd candidate must clear (in addition to the
+    #: fractional ``calling_thresh``) before it can promote a locus to triallelic
+    #: or raise a ``mixture_suspected`` flag. Guards against ONT basecaller
+    #: phantoms (2–4 reads ≈ 5–10% AF at 20–50× coverage). See known-bug #6.
+    min_reads_third: int = Field(default=5, ge=0)
     ont_len_tolerance: int = 0
     stutter_overrides: dict[str, float] = Field(default_factory=dict)
 

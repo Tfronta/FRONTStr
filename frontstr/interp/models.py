@@ -88,6 +88,13 @@ class Allele:
     longtr_match: bool = False
     longtr_inexact: bool = False
     longtr_bp_diff: int | None = None
+    #: Allele-catalog annotation (Phase 2.1). ``catalog_suffix`` is the ISFG
+    #: iso-allele letter ("a"/"b"/…), with a trailing ``*`` when the match was
+    #: approximate. ``catalog_distance`` is the edit distance to the catalog hit
+    #: (0 = exact, ``None`` = no hit). ``catalog_source`` records provenance.
+    catalog_suffix: str | None = None
+    catalog_distance: int | None = None
+    catalog_source: str = ""
 
     def fraction(self, total_reads: int) -> float:
         if total_reads <= 0:

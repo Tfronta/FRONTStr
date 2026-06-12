@@ -6,7 +6,8 @@ Outcomes:
 
 - 0 candidates → ``no_data``
 - 1 candidate, or 2nd allele below ``min_phr`` of the 1st → ``homozygous``
-- 2 candidates (or 3rd below calling threshold) → ``heterozygous``
+- 2 candidates (or 3rd below calling threshold, or 3rd below the absolute
+  ``min_reads_third`` floor) → ``heterozygous``
 - 3+ candidates with ``allow_triallelic``:
     - all three balanced (PHR ≥ ``tri_balanced_thr``) → ``triallelic_type_II``
     - top two balanced, 3rd between 0.3 and ``tri_balanced_thr`` → ``triallelic_type_I``
@@ -35,6 +36,7 @@ def call_profile(
     calling_thresh: float = 0.10,
     min_phr_for_het: float = DEFAULT_MIN_PHR_FOR_HET,
     tri_type_i_low: float = DEFAULT_TRI_TYPE_I_LOW,
+    min_reads_third: int | None = None,
 ) -> tuple[list[Allele], CallRule, TriType]:
     """Decide which alleles to report and the overall call rule.
 
@@ -47,6 +49,11 @@ def call_profile(
         min_phr_for_het: A 2nd allele below this fraction of the 1st is
             collapsed into homozygous.
         tri_type_i_low: Lower bound for the 3rd allele in a Type-I pattern.
+        min_reads_third: Absolute read-count floor a 3rd candidate must clear
+            (in addition to ``calling_thresh``) before it can promote the locus
+            to triallelic or raise ``mixture_suspected``. Defaults to
+            ``system.min_reads_third``. Guards against ONT basecaller phantoms
+            (known-bug #6).
 
     Returns:
         ``(alleles_called, call_rule, tri_type)``.
@@ -80,7 +87,8 @@ def call_profile(
 
     a3 = cands[2]
     phr_13 = a3.n_reads_total / max(a1.n_reads_total, 1)
-    if phr_13 < calling_thresh:
+    read_floor = system.min_reads_third if min_reads_third is None else min_reads_third
+    if phr_13 < calling_thresh or a3.n_reads_total < read_floor:
         return [a1, a2], CallRule.HETEROZYGOUS, TriType.NONE
 
     if not system.allow_triallelic:

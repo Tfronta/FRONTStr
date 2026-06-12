@@ -45,20 +45,21 @@ def test_interpret_marker_heterozygous_high_coverage(tmp_path: Path) -> None:
     assert statuses[10.0] in {AlleleStatus.STUTTER, AlleleStatus.ARTEFACT}
 
 
-def test_interpret_marker_low_coverage_mixture_review(synth_bam_heterozygous: Path) -> None:
-    """Same input but only 11 reads → forensically flagged as mixture review.
-
-    At 11x total, the 2-read CE10 cluster (18%) is above all default thresholds
-    and below LUS-stutter expectation only barely — FRONTStr correctly punts
-    this to analyst review rather than silently calling het."""
+def test_interpret_marker_low_coverage_phantom_not_mixture(
+    synth_bam_heterozygous: Path,
+) -> None:
+    """Bug #6 fix: at 11x total, the 2-read CE10 cluster (18%) clears the
+    fractional calling threshold but falls below the absolute ``min_reads_third``
+    floor (default 5). It is an ONT basecaller phantom, not a 3rd contributor,
+    so FRONTStr calls heterozygous instead of raising a false mixture flag."""
     obs = pileup_locus(
         synth_bam_heterozygous, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END, min_mapq=20,
     )
     clusters = cluster_observations(obs)
     result = interpret_marker(system=_synth_system(), clusters=clusters)
     assert result.total_reads == 11
-    assert result.call_rule == CallRule.TWO_CALLED_THREE_PRESENT
-    assert result.tri_type == TriType.MIXTURE_SUSPECTED
+    assert result.call_rule == CallRule.HETEROZYGOUS
+    assert result.tri_type == TriType.NONE
 
 
 def test_interpret_marker_homozygous(synth_bam_homozygous: Path) -> None:

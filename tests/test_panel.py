@@ -13,7 +13,7 @@ from frontstr.panel.models import Panel, System
 
 def test_load_example_panel(codis_panel_yaml: Path) -> None:
     panel = load_panel(codis_panel_yaml)
-    assert panel.name == "CODIS 20"
+    assert panel.name == "CODIS 20 + sex"
     assert panel.reference_build == "GRCh38"
     assert len(panel.systems) >= 20
     assert panel.by_name("TPOX") is not None
