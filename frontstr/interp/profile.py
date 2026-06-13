@@ -18,6 +18,7 @@ from frontstr.interp.amel import interpret_amel
 from frontstr.interp.catalog import annotate_alleles
 from frontstr.interp.classify import classify_allele
 from frontstr.interp.concordance import cross_check
+from frontstr.interp.flags import derive_marker_flags
 from frontstr.interp.isfg import ce_from_brackets, ce_from_length, compress_isfg
 from frontstr.interp.models import Allele, MarkerResult
 from frontstr.interp.stutter import build_expected_stutter
@@ -108,6 +109,7 @@ def interpret_marker(
         calling_thresh=calling_thresh,
     )
     cross_check(result, longtr)
+    derive_marker_flags(result)
     return result
 
 

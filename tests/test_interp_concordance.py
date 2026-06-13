@@ -8,6 +8,8 @@ from frontstr.interp.models import (
     Allele,
     AlleleStatus,
     CallRule,
+    FlagCode,
+    FlagSeverity,
     MarkerResult,
     TriType,
 )
@@ -97,7 +99,10 @@ def test_cross_check_discordant_high_q() -> None:
     )
     cross_check(result, longtr)
     assert result.discordant is True
-    assert any("Discordance" in w for w in result.warnings)
+    assert any(f.code == FlagCode.LONGTR_DISCORDANT for f in result.flags)
+    disc = next(f for f in result.flags if f.code == FlagCode.LONGTR_DISCORDANT)
+    assert disc.severity == FlagSeverity.WARN
+    assert "LongTR called bp" in disc.message
 
 
 def test_cross_check_low_q_does_not_flag() -> None:

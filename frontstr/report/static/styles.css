@@ -277,6 +277,42 @@ table.profile thead th .th-hint {
 .chip.mixture { background: rgba(198, 40, 40, 0.12); color: var(--danger); }
 .chip.discordant { background: rgba(239, 108, 0, 0.12); color: var(--warn); }
 .chip.no_data { background: rgba(0, 0, 0, 0.06); color: var(--text-faint); }
+.chip.iso { background: rgba(13, 148, 136, 0.16); color: #0d9488; }
+
+.flag { margin: 2px 0; }
+.flag code { font-size: 11px; font-family: var(--mono); opacity: 0.85; }
+.flag-error { color: var(--danger); }
+.flag-warn { color: var(--warn); }
+.flag-info { color: var(--text-soft); }
+
+/* ---------- CE genotype + sequencing table ---------- */
+table.profile td.genotype { font-weight: 600; letter-spacing: 0.02em; }
+.btn-soft {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.btn-soft:hover { border-color: var(--primary); color: var(--primary); }
+.seq-actions { display: flex; align-items: center; gap: 8px; }
+.seq-expand { font-size: 11px; }
+.seq-expand summary { cursor: pointer; color: var(--text-faint); white-space: nowrap; }
+.seq-full {
+  margin-top: 6px;
+  font-size: 11px;
+  max-width: 360px;
+  overflow-x: auto;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 4px;
+  padding: 6px 8px;
+  letter-spacing: 0.3px;
+}
+table.profile.seqtable td.mono.repeat-line { max-width: 260px; }
 
 /* ---------- locus detail ---------- */
 details.locus {

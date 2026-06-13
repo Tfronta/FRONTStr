@@ -12,7 +12,7 @@ Implements plan-longtr-improved.md §6.5.
 from __future__ import annotations
 
 from frontstr.caller.vcf import LongTRResult
-from frontstr.interp.models import Allele, AlleleStatus, MarkerResult
+from frontstr.interp.models import Allele, AlleleStatus, Flag, FlagCode, MarkerResult
 
 CONFIDENT_LONGTR_Q = 0.9
 
@@ -58,8 +58,12 @@ def cross_check(result: MarkerResult, longtr: LongTRResult | None) -> None:
     )
     if longtr_bp_set and evidence_bp_set and longtr_bp_set != evidence_bp_set:
         result.discordant = True
-        result.warnings.append(
-            f"Discordance: LongTR called bp={longtr_bp_set} but evidence layer called bp={evidence_bp_set}"
+        result.flags.append(
+            Flag.of(
+                FlagCode.LONGTR_DISCORDANT,
+                f"LongTR called bp={longtr_bp_set} but evidence layer called "
+                f"bp={evidence_bp_set}",
+            )
         )
 
     # Propagate INEXACT_ALLELE upgrade for clusters that match an inexact LongTR ALT.

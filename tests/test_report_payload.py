@@ -78,6 +78,18 @@ def test_serialize_run_minimal() -> None:
     assert row["allele1_ce_sort"] == 9
     assert row["allele1_ce_is_kit_ce"] is True
     assert row["status_chip"] == "ok"
+    # CE table headline: combined genotype + no isoalleles here.
+    assert row["genotype"] == "9 / 8"
+    assert row["has_iso"] is False
+    # Sequencing-based flat table: one row per called allele.
+    assert len(payload["seq_rows"]) == 2
+    s0 = payload["seq_rows"][0]
+    assert s0["marker"] == "TH01"
+    assert s0["number"] == "9"
+    assert s0["iso"] == ""
+    assert s0["isfg"] == "[AATG]9"
+    assert s0["consensus"] == "AATG" * 9
+    assert s0["n_reads_total"] == 60
     # HP counts must be separate integers, not a combined "hp1/hp2" string.
     assert row["allele1_hp1"] == 30
     assert row["allele1_hp2"] == 30
@@ -86,6 +98,33 @@ def test_serialize_run_minimal() -> None:
     assert row["allele3_hp1"] is None
     assert row["allele3_hp2"] is None
     assert "allele1_hp" not in row
+
+
+def test_iso_alleles_flag_and_designation() -> None:
+    """Catalog suffix → iso designation in seq_rows + has_iso on the CE row."""
+    a1 = Allele(
+        cluster_index=0, consensus="TCTA" * 15, length_bp=60,
+        n_reads_total=19, n_reads_hp1=18, n_reads_hp2=1, n_reads_hp_none=0,
+        n_forward=12, n_reverse=7, mean_qual=30.0, ce=15.0, isfg="[TCTA]15",
+        bp_diff=0, is_deletion=False, allele_numeric=15.0,
+        allele_numeric_source="period_ce", status=AlleleStatus.ALLELE,
+        catalog_suffix="a",
+    )
+    a2 = Allele(
+        cluster_index=1, consensus="TCTG" + "TCTA" * 14, length_bp=60,
+        n_reads_total=17, n_reads_hp1=1, n_reads_hp2=16, n_reads_hp_none=0,
+        n_forward=9, n_reverse=8, mean_qual=30.0, ce=15.0, isfg="TCTG [TCTA]14",
+        bp_diff=0, is_deletion=False, allele_numeric=15.0,
+        allele_numeric_source="period_ce", status=AlleleStatus.ALLELE,
+        catalog_suffix="b",
+    )
+    results = [_marker_result("D3S1358", [a1, a2], [a1, a2])]
+    payload = serialize_run(results, RunContext(sample_name="c", panel_name="p"))
+    row = payload["profile_rows"][0]
+    assert row["genotype"] == "15 / 15"
+    assert row["has_iso"] is True
+    iso_designations = {s["iso"] for s in payload["seq_rows"]}
+    assert iso_designations == {"15a", "15b"}
 
 
 def test_profile_row_compound_manual_delta_numeric() -> None:
