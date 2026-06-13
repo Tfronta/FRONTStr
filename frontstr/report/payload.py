@@ -23,6 +23,7 @@ from frontstr.interp.models import (
     Allele,
     AlleleStatus,
     CallRule,
+    FlagCode,
     MarkerResult,
     TriType,
 )
@@ -177,7 +178,7 @@ def _serialize_allele(a: Allele, total_reads: int, motif: str, strand: str = "+"
         "longtr_inexact": a.longtr_inexact,
         "longtr_bp_diff": a.longtr_bp_diff,
         "fraction": round(a.fraction(total_reads), 4),
-        "catalog_suffix": a.catalog_suffix,
+        "iso": a.iso.model_dump(mode="json"),
         "flags": [f.model_dump(mode="json") for f in a.flags],
     }
 
@@ -287,16 +288,9 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
     labels = [row[f"allele{i + 1}_ce_label"] for i in range(3) if row[f"allele{i + 1}_ce_label"]]
     row["genotype"] = " / ".join(labels) if labels else "\u2013"
 
-    # Isoallele flag: a catalog suffix on any called allele, OR two called
-    # alleles with the same numeric label but a different ISFG structure
-    # (same CE number, different sequence — the FRONTStr differential).
-    by_label: dict[str | None, set[str]] = {}
-    for i, slot in enumerate(called):
-        by_label.setdefault(row.get(f"allele{i + 1}_ce_label"), set()).add(slot.isfg)
-    row["has_iso"] = bool(
-        any(slot.catalog_suffix for slot in called)
-        or any(len(isfgs) > 1 for isfgs in by_label.values())
-    )
+    # Isoallele presence is decided in the model layer (interp.flags); the CE
+    # table only reads the resulting marker flag.
+    row["has_iso"] = any(f.code == FlagCode.ISOALLELE for f in r.flags)
     return row
 
 
@@ -317,7 +311,7 @@ def _seq_rows(results: list[MarkerResult]) -> list[dict[str, Any]]:
     for r in results:
         for i, a in enumerate(r.alleles_called):
             number = _allele_number_label(a)
-            iso = f"{number}{a.catalog_suffix}" if (number and a.catalog_suffix) else ""
+            iso = f"{number}{a.iso.suffix}" if (number and a.iso.suffix) else ""
             rows.append(
                 {
                     "marker": r.marker_name,

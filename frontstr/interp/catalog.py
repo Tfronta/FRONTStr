@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from frontstr.interp.isfg import _rc
-from frontstr.interp.models import Allele
+from frontstr.interp.models import Allele, IsoAllele
 from frontstr.interp.stutter import MotifRun, find_motif_runs
 from frontstr.panel.catalog import AlleleCatalog, CatalogEntry
 from frontstr.panel.models import System
@@ -135,18 +135,20 @@ def annotate_with_catalog(
         # No usable hit — keep the live-computed ISFG/CE.
         return CatalogMatch(matched=False, exact=False, distance=dist, entry=None)
 
-    allele.catalog_distance = dist
-    allele.catalog_source = entry.source
     allele.isfg = entry.isfg
     if allele.ce is None and entry.ce is not None:
         allele.ce = entry.ce
 
     if dist == 0:
-        allele.catalog_suffix = entry.suffix
+        allele.iso = IsoAllele(
+            suffix=entry.suffix, match_type="exact", distance=0, source=entry.source
+        )
         return CatalogMatch(matched=True, exact=True, distance=0, entry=entry)
 
-    # Approximate hit: flag the suffix with a trailing star.
-    allele.catalog_suffix = (entry.suffix or "") + "*"
+    # Approximate hit: clean suffix, match_type records the inexactness.
+    allele.iso = IsoAllele(
+        suffix=entry.suffix, match_type="approx", distance=dist, source=entry.source
+    )
     return CatalogMatch(matched=True, exact=False, distance=dist, entry=entry)
 
 

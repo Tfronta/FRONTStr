@@ -42,9 +42,10 @@ def test_exact_match_adopts_isfg_and_suffix() -> None:
     a = _allele(SEQ_14B)
     m = annotate_with_catalog(a, D3, _catalog())
     assert m.matched and m.exact and m.distance == 0
-    assert a.catalog_suffix == "b"
-    assert a.catalog_distance == 0
-    assert a.catalog_source == "STRSeq"
+    assert a.iso.suffix == "b"
+    assert a.iso.match_type == "exact"
+    assert a.iso.distance == 0
+    assert a.iso.source == "STRSeq"
     assert a.isfg == "TCTA [TCTG]2 [TCTA]11"
 
 
@@ -54,18 +55,20 @@ def test_isoalleles_get_distinct_hits() -> None:
     a, b = _allele(SEQ_14A), _allele(SEQ_14B)
     annotate_with_catalog(a, D3, cat)
     annotate_with_catalog(b, D3, cat)
-    assert a.catalog_suffix == "a" and b.catalog_suffix == "b"
+    assert a.iso.suffix == "a" and b.iso.suffix == "b"
     assert a.isfg != b.isfg
 
 
-def test_approximate_match_flags_suffix_with_star() -> None:
+def test_approximate_match_records_approx_match_type() -> None:
     # One substitution mid-core (index 28, inside the TCTA run); gap-grouping keeps
     # the surrounding runs in one block so the edit shows up as distance 1.
     mutated = SEQ_14A[:28] + ("G" if SEQ_14A[28] != "G" else "C") + SEQ_14A[29:]
     a = _allele(mutated)
     m = annotate_with_catalog(a, D3, _catalog())
     assert m.matched and not m.exact and m.distance == 1
-    assert a.catalog_suffix == "a*"
+    assert a.iso.suffix == "a"
+    assert a.iso.match_type == "approx"
+    assert a.iso.distance == 1
     assert a.isfg == "TCTA TCTG [TCTA]12"
 
 
@@ -75,14 +78,14 @@ def test_core_extraction_strips_flanks_before_match() -> None:
     a = _allele(flanked.upper())
     m = annotate_with_catalog(a, D3, _catalog())
     assert m.exact and m.distance == 0
-    assert a.catalog_suffix == "b"
+    assert a.iso.suffix == "b"
 
 
 def test_no_hit_keeps_live_isfg() -> None:
     a = _allele("TCTA" * 20)  # length far outside the window
     m = annotate_with_catalog(a, D3, _catalog())
     assert not m.matched
-    assert a.catalog_suffix is None
+    assert a.iso.suffix is None
     assert a.isfg == "(live)"
 
 
@@ -109,7 +112,7 @@ def test_deletion_allele_skipped() -> None:
 def test_annotate_alleles_noop_when_catalog_none() -> None:
     a = _allele(SEQ_14B)
     annotate_alleles([a], D3, None)
-    assert a.catalog_suffix is None
+    assert a.iso.suffix is None
     assert a.isfg == "(live)"
 
 

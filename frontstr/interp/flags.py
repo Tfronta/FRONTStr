@@ -15,7 +15,7 @@ again, so callers may run it after other producers without duplication.
 
 from __future__ import annotations
 
-from frontstr.interp.models import Flag, FlagCode, MarkerResult, TriType
+from frontstr.interp.models import Allele, Flag, FlagCode, MarkerResult, TriType
 
 
 def derive_marker_flags(result: MarkerResult) -> None:
@@ -38,3 +38,34 @@ def derive_marker_flags(result: MarkerResult) -> None:
             FlagCode.TRIALLELIC,
             f"Triallelic pattern ({result.tri_type.value}) at {result.marker_name}.",
         )
+
+    if _mark_isoalleles(result.alleles_called):
+        add(
+            FlagCode.ISOALLELE,
+            f"Iso-alleles at {result.marker_name}: same allele number, "
+            "different sequence — see the Sequences view.",
+        )
+
+
+def _mark_isoalleles(called: list[Allele]) -> bool:
+    """Set ``iso.is_isoallele`` on involved called alleles; return True if any.
+
+    An allele is an iso-allele when it shares its (canonical) number with a
+    sibling of different ISFG structure, or the catalog resolved it to a named
+    iso-variant (``iso.suffix`` set).
+    """
+    found = False
+    by_number: dict[float, list[Allele]] = {}
+    for a in called:
+        if a.number is not None:
+            by_number.setdefault(a.number, []).append(a)
+    for group in by_number.values():
+        if len({a.isfg for a in group}) > 1:
+            for a in group:
+                a.iso.is_isoallele = True
+            found = True
+    for a in called:
+        if a.iso.suffix:
+            a.iso.is_isoallele = True
+            found = True
+    return found
