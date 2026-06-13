@@ -62,6 +62,74 @@
     updatePill();
   }
 
+  /* ---------- sequencing table: filter + sort + sync from CE table ---------- */
+  const seqTable = document.querySelector("table.seqtable");
+  const seqSearch = document.querySelector("#seq-search");
+  const seqClear = document.querySelector("#seq-clear");
+  const seqCount = document.querySelector("#seq-count");
+
+  if (seqTable) {
+    const sbody = seqTable.tBodies[0];
+    const seqRows = Array.from(sbody.rows);
+
+    const updateSeqPill = () => {
+      if (seqCount) {
+        const shown = seqRows.filter((r) => r.style.display !== "none").length;
+        seqCount.textContent = `${shown} / ${seqRows.length} alleles`;
+      }
+    };
+    const applySeqFilter = () => {
+      const q = (seqSearch?.value || "").trim().toLowerCase();
+      for (const tr of seqRows) {
+        const text = tr.dataset.search || "";
+        tr.style.display = !q || text.includes(q) ? "" : "none";
+      }
+      updateSeqPill();
+    };
+    seqSearch?.addEventListener("input", applySeqFilter);
+    seqClear?.addEventListener("click", () => {
+      if (seqSearch) seqSearch.value = "";
+      applySeqFilter();
+      seqSearch?.focus();
+    });
+
+    const seqHeaders = seqTable.tHead.querySelectorAll("th[data-sortable]");
+    seqHeaders.forEach((th, idx) => {
+      th.addEventListener("click", () => {
+        const dir = th.dataset.sortDir === "asc" ? "desc" : "asc";
+        seqHeaders.forEach((h) => h.removeAttribute("data-sort-dir"));
+        th.dataset.sortDir = dir;
+        const type = th.dataset.sortable;
+        const sorted = [...seqRows].sort((a, b) => {
+          let av = a.cells[idx]?.dataset.sortValue ?? a.cells[idx]?.textContent?.trim() ?? "";
+          let bv = b.cells[idx]?.dataset.sortValue ?? b.cells[idx]?.textContent?.trim() ?? "";
+          if (type === "num") {
+            av = parseFloat(av) || -Infinity;
+            bv = parseFloat(bv) || -Infinity;
+          }
+          if (av < bv) return dir === "asc" ? -1 : 1;
+          if (av > bv) return dir === "asc" ? 1 : -1;
+          return 0;
+        });
+        for (const r of sorted) sbody.appendChild(r);
+      });
+    });
+
+    updateSeqPill();
+
+    /* click a marker in the CE table → filter this table to that marker */
+    document.querySelectorAll("a.marker-link[data-marker]").forEach((a) => {
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (seqSearch) {
+          seqSearch.value = a.dataset.marker || "";
+          applySeqFilter();
+        }
+        document.getElementById("sequences")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+  }
+
   /* ---------- locus jump-anchor smooth scroll ---------- */
   document.querySelectorAll("a[href^='#locus-']").forEach((a) => {
     a.addEventListener("click", (e) => {

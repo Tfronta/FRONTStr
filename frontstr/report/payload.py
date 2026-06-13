@@ -109,6 +109,7 @@ def serialize_run(
         "summary": summary,
         "qc": qc,
         "profile_rows": [_profile_row(r) for r in results],
+        "seq_rows": _seq_rows(results),
         "results": serialized_results,
     }
     payload["strhub"] = build_strhub_projection(payload)
@@ -138,7 +139,7 @@ def _serialize_marker(r: MarkerResult) -> dict[str, Any]:
         "analytical_thresh": r.analytical_thresh,
         "calling_thresh": r.calling_thresh,
         "discordant": r.discordant,
-        "warnings": list(r.warnings),
+        "flags": [f.model_dump(mode="json") for f in r.flags],
         "alleles": [_serialize_allele(a, r.total_reads, r.system.motif, r.system.strand) for a in r.alleles],
         "alleles_called": [
             _serialize_allele(a, r.total_reads, r.system.motif, r.system.strand) for a in r.alleles_called
@@ -174,6 +175,8 @@ def _serialize_allele(a: Allele, total_reads: int, motif: str, strand: str = "+"
         "longtr_inexact": a.longtr_inexact,
         "longtr_bp_diff": a.longtr_bp_diff,
         "fraction": round(a.fraction(total_reads), 4),
+        "catalog_suffix": a.catalog_suffix,
+        "flags": [f.model_dump(mode="json") for f in a.flags],
     }
 
 
@@ -303,7 +306,66 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
             row[f"allele{i + 1}_hp1"] = None
             row[f"allele{i + 1}_hp2"] = None
             row[f"allele{i + 1}_seq"] = None
+
+    # Genotype string for the CE table headline (numeric, e.g. "12 / 14").
+    labels = [row[f"allele{i + 1}_ce_label"] for i in range(3) if row[f"allele{i + 1}_ce_label"]]
+    row["genotype"] = " / ".join(labels) if labels else "\u2013"
+
+    # Isoallele flag: a catalog suffix on any called allele, OR two called
+    # alleles with the same numeric label but a different ISFG structure
+    # (same CE number, different sequence — the FRONTStr differential).
+    by_label: dict[str | None, set[str]] = {}
+    for i, slot in enumerate(called):
+        by_label.setdefault(row.get(f"allele{i + 1}_ce_label"), set()).add(slot.isfg)
+    row["has_iso"] = bool(
+        any(slot.catalog_suffix for slot in called)
+        or any(len(isfgs) > 1 for isfgs in by_label.values())
+    )
     return row
+
+
+def _allele_number_label(a: Allele) -> str | None:
+    """The absolute allele-number cell for one allele (same logic as the CE table)."""
+    _, label, _ = _profile_forensic_display(
+        allele_numeric=a.allele_numeric,
+        allele_src=a.allele_numeric_source,
+        ce=a.ce,
+        length_bp=a.length_bp,
+    )
+    return label
+
+
+def _seq_rows(results: list[MarkerResult]) -> list[dict[str, Any]]:
+    """Flat sequencing-based table: one row per called allele, all markers.
+
+    This is the NGS differential view (ISFG / iso-allele / full sequence),
+    kept separate from the CE-based genotype table. The raw consensus travels
+    here so consumers can offer copy / FASTA without bloating the CE table.
+    """
+    rows: list[dict[str, Any]] = []
+    for r in results:
+        for i, a in enumerate(r.alleles_called):
+            number = _allele_number_label(a)
+            iso = f"{number}{a.catalog_suffix}" if (number and a.catalog_suffix) else ""
+            rows.append(
+                {
+                    "marker": r.marker_name,
+                    "allele_index": i + 1,
+                    "number": number or "\u2013",
+                    "iso": iso,
+                    "n_reads_total": a.n_reads_total,
+                    "n_reads_hp1": a.n_reads_hp1,
+                    "n_reads_hp2": a.n_reads_hp2,
+                    "isfg": a.isfg,
+                    "motif_repeat_summary": motif_repeat_summary(
+                        a.consensus, r.system.motif, strand=r.system.strand
+                    ),
+                    "length_bp": a.length_bp,
+                    "consensus": a.consensus,
+                    "status": a.status.value,
+                }
+            )
+    return rows
 
 
 def _status_chip(r: MarkerResult) -> str:

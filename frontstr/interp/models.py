@@ -17,6 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from pydantic import BaseModel
+
 from frontstr.caller.vcf import LongTRResult
 from frontstr.panel.models import System
 
@@ -60,6 +62,66 @@ class CallRule(StrEnum):
     TWO_CALLED_THREE_PRESENT = "two_called_three_present_review"
 
 
+class FlagSeverity(StrEnum):
+    """Severity of a structured :class:`Flag`."""
+
+    INFO = "info"
+    WARN = "warn"
+    ERROR = "error"
+
+
+class FlagCode(StrEnum):
+    """Enumerated, machine-readable review/QC conditions.
+
+    Replaces free-text warning strings so flags can be filtered, aggregated
+    (e.g. "all dropouts across a 150-sample batch") and audited. New codes are
+    additive; never repurpose an existing string value (it is part of the
+    serialized contract).
+    """
+
+    LOW_COVERAGE = "low_coverage"
+    DROPOUT = "dropout"
+    STRAND_BIAS = "strand_bias"
+    TRIALLELIC = "triallelic"
+    MIXTURE_SUSPECTED = "mixture_suspected"
+    LONGTR_DISCORDANT = "longtr_discordant"
+    INEXACT_ALLELE = "inexact_allele"
+    ISOALLELE = "isoallele"
+    CE_NOMENCLATURE_OFFSET = "ce_nomenclature_offset"
+
+
+_DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
+    FlagCode.LOW_COVERAGE: FlagSeverity.WARN,
+    FlagCode.DROPOUT: FlagSeverity.WARN,
+    FlagCode.STRAND_BIAS: FlagSeverity.WARN,
+    FlagCode.TRIALLELIC: FlagSeverity.INFO,
+    FlagCode.MIXTURE_SUSPECTED: FlagSeverity.WARN,
+    FlagCode.LONGTR_DISCORDANT: FlagSeverity.WARN,
+    FlagCode.INEXACT_ALLELE: FlagSeverity.INFO,
+    FlagCode.ISOALLELE: FlagSeverity.INFO,
+    FlagCode.CE_NOMENCLATURE_OFFSET: FlagSeverity.INFO,
+}
+
+
+class Flag(BaseModel):
+    """One structured, auditable review/QC condition on an allele or marker."""
+
+    code: FlagCode
+    severity: FlagSeverity
+    message: str
+
+    @classmethod
+    def of(
+        cls, code: FlagCode, message: str, severity: FlagSeverity | None = None
+    ) -> Flag:
+        """Build a flag, defaulting severity from the code when not given."""
+        return cls(
+            code=code,
+            severity=severity or _DEFAULT_SEVERITY.get(code, FlagSeverity.INFO),
+            message=message,
+        )
+
+
 @dataclass(slots=True)
 class Allele:
     """One forensic allele candidate. There is exactly one per evidence cluster."""
@@ -95,6 +157,8 @@ class Allele:
     catalog_suffix: str | None = None
     catalog_distance: int | None = None
     catalog_source: str = ""
+    #: Structured, auditable per-allele conditions (strand bias, inexact, …).
+    flags: list[Flag] = field(default_factory=list)
 
     def fraction(self, total_reads: int) -> float:
         if total_reads <= 0:
@@ -118,4 +182,6 @@ class MarkerResult:
     calling_thresh: float = 0.10
     longtr_result: LongTRResult | None = None
     discordant: bool = False
-    warnings: list[str] = field(default_factory=list)
+    #: Structured, auditable marker-level conditions. Replaces free-text
+    #: warnings so the run is filterable/aggregatable for batch + audit.
+    flags: list[Flag] = field(default_factory=list)

@@ -92,9 +92,20 @@ def test_build_report_writes_valid_html(tmp_path: Path) -> None:
     h1 = doc.find(".//h1")
     assert h1 is not None and "S001" in (h1.text or "")
 
-    # Required sections present
-    for sid in ("cover", "profile", "qc", "loci", "raw"):
+    # Required sections present (incl. the sequencing-based table)
+    for sid in ("cover", "profile", "sequences", "qc", "loci", "raw"):
         assert doc.get_element_by_id(sid) is not None
+
+    # CE table = genotype headline; sequencing table = one row per called allele
+    assert ">Genotype<" in html
+    seqtable = doc.find(".//table[@class='profile seqtable']")
+    assert seqtable is not None
+    seq_body_rows = seqtable.findall(".//tbody/tr")
+    assert len(seq_body_rows) == 5  # TH01 het (2) + TPOX tri (3)
+    # Full consensus reaches the sequencing table behind a copy control
+    assert "data-copy=" in html
+    # CE table marker links over to the sequencing table, not the locus detail
+    assert 'class="marker-link"' in html
 
     # Both markers rendered as <details>
     th01 = doc.get_element_by_id("locus-TH01")
@@ -162,7 +173,7 @@ def test_profile_tri_columns_only_when_tri_chip(tmp_path: Path) -> None:
         out_tri,
     )
     html_tri = out_tri.read_text(encoding="utf-8")
-    assert "Allele 3 (ISFG)" in html_tri
+    assert ">Allele 3 <" in html_tri
 
     th01_only = [
         MarkerResult(
@@ -195,7 +206,7 @@ def test_profile_tri_columns_only_when_tri_chip(tmp_path: Path) -> None:
         out_no,
     )
     html_no = out_no.read_text(encoding="utf-8")
-    assert "Allele 3 (ISFG)" not in html_no
+    assert ">Allele 3 <" not in html_no
 
 
 def test_build_report_is_deterministic(tmp_path: Path) -> None:
