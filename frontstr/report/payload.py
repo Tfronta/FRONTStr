@@ -156,6 +156,8 @@ def _serialize_allele(a: Allele, total_reads: int, motif: str, strand: str = "+"
         "consensus": a.consensus,
         "length_bp": a.length_bp,
         "ce": a.ce,
+        "number": a.number,
+        "number_method": a.number_method,
         "allele_numeric": a.allele_numeric,
         "allele_numeric_source": a.allele_numeric_source,
         "isfg": a.isfg,
@@ -220,47 +222,24 @@ def _trim_ce_display(ce: float) -> str:
     return f"{x:.10f}".rstrip("0").rstrip(".")
 
 
-def _profile_allele_ce_sort_and_label(
-    ce: float | None, length_bp: int
+def _format_allele_number(
+    number: float | None, method: str
 ) -> tuple[float | None, str | None, bool]:
-    """Legacy CE / TR-bp cell when :attr:`Allele.allele_numeric` is absent."""
-    if ce is not None:
-        x = round(float(ce), 4)
-        return (x, _trim_ce_display(ce), True)
-    if length_bp > 0:
-        return (float(length_bp), f"{length_bp} bp TR", False)
-    return (None, None, False)
+    """Format the model's canonical allele number for the table.
 
-
-def _profile_forensic_display(
-    *,
-    allele_numeric: float | None,
-    allele_src: str,
-    ce: float | None,
-    length_bp: int,
-) -> tuple[float | None, str | None, bool]:
-    """(sort key, table cell, confident_absolute_scale).
-
-    Precedence for the headline allele number:
-
-    1. ``period_ce`` / ``reference_offset`` — a calibrated absolute allele
-       number (length-based CE, or a curated ``reference_ce`` + offset).
-    2. ``delta_only`` compound markers — show the **sequence-derived repeat
-       count** (``ce_from_brackets``, the ``ce`` field) when available, so the
-       reported number is an absolute, cross-comparable allele designation
-       instead of a relative Δ offset. We only fall back to the Δ offset when
-       no bracket count exists (e.g. an empty/structureless consensus).
-    3. Otherwise fall back to CE / bp-TR sizing strings.
+    Pure presentation: the *decision* of which number to report (and how it
+    was derived) lives on :meth:`Allele.number` / :attr:`Allele.number_method`.
+    Here we only turn that into ``(sort key, cell label, confident_absolute)``.
     """
-    if allele_numeric is not None and allele_src in {"period_ce", "reference_offset"}:
-        return float(allele_numeric), _trim_ce_display(float(allele_numeric)), True
-    if allele_src == "delta_only" and ce is not None:
-        return float(ce), _trim_ce_display(float(ce)), True
-    if allele_numeric is not None and allele_src == "delta_only":
-        base = _trim_ce_display(float(allele_numeric))
-        label = f"Δ{base}" if abs(float(allele_numeric)) > 1e-9 else base
-        return float(allele_numeric), label, False
-    return _profile_allele_ce_sort_and_label(ce, length_bp)
+    if number is None:
+        return (None, None, False)
+    trimmed = _trim_ce_display(number)
+    if method == "delta":
+        return (number, f"Δ{trimmed}" if abs(number) > 1e-9 else trimmed, False)
+    if method == "bp_sizing":
+        return (number, f"{int(number)} bp TR", False)
+    # period_ce | reference_offset | bracket_count → a real absolute allele number
+    return (number, trimmed, True)
 
 
 def _profile_row(r: MarkerResult) -> dict[str, Any]:
@@ -282,11 +261,8 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
                 slot.consensus, r.system.motif, strand=r.system.strand
             )
             row[f"allele{i + 1}_ce"] = slot.ce
-            ce_sort, ce_label, ce_is_kit = _profile_forensic_display(
-                allele_numeric=slot.allele_numeric,
-                allele_src=slot.allele_numeric_source,
-                ce=slot.ce,
-                length_bp=slot.length_bp,
+            ce_sort, ce_label, ce_is_kit = _format_allele_number(
+                slot.number, slot.number_method
             )
             row[f"allele{i + 1}_ce_sort"] = ce_sort
             row[f"allele{i + 1}_ce_label"] = ce_label
@@ -326,12 +302,7 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
 
 def _allele_number_label(a: Allele) -> str | None:
     """The absolute allele-number cell for one allele (same logic as the CE table)."""
-    _, label, _ = _profile_forensic_display(
-        allele_numeric=a.allele_numeric,
-        allele_src=a.allele_numeric_source,
-        ce=a.ce,
-        length_bp=a.length_bp,
-    )
+    _, label, _ = _format_allele_number(a.number, a.number_method)
     return label
 
 
