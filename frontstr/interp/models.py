@@ -14,10 +14,9 @@ and the HTML report. They never reference cyvcf2 or pysam.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from frontstr.caller.vcf import LongTRResult
 from frontstr.panel.models import System
@@ -122,8 +121,7 @@ class Flag(BaseModel):
         )
 
 
-@dataclass(slots=True)
-class Allele:
+class Allele(BaseModel):
     """One forensic allele candidate. There is exactly one per evidence cluster."""
 
     cluster_index: int
@@ -158,7 +156,46 @@ class Allele:
     catalog_distance: int | None = None
     catalog_source: str = ""
     #: Structured, auditable per-allele conditions (strand bias, inexact, …).
-    flags: list[Flag] = field(default_factory=list)
+    flags: list[Flag] = Field(default_factory=list)
+
+    def _number_and_method(self) -> tuple[float | None, str]:
+        """Resolve the single canonical allele number + how it was derived.
+
+        Precedence (decided once here, not in the report layer):
+
+        - ``period_ce`` / ``reference_offset`` — calibrated absolute CE number.
+        - ``bracket_count`` — sequence-derived repeat count (``ce_from_brackets``)
+          for compound markers; the cross-comparable default when there is no
+          curated ``reference_ce``.
+        - ``delta`` — last-resort relative offset when a compound allele has no
+          countable repeat structure.
+        - ``bp_sizing`` — raw tandem-repeat span when no allele number exists.
+        - ``none`` — deletion / no data.
+        """
+        src = self.allele_numeric_source
+        if self.allele_numeric is not None and src in {"period_ce", "reference_offset"}:
+            return float(self.allele_numeric), src
+        if src == "delta_only" and self.ce is not None:
+            return float(self.ce), "bracket_count"
+        if self.allele_numeric is not None and src == "delta_only":
+            return float(self.allele_numeric), "delta"
+        if self.ce is not None:
+            return float(self.ce), "bracket_count"
+        if self.length_bp > 0:
+            return float(self.length_bp), "bp_sizing"
+        return None, "none"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def number(self) -> float | None:
+        """Canonical absolute allele number (CE / repeat count); ``None`` if undefined."""
+        return self._number_and_method()[0]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def number_method(self) -> str:
+        """How :attr:`number` was derived (period_ce | bracket_count | …)."""
+        return self._number_and_method()[1]
 
     def fraction(self, total_reads: int) -> float:
         if total_reads <= 0:
@@ -166,9 +203,16 @@ class Allele:
         return self.n_reads_total / total_reads
 
 
-@dataclass(slots=True)
-class MarkerResult:
+class MarkerResult(BaseModel):
     """All the forensic decisions for one marker, ready for export/report."""
+
+    # LongTRResult is a stdlib dataclass; treat it as an opaque nested object
+    # rather than letting Pydantic re-validate/copy the caller's internals.
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    #: Version of this serialized record's shape. Bump on breaking changes to
+    #: the canonical schema so downstream consumers can branch defensively.
+    schema_version: str = "1.0"
 
     marker_name: str
     system: System
@@ -177,11 +221,11 @@ class MarkerResult:
     call_rule: CallRule
     tri_type: TriType
     total_reads: int
-    expected_stutter: dict[str, float] = field(default_factory=dict)
+    expected_stutter: dict[str, float] = Field(default_factory=dict)
     analytical_thresh: float = 0.02
     calling_thresh: float = 0.10
     longtr_result: LongTRResult | None = None
     discordant: bool = False
     #: Structured, auditable marker-level conditions. Replaces free-text
     #: warnings so the run is filterable/aggregatable for batch + audit.
-    flags: list[Flag] = field(default_factory=list)
+    flags: list[Flag] = Field(default_factory=list)

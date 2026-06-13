@@ -60,3 +60,37 @@ def test_no_flags_for_clean_het() -> None:
     r = _result(TriType.NONE, CallRule.HETEROZYGOUS)
     derive_marker_flags(r)
     assert r.flags == []
+
+
+def _bare_allele(**kw: object):
+    from frontstr.interp.models import Allele, AlleleStatus
+
+    base = dict(
+        cluster_index=0, consensus="", length_bp=0, n_reads_total=10,
+        n_reads_hp1=5, n_reads_hp2=5, n_reads_hp_none=0, n_forward=5, n_reverse=5,
+        mean_qual=30.0, ce=None, isfg="", bp_diff=0, is_deletion=False,
+        status=AlleleStatus.ALLELE,
+    )
+    base.update(kw)
+    return Allele(**base)  # type: ignore[arg-type]
+
+
+def test_canonical_number_period_ce() -> None:
+    a = _bare_allele(ce=9.0, allele_numeric=9.0, allele_numeric_source="period_ce")
+    assert (a.number, a.number_method) == (9.0, "period_ce")
+
+
+def test_canonical_number_bracket_count_for_compound() -> None:
+    a = _bare_allele(ce=13.0, allele_numeric=-3.0, allele_numeric_source="delta_only")
+    assert (a.number, a.number_method) == (13.0, "bracket_count")
+
+
+def test_canonical_number_delta_only_when_no_brackets() -> None:
+    a = _bare_allele(ce=None, allele_numeric=-3.0, allele_numeric_source="delta_only")
+    assert (a.number, a.number_method) == (-3.0, "delta")
+
+
+def test_canonical_number_none_for_deletion() -> None:
+    a = _bare_allele(ce=None, length_bp=0, is_deletion=True,
+                     allele_numeric=None, allele_numeric_source="deletion")
+    assert (a.number, a.number_method) == (None, "none")
