@@ -121,6 +121,23 @@ class Flag(BaseModel):
         )
 
 
+class IsoAllele(BaseModel):
+    """ISFG iso-allele annotation: same allele number, different sequence.
+
+    Folds the former flat ``catalog_*`` fields into one object. ``suffix`` is
+    the clean ISFG iso-allele letter ("a"/"b"/…) with no trailing marker;
+    ``match_type`` ("exact" | "approx" | "none") replaces the old ``*`` overload.
+    ``is_isoallele`` is set at marker level when this allele shares its number
+    with a sibling of different sequence (or the catalog resolved a variant).
+    """
+
+    suffix: str | None = None
+    match_type: str = "none"
+    distance: int | None = None
+    source: str = ""
+    is_isoallele: bool = False
+
+
 class Allele(BaseModel):
     """One forensic allele candidate. There is exactly one per evidence cluster."""
 
@@ -148,13 +165,9 @@ class Allele(BaseModel):
     longtr_match: bool = False
     longtr_inexact: bool = False
     longtr_bp_diff: int | None = None
-    #: Allele-catalog annotation (Phase 2.1). ``catalog_suffix`` is the ISFG
-    #: iso-allele letter ("a"/"b"/…), with a trailing ``*`` when the match was
-    #: approximate. ``catalog_distance`` is the edit distance to the catalog hit
-    #: (0 = exact, ``None`` = no hit). ``catalog_source`` records provenance.
-    catalog_suffix: str | None = None
-    catalog_distance: int | None = None
-    catalog_source: str = ""
+    #: ISFG iso-allele annotation (catalog match + same-number sibling). Folds
+    #: the former flat ``catalog_suffix``/``catalog_distance``/``catalog_source``.
+    iso: IsoAllele = Field(default_factory=IsoAllele)
     #: Structured, auditable per-allele conditions (strand bias, inexact, …).
     flags: list[Flag] = Field(default_factory=list)
 

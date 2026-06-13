@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from frontstr.interp.flags import derive_marker_flags
 from frontstr.interp.models import (
     Allele,
     AlleleStatus,
     CallRule,
+    IsoAllele,
     MarkerResult,
     TriType,
 )
@@ -108,7 +110,7 @@ def test_iso_alleles_flag_and_designation() -> None:
         n_forward=12, n_reverse=7, mean_qual=30.0, ce=15.0, isfg="[TCTA]15",
         bp_diff=0, is_deletion=False, allele_numeric=15.0,
         allele_numeric_source="period_ce", status=AlleleStatus.ALLELE,
-        catalog_suffix="a",
+        iso=IsoAllele(suffix="a", match_type="exact", distance=0, source="STRSeq"),
     )
     a2 = Allele(
         cluster_index=1, consensus="TCTG" + "TCTA" * 14, length_bp=60,
@@ -116,10 +118,11 @@ def test_iso_alleles_flag_and_designation() -> None:
         n_forward=9, n_reverse=8, mean_qual=30.0, ce=15.0, isfg="TCTG [TCTA]14",
         bp_diff=0, is_deletion=False, allele_numeric=15.0,
         allele_numeric_source="period_ce", status=AlleleStatus.ALLELE,
-        catalog_suffix="b",
+        iso=IsoAllele(suffix="b", match_type="exact", distance=0, source="STRSeq"),
     )
-    results = [_marker_result("D3S1358", [a1, a2], [a1, a2])]
-    payload = serialize_run(results, RunContext(sample_name="c", panel_name="p"))
+    result = _marker_result("D3S1358", [a1, a2], [a1, a2])
+    derive_marker_flags(result)
+    payload = serialize_run([result], RunContext(sample_name="c", panel_name="p"))
     row = payload["profile_rows"][0]
     assert row["genotype"] == "15 / 15"
     assert row["has_iso"] is True

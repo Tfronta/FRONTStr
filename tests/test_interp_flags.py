@@ -94,3 +94,52 @@ def test_canonical_number_none_for_deletion() -> None:
     a = _bare_allele(ce=None, length_bp=0, is_deletion=True,
                      allele_numeric=None, allele_numeric_source="deletion")
     assert (a.number, a.number_method) == (None, "none")
+
+
+def test_isoalleles_detected_by_same_number_diff_sequence() -> None:
+    """Two called alleles, same number, different ISFG → ISOALLELE flag + marks."""
+    a1 = _bare_allele(consensus="TCTA" * 15, length_bp=60, ce=15.0,
+                      isfg="[TCTA]15", allele_numeric=15.0,
+                      allele_numeric_source="period_ce")
+    a2 = _bare_allele(cluster_index=1, consensus="TCTG" + "TCTA" * 14, length_bp=60,
+                      ce=15.0, isfg="TCTG [TCTA]14", allele_numeric=15.0,
+                      allele_numeric_source="period_ce")
+    r = MarkerResult(
+        marker_name="D3S1358", system=_system("D3S1358"), alleles=[a1, a2],
+        alleles_called=[a1, a2], call_rule=CallRule.HETEROZYGOUS,
+        tri_type=TriType.NONE, total_reads=20,
+    )
+    derive_marker_flags(r)
+    assert any(f.code == FlagCode.ISOALLELE for f in r.flags)
+    assert a1.iso.is_isoallele and a2.iso.is_isoallele
+
+
+def test_no_isoallele_flag_for_distinct_numbers() -> None:
+    a1 = _bare_allele(consensus="TCTA" * 12, length_bp=48, ce=12.0,
+                      isfg="[TCTA]12", allele_numeric=12.0,
+                      allele_numeric_source="period_ce")
+    a2 = _bare_allele(cluster_index=1, consensus="TCTA" * 14, length_bp=56, ce=14.0,
+                      isfg="[TCTA]14", allele_numeric=14.0,
+                      allele_numeric_source="period_ce")
+    r = MarkerResult(
+        marker_name="CSF1PO", system=_system("CSF1PO"), alleles=[a1, a2],
+        alleles_called=[a1, a2], call_rule=CallRule.HETEROZYGOUS,
+        tri_type=TriType.NONE, total_reads=20,
+    )
+    derive_marker_flags(r)
+    assert not any(f.code == FlagCode.ISOALLELE for f in r.flags)
+
+
+def test_amel_like_none_numbers_not_isoallele() -> None:
+    """Two number-less alleles (AMEL X/Y) must NOT be grouped as iso-alleles."""
+    x = _bare_allele(consensus="", isfg="X", ce=None, allele_numeric=None,
+                     allele_numeric_source="unavailable")
+    y = _bare_allele(cluster_index=1, consensus="", isfg="Y", ce=None,
+                     allele_numeric=None, allele_numeric_source="unavailable")
+    r = MarkerResult(
+        marker_name="AMEL", system=_system("AMEL"), alleles=[x, y],
+        alleles_called=[x, y], call_rule=CallRule.HETEROZYGOUS,
+        tri_type=TriType.NONE, total_reads=20,
+    )
+    derive_marker_flags(r)
+    assert not any(f.code == FlagCode.ISOALLELE for f in r.flags)
