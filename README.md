@@ -2,97 +2,78 @@
 
 > **Forensic Ranked Output for Nanopore Tandem Short Tandem Repeats**
 
-FRONTStr is a forensic STR profiling toolkit for **long-read sequencing data**,
-built ONT-first: every default, every calibration and every threshold in it was
-measured on Oxford Nanopore R10 data rather than carried over from capillary
-electrophoresis or short-read practice.
+A forensic STR profiling toolkit for **long-read sequencing**, built ONT-first:
+every default, calibration and threshold in it was measured on Oxford Nanopore
+R10 data rather than carried over from capillary electrophoresis or short-read
+practice.
 
-That distinction is the point of the project. Long reads span an entire STR
-locus plus its flanks in a single read, which makes it possible to report the
-**sequence** of each allele rather than only its length — iso-alleles,
-microvariants and interrupted repeat structures that CE cannot resolve. But the
-error profile of a nanopore read is nothing like that of a capillary trace, and
-a caller that inherits CE-era constants will be confidently wrong in ways that
-are hard to see. Where FRONTStr had inherited such constants, they have been
-replaced with values fitted to real ONT data — and the measurements are in
-[`docs/`](docs/), including the ones that changed the answer.
+That is the point of the project. A long read spans an entire STR locus and its
+flanks at once, which makes it possible to report the **sequence** of each
+allele rather than only its length — iso-alleles, microvariants and interrupted
+repeat structures that CE cannot resolve. But a nanopore read's error profile
+is nothing like a capillary trace's, and a caller that inherits CE-era
+constants is confidently wrong in ways that are hard to see. Where FRONTStr had
+inherited such constants, they have been replaced with values fitted to real
+ONT data, and the measurements are in [`docs/`](docs/) — including the ones
+that changed the answer.
 
 ## Status
 
-**Pre-alpha.** The interpretation pipeline works end-to-end from an aligned BAM
-and is regression-tested against a real ONT sample. It has **not** been
-validated by a forensic laboratory, and it is not fit for casework. See
-[Limitations](#limitations) — they are specific, and worth reading before you
-draw conclusions from any output.
+**Pre-alpha.** The pipeline works end to end from an aligned BAM and is
+regression-tested against a real ONT sample. It has **not** been validated by a
+forensic laboratory and is not fit for casework. The
+[Limitations](#limitations) are specific and worth reading before you draw
+conclusions from any output.
 
 ## What it does
 
-Three layers, each with a strict responsibility
-(see [`docs/architecture.md`](docs/architecture.md)):
-
 **FRONTStr calls genotypes by itself.** Every allele, read count and sequence
-in its output comes from its own pileup of the BAM. The pipeline is:
+in its output comes from its own pileup of the BAM.
 
 | Stage | Module | What it does |
 |---|---|---|
-| 1 — Evidence | `frontstr.evidence` | Per-locus pileup → clustering by repeat-core length → POA consensus. **Integer per-allele read counts straight from the BAM.** |
-| 2 — Interpretation | `frontstr.interp` | ISFG nomenclature, allele numbering, stutter, haplotype-aware suppression, genotype calling. |
-| 3 — QC & audit | `frontstr.interp.qc`, `frontstr.audit` | Coverage, strand bias and nomenclature flags; the sealed audit record. |
+| Evidence | `frontstr.evidence` | Per-locus pileup → clustering by repeat-core length → POA consensus. **Integer per-allele read counts straight from the BAM.** |
+| Interpretation | `frontstr.interp` | ISFG nomenclature, allele numbering, stutter, haplotype-aware suppression, genotype calling. |
+| QC & audit | `frontstr.interp.qc`, `frontstr.audit` | Coverage, strand-bias and nomenclature flags; the sealed audit record. |
 
 Coverage is counted, not divided out of a caller's `BPDIFFS` field, and the
-ISFG bracket string is computed from the cluster's consensus rather than from a
+ISFG bracket string is computed from the cluster consensus rather than from a
 VCF `ALT`.
 
 > **LongTR is optional and off by default.** `frontstr.caller` wraps it, but it
-> runs only if you pass `--longtr-vcf`, and all it does then is cross-check:
-> disagreement raises a flag for an analyst, never changes a call. With no
-> `--longtr-vcf` the step is a no-op. FRONTStr does not need LongTR installed.
+> runs only if you pass `--longtr-vcf`, and all it does then is cross-check —
+> disagreement raises a flag for an analyst, never changes a call. FRONTStr
+> does not need LongTR installed.
 
-A full walkthrough of every stage, with worked examples and measurements, is in
-[`docs/how_it_works.md`](docs/how_it_works.md).
+Four choices drive most of what the tool reports, each measured rather than
+asserted:
 
-### Design decisions worth knowing about
+- **POA consensus is required, not optional.** Without it the consensus is a
+  single unpolished read, which on the test set manufactured four false
+  microvariants in 202 called alleles.
+- **Reads are binned by repeat-core length**, not window length — panel windows
+  are ~80% flank. Binning by repeat *unit count* was evaluated and rejected: it
+  would merge TH01 9 with 9.3.
+- **Stutter is log-linear in LUS** (R² 0.965), because the measured rate spans
+  more than 10× across LUS 10–14.
+- **Haplotype tags are evidence.** Two candidates on the same haplotype within
+  2 bp cannot both be real alleles.
 
-These are the choices that most affect what the tool reports. Each is measured
-and documented rather than asserted.
+**→ [`docs/how_it_works.md`](docs/how_it_works.md) walks every stage with
+worked examples, the derivation behind each threshold, and the full current
+state of the project.**
 
-- **A POA consensus is required, not optional.** Without one the consensus
-  degrades to a single unpolished read. Measured on five ONT R10 samples, that
-  fallback manufactured **four false microvariants in 202 called alleles**
-  (TH01 6.3, TH01 6.1, D13S317 14.1, D18S51 11.3 — all integers under real POA).
-  The fallback still exists so the package stays importable, but it raises a
-  `CONSENSUS_FALLBACK` warning on every affected marker.
-- **Reads are binned by repeat-core length, not by window length.** Panel
-  windows are ~80% flank, so binning on raw length let flank indel errors split
-  one allele into two clusters. Core binning cut cluster fragmentation by 29%
-  and eliminated all false mixture flags on the test set. Binning by repeat
-  *unit count* was evaluated and rejected — `[AATG]9` and `[AATG]6 ATG [AATG]3`
-  are both nine units, so it would have destroyed TH01 9 vs 9.3.
-- **Stutter is modelled log-linearly in LUS**, fitted to ONT data
-  (R² 0.965), not as a flat per-marker rate. The measured rate spans more than
-  10× across LUS 10–14, which no constant can express. See
-  [`docs/stutter_calibration.md`](docs/stutter_calibration.md) — including the
-  caveat that the shipped model is fitted on **PCR-free WGS** and must be
-  re-fitted before amplicon casework.
-- **Haplotype tags are used as evidence.** On a phased BAM, two candidates
-  confidently on the same haplotype and within 2 bp of each other cannot both
-  be real alleles, so the weaker is suppressed and recorded.
-- **Every QC condition that is checked is reported as checked.** The audit
-  record lists every flag code the pipeline can raise, so a code absent from
-  the counts means "evaluated and not found" rather than "never looked at".
+## Install
 
-## Requirements
-
-- Python ≥ 3.11
-- A **POA backend** — `pyspoa` by default. `pyabpoa` is also supported but does
-  not build on macOS arm64 (it hardcodes AVX2 x86 intrinsics).
-- `samtools` for preparing inputs; `LongTR` only if you want Layer 1.
+Requires Python ≥ 3.11 and a POA backend.
 
 ```bash
 pip install -e '.[poa]'
 ```
 
-Then confirm the backend resolved, because a run without one is a different run:
+`pyspoa` is the default backend; `pyabpoa` also works but does not build on
+macOS arm64 (it hardcodes AVX2 x86 intrinsics). Confirm the backend resolved
+before trusting a run — one without it is a different run:
 
 ```bash
 frontstr doctor --bam sample.bam --panel examples/panels/codis_20_grch38.yaml
@@ -100,8 +81,8 @@ frontstr doctor --bam sample.bam --panel examples/panels/codis_20_grch38.yaml
 
 ## Usage
 
-FRONTStr currently takes an **indexed, aligned BAM or CRAM**. Align your reads
-first (`minimap2 -ax map-ont`); see [Limitations](#limitations).
+FRONTStr takes an **indexed, aligned BAM or CRAM**. Align first with
+`minimap2 -ax map-ont` — the FASTQ path is not wired yet.
 
 Call a profile and print it:
 
@@ -109,69 +90,77 @@ Call a profile and print it:
 frontstr interpret --bam sample.bam --panel examples/panels/codis_20_grch38.yaml
 ```
 
-Full pipeline with exports, an HTML report and an audit trail:
+Full pipeline with exports and an audit trail:
 
 ```bash
-frontstr export --bam sample.bam --panel examples/panels/codis_20_grch38.yaml --out-dir out/ --formats profile,evidence,seqs,json,html --operator "your name" --run-id RUN-001
+frontstr export --bam sample.bam --panel examples/panels/codis_20_grch38.yaml --out-dir out/ --formats profile,seqs,json,html,xlsx,vcf --reference GRCh38.fa --operator "your name" --run-id RUN-001
 ```
 
-That writes `<sample>.profile.csv`, `<sample>.evidence.csv`,
-`<sample>.seqs.csv`, `<sample>.json`, a self-contained `<sample>.html`, and a
-`frontstr.log.jsonl` process log. The canonical JSON carries a sealed audit
-record: tool version, POA backend, stutter model, every threshold that moved a
-call, input hashes and the flag census.
+Alongside the exports this writes a `frontstr.log.jsonl` process log, and the
+canonical JSON carries a sealed audit record: tool version, POA backend,
+stutter model, every threshold that moved a call, input hashes and the flag
+census.
 
-### Exports
+### Export formats
 
-`--formats` accepts `profile`, `evidence`, `seqs` (CSV), `json`,
-`json-compact`, `html`, `xlsx` and `vcf`.
+| `--formats` | Output |
+|---|---|
+| `profile` | CSV, one row per marker — the genotype table |
+| `evidence` | CSV, one row per cluster, including the uncalled ones |
+| `seqs` | CSV, one row per called allele with ISFG and consensus |
+| `json` / `json-compact` | The canonical record: everything, plus the audit block |
+| `html` | Self-contained offline report |
+| `xlsx` | Five-sheet review workbook (Profile, Sequences, Evidence, QC, Audit) |
+| `vcf` | Native sequence-resolved VCF — **needs `--reference`** |
 
-- **`vcf`** — a native, sequence-resolved VCF. `ALT` is the allele's sequence,
-  not a length, so iso-alleles remain distinct records; the repeat count rides
-  along in `FORMAT/MC` and FRONTStr's integer per-allele coverage in
-  `FORMAT/AD`. QC warnings become `FILTER` entries. It is bgzip/tabix
-  indexable and queryable with bcftools, which is the point — it exists so
-  FRONTStr can be benchmarked against other callers. **Needs `--reference`.**
-- **`xlsx`** — a five-sheet review workbook (Profile, Sequences, Evidence, QC,
-  Audit). Markers carrying a warning are tinted, QC is ordered worst-first, and
-  the Evidence sheet keeps the clusters that were *not* called.
+The VCF is native, not an annotation of LongTR's output. `ALT` carries the
+allele's sequence so iso-alleles stay distinct; the repeat count rides in
+`FORMAT/MC` and per-allele coverage in `FORMAT/AD`. It is bgzip/tabix
+indexable and bcftools-queryable, which is the point — it exists so FRONTStr
+can be benchmarked against other callers.
 
-Other commands: `evidence` (per-locus cluster dump for debugging), `call`
-(LongTR), `batch` (multi-sample from a manifest), `calibrate-stutter`
-(fit a stutter model to your own data), `doctor`, `inspect`.
-
-Run `frontstr --help` for the full list.
+Other commands: `evidence` (per-locus cluster dump), `batch` (multi-sample from
+a manifest), `calibrate-stutter` (fit a stutter model to your own data), `call`
+(LongTR), `doctor`, `inspect`. Run `frontstr --help` for the full list.
 
 ## Limitations
 
-Read this section as part of the documentation, not as a disclaimer.
+Part of the documentation, not a disclaimer.
 
 - **`frontstr run` is a stub.** The FASTQ → alignment → report path is not
   wired; `ingest.align` raises. Align externally and start from a BAM.
-- **Not laboratory-validated.** No forensic partner has signed off on a
-  validation report. There is no mixture series, no dropout study and no NIST
-  control run. The reference profile it is regression-tested against comes from
-  HipSTR on matched Illumina data — that is caller-vs-caller concordance, not
-  validation against a reference method.
-- **The stutter model is PCR-free.** Fitted on WGS data, so it contains no PCR
-  slippage component and will under-predict stutter on an amplicon panel. The
-  model records its own protocol so this cannot be lost.
+- **Not laboratory-validated.** No forensic partner has signed off. No mixture
+  series, no dropout study, no NIST control. The reference profile it is tested
+  against comes from HipSTR on matched Illumina data — caller-vs-caller
+  concordance, not validation against a reference method.
+- **The stutter model is PCR-free.** Fitted on WGS, so it has no PCR slippage
+  component and will under-predict stutter on an amplicon panel. The model
+  records its own protocol so this cannot be lost.
 - **vWA and D21S11 do not report the legacy kit allele number.** FRONTStr
   reports the sequence-derived repeat count; for these two compound loci that
   is not the CE-kit designation, and no single correction reconciles them. Both
-  raise a `CE_NOMENCLATURE_OFFSET` warning with the reason. Do not compare
-  those numbers directly against a CE profile.
+  raise `CE_NOMENCLATURE_OFFSET`. Do not compare those numbers against a CE
+  profile directly.
 - **The analytical and calling thresholds (0.02 / 0.10) are not data-derived.**
-  They are chosen defaults. The low-coverage floor and the stutter model *are*
-  derived; these two are not, and that is a gap.
+  The coverage floor and the stutter model are; these two are chosen defaults,
+  and that is a gap.
 - **No CODIS `.cmf`, MIDST or PDF export**, and no tidy/Parquet dataset for
-  cohort-scale analysis, despite what earlier plans promised.
-- **Illumina data will not work** against the shipped panel. Its windows are
-  ±100 bp and the pileup requires reads that fully span them; 150 bp reads
-  cannot. This is a deliberate ONT-first design choice, not an oversight.
+  cohort-scale analysis.
+- **Illumina data will not work** against the shipped panel: its windows are
+  ±100 bp and the pileup needs reads that span them fully. A deliberate
+  ONT-first choice, not an oversight.
 
-See [`ROADMAP.md`](ROADMAP.md) for what is planned and what is deliberately
-deferred.
+`docs/how_it_works.md` §12 lists the known gaps *inside* what does work.
+[`ROADMAP.md`](ROADMAP.md) covers what is planned and what is deferred.
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [`docs/how_it_works.md`](docs/how_it_works.md) | Every stage step by step, with examples and measurements; full current state |
+| [`docs/stutter_calibration.md`](docs/stutter_calibration.md) | How the stutter model was measured, and its caveats |
+| [`docs/architecture.md`](docs/architecture.md) | Module layout |
+| [`ROADMAP.md`](ROADMAP.md) | Delivery plan |
 
 ## Development
 
@@ -183,8 +172,8 @@ ruff check frontstr tests && ruff format --check frontstr tests && mypy frontstr
 ```
 
 The integration tests run the whole pipeline against a real ONT R10 BAM and
-assert the genotype of every marker. The slices are not versioned (~200 MB), so
-those tests skip cleanly when the data is absent.
+assert the genotype of every marker. Those slices are not versioned (~200 MB),
+so the tests skip cleanly when the data is absent.
 
 ## License
 
@@ -198,9 +187,9 @@ If you use FRONTStr in research, please cite:
 
 ### Prior art
 
-FRONTStr is an independent implementation. It uses and draws on the following:
+FRONTStr is an independent implementation. It uses and draws on:
 
-- **LongTR** — Tang et al. Used directly as the optional Layer 1 genotyper.
+- **LongTR** — Tang et al. Wrapped as an optional cross-check.
 - **ISFG sequence nomenclature** — the bracketed-repeat convention FRONTStr
   emits follows the ISFG recommendations and the counting rules described by
   Phillips (2018).
@@ -211,7 +200,6 @@ FRONTStr is an independent implementation. It uses and draws on the following:
   framing of stutter. **FRONTStr is not a successor to, port of, or derivative
   of toaSTR, and contains none of its code** — toaSTR's public repository
   distributes only a Docker Compose file and a SQL schema, and no toaSTR source
-  is present in this project. The stutter rates FRONTStr once carried over from
-  the CE/short-read literature have since been replaced with values fitted to
-  ONT data.
+  is present in this project. The stutter rates FRONTStr once carried from the
+  CE/short-read literature have been replaced with values fitted to ONT data.
 - **STRspy** — Hall, Kesharwani et al. Referenced for allele-database design.
