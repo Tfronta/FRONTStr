@@ -31,7 +31,7 @@ ISFG compression.
 
 Forensic decision rules.
 
-- `interp.isfg` — bracketed nomenclature compression (toaSTR v1 port).
+- `interp.isfg` — bracketed nomenclature compression.
 - `interp.stutter` — LUS/SLUS expected-stutter model + per-marker overrides.
 - `interp.classify` — `allele | stutter | artefact | noise | inexact | deletion`.
 - `interp.triallelic` — `call_profile` supporting 1, 2, or 3+ alleles plus
