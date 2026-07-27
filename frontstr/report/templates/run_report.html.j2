@@ -354,6 +354,47 @@
     <pre class="argv">{{ payload.meta.pipeline_argv | join(' ') }}</pre>
     {% endif %}
   </div>
+
+  {% if payload.audit %}
+  {% set audit = payload.audit %}
+  <div class="card" style="margin-top:14px;">
+    <h3 style="font-size:13px;margin:0 0 8px;color:var(--text-soft);">Run configuration</h3>
+    <dl class="raw-grid">
+      <dt>FRONTStr</dt><dd>{{ audit.tool_version }}</dd>
+      <dt>POA backend</dt>
+      <dd>{% if audit.poa_backend == 'none' %}<b style="color:var(--warn,#b58900);">none — consensus unpolished</b>{% else %}{{ audit.poa_backend }}{% endif %}</dd>
+      <dt>Stutter model</dt>
+      <dd>{{ audit.stutter_model_version }} <span class="meta">({{ audit.stutter_model_protocol }})</span></dd>
+      <dt>Analytical / calling</dt><dd>{{ audit.analytical_thresh }} / {{ audit.calling_thresh }}</dd>
+      <dt>Low-coverage floor</dt><dd>{{ audit.qc_thresholds.low_coverage_reads }} reads</dd>
+      <dt>Strand-bias test</dt>
+      <dd>p &lt; {{ audit.qc_thresholds.strand_bias_p }}, min {{ audit.qc_thresholds.strand_bias_min_reads }} reads</dd>
+      <dt>Audit record</dt><dd><span class="hash">{{ audit.integrity_sha256 }}</span></dd>
+    </dl>
+
+    <h3 style="font-size:13px;margin:16px 0 8px;color:var(--text-soft);">
+      Conditions checked
+      <span class="meta">— every condition below was evaluated; those not listed as raised were checked and not found</span>
+    </h3>
+    <ul class="raw-grid" style="list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:6px;">
+      {% for code in audit.flags_checked %}
+      <li class="chip {% if audit.flag_counts.get(code) %}chip-flagged{% else %}chip-clear{% endif %}"
+          style="font-size:11px;">
+        {{ code }}{% if audit.flag_counts.get(code) %} ×{{ audit.flag_counts[code] }}{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+
+    {% if audit.markers_needing_review %}
+    <p class="meta" style="margin-top:12px;">
+      <b>{{ audit.markers_needing_review | length }}</b> marker(s) carry a warning or error:
+      {{ audit.markers_needing_review | join(', ') }}
+    </p>
+    {% else %}
+    <p class="meta" style="margin-top:12px;">No marker raised a warning or error.</p>
+    {% endif %}
+  </div>
+  {% endif %}
   <details class="locus" id="run-data-blob" style="margin-top:14px;">
     <summary><b>Embedded run payload (JSON)</b><span class="meta">click to inspect</span></summary>
     <pre class="argv" style="max-height:60vh;overflow:auto;">{{ run_data_json_pretty | safe }}</pre>

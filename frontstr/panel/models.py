@@ -31,6 +31,16 @@ class System(BaseModel):
     #: the REF anchor length (defaults to tetranucleotide-style mapping).
     allele_bp_step: int = Field(default=4, ge=1)
 
+    #: Why this marker's reported allele number does not equal the legacy
+    #: CE-kit designation. When set, every call at this marker carries a
+    #: ``CE_NOMENCLATURE_OFFSET`` warning quoting the note.
+    #:
+    #: Curated per panel rather than detected in code: which markers diverge is
+    #: a property of the kit convention a laboratory compares against, not of
+    #: the sequence. Leave unset for markers where the sequence-derived repeat
+    #: count *is* the kit allele.
+    kit_nomenclature_note: str | None = None
+
     min_mapq: int | None = None
     min_mean_qual: int | None = None
     max_tr_len: int = 1000

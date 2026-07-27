@@ -7,6 +7,7 @@ or :func:`interpret_run` (full panel).
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -22,8 +23,10 @@ from frontstr.interp.flags import derive_marker_flags
 from frontstr.interp.haplotype import suppress_hp_phantoms
 from frontstr.interp.isfg import ce_from_brackets, ce_from_length, compress_isfg
 from frontstr.interp.models import Allele, MarkerResult
+from frontstr.interp.qc import QcThresholds, derive_run_qc_flags
 from frontstr.interp.stutter import build_expected_stutter
 from frontstr.interp.triallelic import call_profile
+from frontstr.log import get_logger
 from frontstr.panel.catalog import AlleleCatalog
 from frontstr.panel.models import Panel, System
 
@@ -129,6 +132,7 @@ def interpret_run(
     calling_thresh: float = DEFAULT_CALLING_THRESH,
     reference_fasta: Path | None = None,
     catalog: AlleleCatalog | None = None,
+    qc_thresholds: QcThresholds | None = None,
 ) -> list[MarkerResult]:
     """End-to-end: for each marker in ``panel``, pileup → cluster → interpret.
 
@@ -139,13 +143,29 @@ def interpret_run(
             concordance checks. Markers without an entry are interpreted
             from evidence alone.
         reference_fasta: Reference FASTA path; required when ``bam`` is a CRAM.
+        qc_thresholds: Laboratory QC policy for the run-level flags (coverage,
+            strand bias). Defaults apply when omitted.
 
     Returns:
-        One :class:`MarkerResult` per marker in panel order. Empty pileups
-        produce a ``NO_DATA`` result rather than failing.
+        One :class:`MarkerResult` per marker in panel order, each carrying its
+        marker-level *and* run-level QC flags. Empty pileups produce a
+        ``NO_DATA`` result rather than failing.
     """
+    log = get_logger(__name__)
     longtr_results = longtr_results or {}
     out: list[MarkerResult] = []
+    log.info(
+        "run.start",
+        bam=str(bam),
+        panel=panel.name,
+        panel_version=panel.version,
+        n_markers=len(panel.systems),
+        min_mapq=min_mapq,
+        identity_threshold=identity_threshold,
+        analytical_thresh=analytical_thresh,
+        calling_thresh=calling_thresh,
+        catalog=bool(catalog),
+    )
     for system in panel.systems:
         if system.marker_type == "amel":
             out.append(
@@ -160,16 +180,32 @@ def interpret_run(
             len_tolerance_bp=len_tolerance_bp,
             reference_fasta=reference_fasta,
         )
-        out.append(
-            interpret_marker(
-                system=system,
-                clusters=clusters,
-                longtr=longtr_results.get(system.name),
-                analytical_thresh=analytical_thresh,
-                calling_thresh=calling_thresh,
-                catalog=catalog,
-            )
+        result = interpret_marker(
+            system=system,
+            clusters=clusters,
+            longtr=longtr_results.get(system.name),
+            analytical_thresh=analytical_thresh,
+            calling_thresh=calling_thresh,
+            catalog=catalog,
         )
+        log.debug(
+            "marker.called",
+            marker=system.name,
+            call_rule=result.call_rule.value,
+            total_reads=result.total_reads,
+            n_clusters=len(clusters),
+            alleles=[a.number_label for a in result.alleles_called],
+        )
+        out.append(result)
+
+    thresholds = derive_run_qc_flags(out, qc_thresholds)
+    log.info(
+        "run.complete",
+        n_markers=len(out),
+        n_called=sum(1 for r in out if r.alleles_called),
+        flags=dict(sorted(Counter(f.code.value for r in out for f in r.flags).items())),
+        low_coverage_reads=thresholds.low_coverage_reads,
+    )
     return out
 
 

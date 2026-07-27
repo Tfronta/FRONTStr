@@ -17,6 +17,7 @@ from rich.table import Table
 from frontstr.errors import FrontstrError
 from frontstr.ingest import detect_input, validate_bam
 from frontstr.interp.models import Allele
+from frontstr.interp.qc import QcThresholds
 from frontstr.version import __version__
 
 app = typer.Typer(
@@ -478,14 +479,29 @@ def export_cmd(
         Path | None,
         typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
     ] = None,
+    low_coverage_reads: Annotated[
+        int,
+        typer.Option(
+            "--low-coverage-reads",
+            help="Called loci below this many reads raise LOW_COVERAGE.",
+        ),
+    ] = QcThresholds.model_fields["low_coverage_reads"].default,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", "-v", help="Log every marker call, not just the run.")
+    ] = False,
 ) -> None:
     """Run the full pipeline and write one or more export files.
+
+    A JSONL process log is always written to ``<out-dir>/frontstr.log.jsonl``
+    alongside the exports; the canonical JSON carries the audit record.
 
     Example::
 
         frontstr export --bam s.bam --panel p.yaml -o exports/ \
             --formats profile,evidence,seqs,json,html
     """
+    import logging
+
     from frontstr.caller import parse_longtr_vcf
     from frontstr.exports import (
         write_evidence_csv,
@@ -494,6 +510,7 @@ def export_cmd(
         write_seqs_csv,
     )
     from frontstr.interp import index_longtr_results, interpret_run
+    from frontstr.log import PROCESS_LOG_NAME, configure_logging
     from frontstr.panel.loader import load_panel
     from frontstr.report import RunContext, build_report, serialize_run
 
@@ -502,6 +519,11 @@ def export_cmd(
     if unknown:
         console.print(f"[red]Unknown formats:[/red] {sorted(unknown)}")
         raise typer.Exit(code=2)
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    log_path = out_dir / PROCESS_LOG_NAME
+    configure_logging(log_path, level=logging.DEBUG if verbose else logging.INFO)
+    qc_thresholds = QcThresholds(low_coverage_reads=low_coverage_reads)
 
     try:
         panel = load_panel(panel_path)
@@ -515,6 +537,7 @@ def export_cmd(
             analytical_thresh=analytical_thresh,
             calling_thresh=calling_thresh,
             reference_fasta=reference,
+            qc_thresholds=qc_thresholds,
         )
         context = RunContext(
             sample_name=sample_name or bam.stem,
@@ -526,13 +549,13 @@ def export_cmd(
             operator=operator,
             run_id=run_id,
             reference_build=panel.reference_build,
+            qc_thresholds=qc_thresholds,
         )
         payload = serialize_run(results, context)
     except FrontstrError as exc:
         console.print(f"[red]export error:[/red] {exc}")
         raise typer.Exit(code=2) from exc
 
-    out_dir.mkdir(parents=True, exist_ok=True)
     stem = context.sample_name
     written: list[Path] = []
     if "profile" in wanted:
@@ -551,6 +574,19 @@ def export_cmd(
     for path in written:
         size_kb = path.stat().st_size / 1024
         console.print(f"[green]wrote[/green] {path}  ({size_kb:.1f} KB)")
+
+    audit = payload["audit"]
+    sev = audit["severity_counts"]
+    console.print(f"[green]wrote[/green] {log_path}  (process log)")
+    if sev.get("error") or sev.get("warn"):
+        console.print(
+            f"[yellow]review:[/yellow] {sev.get('error', 0)} error / "
+            f"{sev.get('warn', 0)} warning flag(s) across "
+            f"{len(audit['markers_needing_review'])} marker(s): "
+            f"{', '.join(audit['markers_needing_review'])}"
+        )
+    else:
+        console.print("[green]no review flags raised[/green]")
 
 
 @app.command("report")

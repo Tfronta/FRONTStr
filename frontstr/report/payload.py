@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from frontstr.audit import InputFile, build_audit_record
 from frontstr.interp.isfg import motif_repeat_summary
 from frontstr.interp.models import (
     Allele,
@@ -27,6 +28,7 @@ from frontstr.interp.models import (
     MarkerResult,
     TriType,
 )
+from frontstr.interp.qc import QcThresholds
 from frontstr.report.ngs_display import build_ngs_panel, build_strhub_projection
 from frontstr.version import __version__
 
@@ -57,6 +59,9 @@ class RunContext:
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     pipeline_argv: list[str] = field(default_factory=list)
     dropout_floor: int = DEFAULT_DROPOUT_FLOOR
+    #: QC policy applied during interpretation, carried through so the audit
+    #: record states the thresholds the calls were actually made under.
+    qc_thresholds: QcThresholds = field(default_factory=QcThresholds)
 
 
 def serialize_run(
@@ -107,12 +112,39 @@ def serialize_run(
         },
         "summary": summary,
         "qc": qc,
+        "audit": _build_audit(results, context),
         "profile_rows": [_profile_row(r) for r in results],
         "seq_rows": _seq_rows(results),
         "results": serialized_results,
     }
     payload["strhub"] = build_strhub_projection(payload)
     return payload
+
+
+def _build_audit(results: list[MarkerResult], context: RunContext) -> dict[str, Any]:
+    """Assemble the audit record from the run's inputs and its results.
+
+    Placed in the canonical payload rather than only in the HTML: the audit
+    trail has to travel with the data, or it is not an audit trail.
+    """
+    inputs = [
+        InputFile(role=role, path=str(path), sha256=sha)
+        for role, path, sha in (
+            ("bam", context.bam_path, context.bam_sha256),
+            ("panel", None, context.panel_sha256),
+            ("longtr_vcf", context.longtr_vcf_path, context.longtr_vcf_sha256),
+        )
+        if path is not None or sha is not None
+    ]
+    first = results[0] if results else None
+    record = build_audit_record(
+        results,
+        inputs=inputs,
+        qc_thresholds=context.qc_thresholds,
+        analytical_thresh=first.analytical_thresh if first else None,
+        calling_thresh=first.calling_thresh if first else None,
+    )
+    return record.model_dump(mode="json")
 
 
 def _serialize_marker(r: MarkerResult) -> dict[str, Any]:
