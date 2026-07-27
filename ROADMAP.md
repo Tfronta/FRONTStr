@@ -192,6 +192,35 @@ science with real labs in week 4.
 - [ ] Derive the analytical / calling thresholds (0.02 / 0.10) from data too —
       they are still chosen numbers, not measured ones.
 
+### 2.6 Audit trail — DONE
+
+Three layers, built Jul 2026:
+
+- [x] `frontstr/log.py` — JSONL process log, one event per line, written to
+      `<out-dir>/frontstr.log.jsonl` by `frontstr export`. Deliberately free of
+      FRONTStr imports so the domain does not depend on the audit trail and
+      vice versa. Quiet by default: importing the library configures nothing,
+      because a library that writes to someone else's stdout is broken.
+- [x] `frontstr/audit.py` — `AuditRecord` embedded in the canonical JSON and
+      rendered on the report's audit page: tool version, POA backend, stutter
+      model + protocol, every threshold that moved a call, input hashes, the
+      flag census, and `markers_needing_review`. Sealed with a SHA-256 over its
+      own canonical form (tamper evidence, not a signature).
+- [x] `AuditRecord.flags_checked` — every code the pipeline *can* raise, so a
+      code absent from the counts provably means "checked and not found"
+      rather than "never looked at".
+- [x] `frontstr/interp/qc.py` — the five declared-but-never-emitted FlagCodes
+      now fire: DROPOUT, LOW_COVERAGE, STRAND_BIAS (exact two-sided binomial,
+      no SciPy), INEXACT_ALLELE, CE_NOMENCLATURE_OFFSET.
+      `QcThresholds.low_coverage_reads` defaults to 20, *derived*: it is where
+      the dropout risk for the most unbalanced heterozygote the caller still
+      accepts settles at ~1%.
+- [ ] Process log for `frontstr batch` — worker processes need per-process
+      logging configuration. The audit record already lands in each sample's
+      JSON; only the JSONL process log is missing in batch mode.
+
+---
+
 ### 2.5 Validation (one full week)
 
 - [ ] HG002 + HG001 ONT R10 simplex/duplex → expected profile, F1 ≥ 0.95

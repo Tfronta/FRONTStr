@@ -104,7 +104,9 @@ _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
     FlagCode.LONGTR_DISCORDANT: FlagSeverity.WARN,
     FlagCode.INEXACT_ALLELE: FlagSeverity.INFO,
     FlagCode.ISOALLELE: FlagSeverity.INFO,
-    FlagCode.CE_NOMENCLATURE_OFFSET: FlagSeverity.INFO,
+    # WARN, not INFO: comparing this number against a CE profile without
+    # knowing it is a bracket count can produce a false exclusion.
+    FlagCode.CE_NOMENCLATURE_OFFSET: FlagSeverity.WARN,
     # WARN, not INFO: an unpolished consensus carries single-read errors into
     # the ISFG string and the iso-allele catalog match.
     FlagCode.CONSENSUS_FALLBACK: FlagSeverity.WARN,
