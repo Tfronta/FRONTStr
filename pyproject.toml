@@ -73,9 +73,12 @@ path = "frontstr/version.py"
 [tool.hatch.build.targets.wheel]
 packages = ["frontstr"]
 
-[tool.hatch.build.targets.wheel.force-include]
-"frontstr/report/templates" = "frontstr/report/templates"
-"frontstr/report/static" = "frontstr/report/static"
+# NOTE: do not add a [tool.hatch.build.targets.wheel.force-include] block for
+# report/templates and report/static. `packages = ["frontstr"]` already puts
+# them in the wheel (verified), and force-include additionally materialises a
+# real site-packages/frontstr/ directory during `pip install -e .` — which then
+# shadows the editable install's .pth and breaks the `frontstr` console script
+# with "No module named 'frontstr.cli'" from any directory but the repo root.
 
 [tool.hatch.build.targets.sdist]
 include = ["frontstr", "examples", "tests", "README.md", "ROADMAP.md", "LICENSE"]
