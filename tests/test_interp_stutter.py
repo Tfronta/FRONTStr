@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from frontstr.evidence.cluster import Cluster
 from frontstr.evidence.pileup import Observation
 from frontstr.interp.stutter import (
+    DEFAULT_STUTTER_MODEL,
     build_expected_stutter,
     find_motif_runs,
     top_two_runs,
@@ -74,64 +77,105 @@ def test_virtual_stutters_skip_singleton_runs() -> None:
     assert variants == []
 
 
-def test_build_expected_stutter_default_rates() -> None:
-    """100-read parent of 5 AGAT should give ES=10 for the -1 stutter (4 AGAT)."""
+def test_build_expected_stutter_scales_with_lus() -> None:
+    """The rate is a function of the slipping run's length, not a constant.
+
+    This is the whole point of the calibrated model: a flat per-marker rate
+    cannot express that stutter at LUS 14 is ~6x that at LUS 10 (measured on
+    the ONT R10 slice set).
+    """
     system = System(
-        name="TEST", chromosome="chr1", ref_start=1, ref_end=20,
+        name="TEST", chromosome="chr1", ref_start=1, ref_end=200,
         motif="AGAT", period=4,
     )
-    parents = [_cluster("AGAT" * 5, n_reads=100)]
-    exp = build_expected_stutter(parents, system)
-    assert exp["AGAT" * 4] == pytest.approx(10.0)
-    assert exp["AGAT" * 3] == pytest.approx(1.0)  # 0.10^2 * 100
-    # +1 stutter uses plus_factor=0.5 by default → 5.0
-    assert exp["AGAT" * 6] == pytest.approx(5.0)
+    short = build_expected_stutter([_cluster("AGAT" * 10, n_reads=100)], system)
+    long = build_expected_stutter([_cluster("AGAT" * 14, n_reads=100)], system)
+    assert long["AGAT" * 13] > 4 * short["AGAT" * 9]
 
 
-def test_build_expected_stutter_overrides() -> None:
-    """Per-system stutter_overrides must override defaults."""
+def test_build_expected_stutter_step_factors() -> None:
+    """-2 and +1 are multipliers of the -1 rate, not a geometric decay.
+
+    The geometric ``rate ** step`` form underestimates -2 on ONT by ~2.5x.
+    """
     system = System(
-        name="TPOX", chromosome="chr2", ref_start=1, ref_end=20,
-        motif="AATG", period=4,
-        stutter_overrides={"lus": 0.20, "plus_factor": 0.25},
+        name="TEST", chromosome="chr1", ref_start=1, ref_end=200,
+        motif="AGAT", period=4,
     )
-    parents = [_cluster("AATG" * 8, n_reads=200)]
-    exp = build_expected_stutter(parents, system)
-    assert exp["AATG" * 7] == pytest.approx(40.0)   # 0.20 * 200
-    assert exp["AATG" * 9] == pytest.approx(10.0)   # 0.20 * 200 * 0.25
+    exp = build_expected_stutter([_cluster("AGAT" * 13, n_reads=100)], system)
+    minus1 = exp["AGAT" * 12]
+    factors = DEFAULT_STUTTER_MODEL.step_factors
+    assert exp["AGAT" * 11] == pytest.approx(minus1 * factors["-2"])
+    assert exp["AGAT" * 14] == pytest.approx(minus1 * factors["1"])
+    # -2 is a multiplier of -1, NOT the geometric rate**2 the old model used.
+    assert factors["-2"] > minus1 / 100 * 2
 
 
-def test_build_expected_stutter_compound_motif() -> None:
-    """D3-like locus: LUS-from-TCTA stutter must subtract from the longest TCTA run."""
+def test_lus_is_clamped_to_the_calibrated_range() -> None:
+    """Outside the fitted LUS range, use the nearest supported rate.
+
+    Extrapolating the line would predict a negative (i.e. zero) rate at low LUS
+    and an implausible one at very high LUS; neither is measured.
+    """
     system = System(
-        name="D3S1358", chromosome="chr3", ref_start=1, ref_end=100,
+        name="TEST", chromosome="chr1", ref_start=1, ref_end=400,
+        motif="AGAT", period=4,
+    )
+    at_min = build_expected_stutter([_cluster("AGAT" * 10, n_reads=100)], system)
+    below = build_expected_stutter([_cluster("AGAT" * 6, n_reads=100)], system)
+    assert below["AGAT" * 5] == pytest.approx(at_min["AGAT" * 9])
+
+    at_max = build_expected_stutter([_cluster("AGAT" * 15, n_reads=100)], system)
+    above = build_expected_stutter([_cluster("AGAT" * 30, n_reads=100)], system)
+    assert above["AGAT" * 29] == pytest.approx(at_max["AGAT" * 14])
+
+
+def test_slus_stutter_is_rated_by_its_own_run_length() -> None:
+    """A shorter secondary run must produce less stutter than the primary one."""
+    system = System(
+        name="D3S1358", chromosome="chr3", ref_start=1, ref_end=200,
         motif="TCTA,TCTG", period=4,
     )
-    parent_seq = "TCTA" * 5 + "TCTG" + "TCTA" * 8
-    parents = [_cluster(parent_seq, n_reads=100)]
-    exp = build_expected_stutter(parents, system)
-    # The -1 LUS variant collapses the 8-TCTA run to 7
-    minus_one_lus = "TCTA" * 5 + "TCTG" + "TCTA" * 7
-    assert minus_one_lus in exp
-    assert exp[minus_one_lus] == pytest.approx(10.0)
-    # The -1 SLUS variant collapses the 5-TCTA run to 4 (slus_rate=0.05)
-    minus_one_slus = "TCTA" * 4 + "TCTG" + "TCTA" * 8
-    assert minus_one_slus in exp
-    assert exp[minus_one_slus] == pytest.approx(5.0)
+    parent_seq = "TCTA" * 11 + "TCTG" + "TCTA" * 14
+    exp = build_expected_stutter([_cluster(parent_seq, n_reads=100)], system)
+
+    minus_one_lus = "TCTA" * 11 + "TCTG" + "TCTA" * 13
+    minus_one_slus = "TCTA" * 10 + "TCTG" + "TCTA" * 14
+    assert exp[minus_one_lus] > exp[minus_one_slus] > 0
+
+
+def test_legacy_flat_lus_override_is_still_honoured() -> None:
+    """Labs validated against the old flat rate can pin it per marker."""
+    system = System(
+        name="TPOX", chromosome="chr2", ref_start=1, ref_end=200,
+        motif="AATG", period=4,
+        stutter_overrides={"lus": 0.20},
+    )
+    exp = build_expected_stutter([_cluster("AATG" * 8, n_reads=200)], system)
+    assert exp["AATG" * 7] == pytest.approx(40.0)  # 0.20 * 200
+
+
+def test_per_marker_slope_override() -> None:
+    system = System(
+        name="TEST", chromosome="chr1", ref_start=1, ref_end=200,
+        motif="AGAT", period=4,
+        stutter_overrides={"log_intercept": -4.0, "log_slope": 0.0},
+    )
+    exp = build_expected_stutter([_cluster("AGAT" * 12, n_reads=100)], system)
+    assert exp["AGAT" * 11] == pytest.approx(math.exp(-4.0) * 100)
 
 
 def test_build_expected_stutter_accumulates() -> None:
     """Two parents that share a -1 variant should accumulate their contributions."""
     system = System(
-        name="T", chromosome="chr1", ref_start=1, ref_end=100,
+        name="T", chromosome="chr1", ref_start=1, ref_end=200,
         motif="AGAT", period=4,
     )
-    parents = [
-        _cluster("AGAT" * 5, n_reads=100),
-        _cluster("AGAT" * 5, n_reads=50),
-    ]
-    exp = build_expected_stutter(parents, system)
-    assert exp["AGAT" * 4] == pytest.approx(15.0)
+    one = build_expected_stutter([_cluster("AGAT" * 12, n_reads=100)], system)
+    two = build_expected_stutter(
+        [_cluster("AGAT" * 12, n_reads=100), _cluster("AGAT" * 12, n_reads=50)], system
+    )
+    assert two["AGAT" * 11] == pytest.approx(one["AGAT" * 11] * 1.5)
 
 
 def test_build_expected_stutter_empty() -> None:
