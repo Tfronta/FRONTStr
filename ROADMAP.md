@@ -162,11 +162,29 @@ science with real labs in week 4.
 - [ ] HTML report: visible discordance chip + side‑by‑side panel
 - [ ] Tests: forced discordance → flag set, never silently overridden
 
-### 2.4 Stutter overrides per marker (2 days)
+### 2.4 Stutter model — calibrated from data
 
-- [ ] Panel YAML `stutter_overrides: {plus1A: 0.12, minus1A: 0.20}`
-- [ ] Override path tested with D21S11 (compound motif)
-- [ ] D3S1358 also (TCTA/TCTG mix)
+- [x] `panel/stutter_calib.py` — measures stutter from real BAMs and fits a
+      `StutterModel`; CLI `frontstr calibrate-stutter`. Replaces the flat
+      toaSTR/CE constants (10% LUS, 5% SLUS, forward at half) with
+      `rate(-1) = exp(-12.1125 + 0.7159 × clamp(LUS, 10, 14))`, R² 0.965, and
+      -2 / +1 as multipliers (0.242 / 0.726) rather than a geometric decay.
+      **First pass on the 5 ONT R10 slices; see `docs/stutter_calibration.md`.**
+      Headline findings: the flat -1 rate was 2.3× too high; forward stutter
+      runs at 0.73 of reverse, not 0.5; and the rate spans >10× across LUS
+      10-14, which no constant can express.
+- [x] Panel YAML `stutter_overrides` honoured per marker
+      (`log_intercept` / `log_slope` / `slus_factor` / `step_-1` / `step_-2` /
+      `step_1`, plus the legacy flat `lus` key)
+- [ ] **Re-fit on more R10 + Dorado samples.** The shipped model rests on 76
+      observations over 52 loci, and only LUS 10-14 has usable support —
+      everything outside is clamped. Widening that range is the main goal.
+- [ ] **Re-fit on amplicon data before casework.** The shipped model is
+      PCR-free WGS, so it contains no PCR slippage component and will
+      under-predict stutter on an amplicon panel. `StutterModel.protocol`
+      records which regime a model came from.
+- [ ] Derive the analytical / calling thresholds (0.02 / 0.10) from data too —
+      they are still chosen numbers, not measured ones.
 
 ### 2.5 Validation (one full week)
 

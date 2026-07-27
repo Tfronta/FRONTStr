@@ -611,6 +611,112 @@ def report(
     console.print(f"[green]✓ Report written:[/green] {out_path} ({size_kb:.1f} KB)")
 
 
+@app.command("calibrate-stutter")
+def calibrate_stutter(
+    bams: Annotated[
+        list[Path],
+        typer.Option("--bam", help="Indexed BAM/CRAM. Repeat for each sample."),
+    ],
+    panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
+    out: Annotated[
+        Path | None, typer.Option("--out", "-o", help="Write the fitted model as JSON.")
+    ] = None,
+    protocol: Annotated[
+        str,
+        typer.Option(
+            "--protocol",
+            help="Library protocol the samples came from: wgs_pcr_free | amplicon. "
+            "Recorded in the model — a PCR-free fit has no PCR slippage in it.",
+        ),
+    ] = "unknown",
+    min_mapq: Annotated[int, typer.Option("--min-mapq")] = 20,
+    reference: Annotated[
+        Path | None,
+        typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
+    ] = None,
+) -> None:
+    """Measure stutter rates from real data and fit a :class:`StutterModel`.
+
+    This is a calibration pass, not a per-case step: the model is a property of
+    the chemistry and the library protocol, not of the sample. Run it once per
+    platform + protocol, commit the JSON, and pass it to the pipeline.
+
+    Only loci where a stutter position cannot be confused with a real allele
+    are used (homozygotes, or heterozygotes ≥3 repeat units apart), so expect
+    roughly half the loci to be discarded. Prints the breakdown by step, by LUS
+    and by marker so a thin fit is visible rather than silently shipped.
+    """
+    from frontstr.panel.loader import load_panel
+    from frontstr.panel.stutter_calib import (
+        collect_observations,
+        dump_stutter_model,
+        fit_stutter_model,
+        summarise,
+    )
+
+    try:
+        panel = load_panel(panel_path)
+    except FrontstrError as exc:
+        console.print(f"[red]panel error:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+
+    obs = collect_observations(
+        list(bams), panel, min_mapq=min_mapq, reference_fasta=reference
+    )
+    if not obs:
+        console.print("[red]no usable observations[/red] — every locus was ambiguous.")
+        raise typer.Exit(code=1)
+
+    stats = summarise(obs)
+    by_step: dict[str, dict[str, float]] = stats["by_step"]  # type: ignore[assignment]
+    t = Table(title=f"Observed stutter — {len(bams)} sample(s), {panel.name}")
+    t.add_column("Step", style="bold")
+    t.add_column("n", justify="right")
+    t.add_column("Pooled ratio", justify="right")
+    t.add_column("Zero-stutter", justify="right")
+    for step, row in by_step.items():
+        t.add_row(step, str(row["n"]), f"{row['pooled_ratio']:.4f}", str(row["n_zero"]))
+    console.print(t)
+
+    lus_rows: dict[int, dict[str, float]] = stats["minus1_by_lus"]  # type: ignore[assignment]
+    t2 = Table(title="-1 step by parent LUS (the covariate being fitted)")
+    t2.add_column("LUS", justify="right")
+    t2.add_column("n", justify="right")
+    t2.add_column("Pooled ratio", justify="right")
+    for lus, row in lus_rows.items():
+        style = "" if row["n"] >= 7 else "dim"
+        t2.add_row(str(lus), str(row["n"]), f"{row['pooled_ratio']:.4f}", style=style)
+    console.print(t2)
+    console.print("[dim]dim rows have thin support (n < 7) — widen the sample set.[/dim]")
+
+    try:
+        model = fit_stutter_model(
+            obs,
+            source=f"{len(bams)} sample(s): {', '.join(b.name for b in bams)}",
+            protocol=protocol,
+        )
+    except ValueError as exc:
+        console.print(f"[red]fit failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(
+        f"\n[green]rate(-1) = exp({model.log_intercept:+.4f} "
+        f"+ {model.log_slope:.4f} * LUS)[/green]   "
+        f"R²={model.r_squared}  LUS calibrado {model.lus_min}-{model.lus_max}"
+    )
+    console.print(f"step factors: {model.step_factors}   n={model.n_observations}")
+    if protocol == "unknown":
+        console.print(
+            "[yellow]warning:[/yellow] --protocol not set. A model fitted on "
+            "PCR-free data has no PCR slippage component and will under-predict "
+            "stutter on amplicon casework."
+        )
+
+    if out is not None:
+        dump_stutter_model(model, out)
+        console.print(f"[green]✓ Model written:[/green] {out}")
+
+
 @app.command("interpret")
 def interpret(
     bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM or CRAM.")],
