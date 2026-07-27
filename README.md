@@ -30,15 +30,26 @@ draw conclusions from any output.
 Three layers, each with a strict responsibility
 (see [`docs/architecture.md`](docs/architecture.md)):
 
-| Layer | Module | Responsibility |
-|---|---|---|
-| 1 — Caller | `frontstr.caller` | Runs LongTR, parses its VCF. Used for cross-checking, never as the source of coverage. |
-| 2 — Evidence | `frontstr.evidence` | Sequence-level pileup, clustering, POA consensus. **Integer per-allele read counts straight from the BAM.** |
-| 3 — Interpretation | `frontstr.interp` | ISFG nomenclature, stutter, allele calling, QC flags. |
+**FRONTStr calls genotypes by itself.** Every allele, read count and sequence
+in its output comes from its own pileup of the BAM. The pipeline is:
 
-The forensic value sits in Layer 2: coverage is counted, not divided out of a
-caller's `BPDIFFS` field, and the ISFG bracket string is computed from the
-cluster's consensus rather than from a VCF `ALT`.
+| Stage | Module | What it does |
+|---|---|---|
+| 1 — Evidence | `frontstr.evidence` | Per-locus pileup → clustering by repeat-core length → POA consensus. **Integer per-allele read counts straight from the BAM.** |
+| 2 — Interpretation | `frontstr.interp` | ISFG nomenclature, allele numbering, stutter, haplotype-aware suppression, genotype calling. |
+| 3 — QC & audit | `frontstr.interp.qc`, `frontstr.audit` | Coverage, strand bias and nomenclature flags; the sealed audit record. |
+
+Coverage is counted, not divided out of a caller's `BPDIFFS` field, and the
+ISFG bracket string is computed from the cluster's consensus rather than from a
+VCF `ALT`.
+
+> **LongTR is optional and off by default.** `frontstr.caller` wraps it, but it
+> runs only if you pass `--longtr-vcf`, and all it does then is cross-check:
+> disagreement raises a flag for an analyst, never changes a call. With no
+> `--longtr-vcf` the step is a no-op. FRONTStr does not need LongTR installed.
+
+A full walkthrough of every stage, with worked examples and measurements, is in
+[`docs/how_it_works.md`](docs/how_it_works.md).
 
 ### Design decisions worth knowing about
 
