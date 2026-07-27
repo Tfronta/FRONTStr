@@ -19,6 +19,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from frontstr.caller.vcf import LongTRResult
+from frontstr.evidence.consensus import ConsensusMethod
 from frontstr.panel.models import System
 
 
@@ -31,6 +32,9 @@ class AlleleStatus(StrEnum):
     NOISE = "noise"
     STUTTER = "stutter"
     ARTEFACT = "artefact"
+    #: Same allele as a stronger cluster on the same haplotype, split apart by
+    #: sequencing error. See :mod:`frontstr.interp.haplotype`.
+    HP_PHANTOM = "hp_phantom"
     INEXACT_ALLELE = "inexact_allele"
     ALLELE = "allele"
 
@@ -87,6 +91,8 @@ class FlagCode(StrEnum):
     INEXACT_ALLELE = "inexact_allele"
     ISOALLELE = "isoallele"
     CE_NOMENCLATURE_OFFSET = "ce_nomenclature_offset"
+    CONSENSUS_FALLBACK = "consensus_fallback"
+    HP_PHANTOM_COLLAPSED = "hp_phantom_collapsed"
 
 
 _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
@@ -98,7 +104,15 @@ _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
     FlagCode.LONGTR_DISCORDANT: FlagSeverity.WARN,
     FlagCode.INEXACT_ALLELE: FlagSeverity.INFO,
     FlagCode.ISOALLELE: FlagSeverity.INFO,
-    FlagCode.CE_NOMENCLATURE_OFFSET: FlagSeverity.INFO,
+    # WARN, not INFO: comparing this number against a CE profile without
+    # knowing it is a bracket count can produce a false exclusion.
+    FlagCode.CE_NOMENCLATURE_OFFSET: FlagSeverity.WARN,
+    # WARN, not INFO: an unpolished consensus carries single-read errors into
+    # the ISFG string and the iso-allele catalog match.
+    FlagCode.CONSENSUS_FALLBACK: FlagSeverity.WARN,
+    # INFO: the collapse is the *correct* call, but it must stay visible so a
+    # reviewer can see that a candidate was suppressed and why.
+    FlagCode.HP_PHANTOM_COLLAPSED: FlagSeverity.INFO,
 }
 
 
@@ -110,9 +124,7 @@ class Flag(BaseModel):
     message: str
 
     @classmethod
-    def of(
-        cls, code: FlagCode, message: str, severity: FlagSeverity | None = None
-    ) -> Flag:
+    def of(cls, code: FlagCode, message: str, severity: FlagSeverity | None = None) -> Flag:
         """Build a flag, defaulting severity from the code when not given."""
         return cls(
             code=code,
@@ -138,6 +150,14 @@ class IsoAllele(BaseModel):
     is_isoallele: bool = False
 
 
+def _trim_number(value: float) -> str:
+    """Render an allele number without trailing zeros (``9.3``, ``14``)."""
+    x = round(float(value), 4)
+    if abs(x - int(x)) < 1e-9:
+        return str(round(x))
+    return f"{x:.10f}".rstrip("0").rstrip(".")
+
+
 class Allele(BaseModel):
     """One forensic allele candidate. There is exactly one per evidence cluster."""
 
@@ -155,12 +175,20 @@ class Allele(BaseModel):
     isfg: str
     bp_diff: int
     is_deletion: bool
+    #: How ``consensus`` was derived (``poa_spoa`` | ``poa_abpoa`` | ``single``
+    #: | ``mode`` | ``empty``). ``mode`` means no POA backend was available and
+    #: the sequence is a single unpolished read — see ``CONSENSUS_FALLBACK``.
+    consensus_method: str = ConsensusMethod.SINGLE.value
     #: Primary numeric allele for reports: CE when period is defined, else
     #: LongTR-style offset from REF anchor (see :mod:`frontstr.interp.allele_numeric`).
     allele_numeric: float | None = None
     #: ``period_ce`` | ``reference_offset`` | ``delta_only`` | ``deletion`` | ``unavailable``
     allele_numeric_source: str = ""
     expected_stutter: float = 0.0
+    #: Reads recovered from same-haplotype phantom clusters of this allele
+    #: (see :mod:`frontstr.interp.haplotype`). Reported so coverage is not
+    #: understated; ``n_reads_total`` deliberately stays as observed.
+    n_reads_absorbed: int = 0
     status: AlleleStatus = AlleleStatus.PENDING
     longtr_match: bool = False
     longtr_inexact: bool = False
@@ -209,6 +237,39 @@ class Allele(BaseModel):
     def number_method(self) -> str:
         """How :attr:`number` was derived (period_ce | bracket_count | …)."""
         return self._number_and_method()[1]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def number_is_absolute(self) -> bool:
+        """True when :attr:`number` is a real, cross-comparable allele number.
+
+        False for the relative and fallback methods (``delta``, ``bp_sizing``,
+        ``none``), which must not be read as a kit CE designation.
+        """
+        return self.number_method in ("period_ce", "reference_offset", "bracket_count")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def number_label(self) -> str:
+        """The single human-facing label for this allele.
+
+        Every view — the CLI table, the HTML report, the CSV exports — renders
+        this string. Formatting used to be duplicated per view, which let the
+        same allele read as ``Δ-2`` in ``frontstr interpret`` and ``14`` in the
+        report. In a forensic context two numbers for one allele is not a
+        cosmetic problem, so the label is produced once, here, beside the
+        number it describes.
+        """
+        number = self.number
+        if number is None:
+            # Non-numeric markers (AMEL X / Y) carry their designation in ISFG.
+            return self.isfg or ""
+        trimmed = _trim_number(number)
+        if self.number_method == "delta":
+            return f"Δ{trimmed}" if abs(number) > 1e-9 else trimmed
+        if self.number_method == "bp_sizing":
+            return f"{int(number)} bp TR"
+        return trimmed
 
     def fraction(self, total_reads: int) -> float:
         if total_reads <= 0:

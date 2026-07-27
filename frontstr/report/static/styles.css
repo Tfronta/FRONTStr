@@ -279,6 +279,12 @@ table.profile thead th .th-hint {
 .chip.no_data { background: rgba(0, 0, 0, 0.06); color: var(--text-faint); }
 .chip.iso { background: rgba(13, 148, 136, 0.16); color: #0d9488; }
 
+/* Audit page: which QC conditions were evaluated, and which of them fired.
+   A cleared condition is deliberately still visible — the point of the list is
+   to show that it was checked, not to hide it. */
+.chip-clear { background: rgba(0, 0, 0, 0.05); color: var(--text-faint); }
+.chip-flagged { background: rgba(239, 108, 0, 0.14); color: var(--warn); font-weight: 600; }
+
 .flag { margin: 2px 0; }
 .flag code { font-size: 11px; font-family: var(--mono); opacity: 0.85; }
 .flag-error { color: var(--danger); }

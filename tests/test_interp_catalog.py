@@ -10,8 +10,12 @@ from frontstr.panel.catalog import AlleleCatalog, CatalogEntry, load_catalog
 from frontstr.panel.models import System
 
 D3 = System(
-    name="D3S1358", chromosome="chr3", ref_start=1, ref_end=60,
-    motif="TCTA,TCTG", period=4,
+    name="D3S1358",
+    chromosome="chr3",
+    ref_start=1,
+    ref_end=60,
+    motif="TCTA,TCTG",
+    period=4,
 )
 
 SEQ_14A = "TCTA" + "TCTG" * 1 + "TCTA" * 12
@@ -20,20 +24,44 @@ SEQ_14B = "TCTA" + "TCTG" * 2 + "TCTA" * 11
 
 def _allele(seq: str, *, ce: float | None = 14.0) -> Allele:
     return Allele(
-        cluster_index=0, consensus=seq, length_bp=len(seq), n_reads_total=20,
-        n_reads_hp1=0, n_reads_hp2=0, n_reads_hp_none=20, n_forward=20, n_reverse=0,
-        mean_qual=30.0, ce=ce, isfg="(live)", bp_diff=0, is_deletion=False,
+        cluster_index=0,
+        consensus=seq,
+        length_bp=len(seq),
+        n_reads_total=20,
+        n_reads_hp1=0,
+        n_reads_hp2=0,
+        n_reads_hp_none=20,
+        n_forward=20,
+        n_reverse=0,
+        mean_qual=30.0,
+        ce=ce,
+        isfg="(live)",
+        bp_diff=0,
+        is_deletion=False,
         status=AlleleStatus.ALLELE,
     )
 
 
 def _catalog() -> AlleleCatalog:
     return AlleleCatalog(
-        version="t", entries=[
-            CatalogEntry(marker="D3S1358", sequence=SEQ_14A, isfg="TCTA TCTG [TCTA]12",
-                         ce=14, suffix="a", source="STRSeq"),
-            CatalogEntry(marker="D3S1358", sequence=SEQ_14B, isfg="TCTA [TCTG]2 [TCTA]11",
-                         ce=14, suffix="b", source="STRSeq"),
+        version="t",
+        entries=[
+            CatalogEntry(
+                marker="D3S1358",
+                sequence=SEQ_14A,
+                isfg="TCTA TCTG [TCTA]12",
+                ce=14,
+                suffix="a",
+                source="STRSeq",
+            ),
+            CatalogEntry(
+                marker="D3S1358",
+                sequence=SEQ_14B,
+                isfg="TCTA [TCTG]2 [TCTA]11",
+                ce=14,
+                suffix="b",
+                source="STRSeq",
+            ),
         ],
     )
 
@@ -100,9 +128,20 @@ def test_distant_sequence_within_length_no_match() -> None:
 
 def test_deletion_allele_skipped() -> None:
     a = Allele(
-        cluster_index=0, consensus="", length_bp=0, n_reads_total=5,
-        n_reads_hp1=0, n_reads_hp2=0, n_reads_hp_none=5, n_forward=5, n_reverse=0,
-        mean_qual=30.0, ce=None, isfg="", bp_diff=0, is_deletion=True,
+        cluster_index=0,
+        consensus="",
+        length_bp=0,
+        n_reads_total=5,
+        n_reads_hp1=0,
+        n_reads_hp2=0,
+        n_reads_hp_none=5,
+        n_forward=5,
+        n_reverse=0,
+        mean_qual=30.0,
+        ce=None,
+        isfg="",
+        bp_diff=0,
+        is_deletion=True,
         status=AlleleStatus.DELETION,
     )
     m = annotate_with_catalog(a, D3, _catalog())
@@ -118,8 +157,7 @@ def test_annotate_alleles_noop_when_catalog_none() -> None:
 
 def test_demo_catalog_th01_microvariant(demo_catalog_json: Path) -> None:
     cat = load_catalog(demo_catalog_json)
-    th01 = System(name="TH01", chromosome="chr11", ref_start=1, ref_end=40,
-                  motif="AATG", period=4)
+    th01 = System(name="TH01", chromosome="chr11", ref_start=1, ref_end=40, motif="AATG", period=4)
     seq_93 = "AATG" * 6 + "ATG" + "AATG" * 3
     a = _allele(seq_93, ce=9.3)
     m = annotate_with_catalog(a, th01, cat)

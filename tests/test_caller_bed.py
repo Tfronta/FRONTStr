@@ -14,11 +14,20 @@ from frontstr.panel.models import Panel, System
 
 def test_write_panel_bed_basic(tmp_path: Path) -> None:
     panel = Panel(
-        name="t", version="0",
+        name="t",
+        version="0",
         systems=[
-            System(name="M1", chromosome="chr1", ref_start=200, ref_end=240, motif="AGAT", period=4),
-            System(name="M2", chromosome="chr1", ref_start=100, ref_end=140, motif="TCTA,TCTG",
-                   period=-1),
+            System(
+                name="M1", chromosome="chr1", ref_start=200, ref_end=240, motif="AGAT", period=4
+            ),
+            System(
+                name="M2",
+                chromosome="chr1",
+                ref_start=100,
+                ref_end=140,
+                motif="TCTA,TCTG",
+                period=-1,
+            ),
             System(name="M3", chromosome="chr2", ref_start=50, ref_end=80, motif="AT", period=2),
         ],
     )
@@ -38,7 +47,8 @@ def test_write_panel_bed_skips_no_motif(tmp_path: Path) -> None:
     the same outcome by making sure the BED contains exactly the systems with
     valid motifs."""
     panel = Panel(
-        name="t", version="0",
+        name="t",
+        version="0",
         systems=[
             System(name="ok", chromosome="chr1", ref_start=1, ref_end=10, motif="A", period=1),
         ],
@@ -55,7 +65,8 @@ def test_write_panel_bed_raises_when_empty(tmp_path: Path) -> None:
 
 def test_split_panel_by_chromosome(tmp_path: Path) -> None:
     panel = Panel(
-        name="t", version="0",
+        name="t",
+        version="0",
         systems=[
             System(name="A", chromosome="chr1", ref_start=10, ref_end=20, motif="AG", period=2),
             System(name="B", chromosome="chr1", ref_start=30, ref_end=40, motif="AG", period=2),

@@ -20,9 +20,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from frontstr.interp.isfg import _rc
 from frontstr.interp.models import Allele, IsoAllele
-from frontstr.interp.stutter import MotifRun, find_motif_runs
+from frontstr.motifs import DEFAULT_GAP_THRESHOLD, extract_repeat_core
 from frontstr.panel.catalog import AlleleCatalog, CatalogEntry
 from frontstr.panel.models import System
 
@@ -31,45 +30,17 @@ DEFAULT_EXACT_EPS = 2
 #: Candidates whose length differs from the consensus by more than this are
 #: skipped before the (costlier) edit-distance refinement.
 DEFAULT_LEN_WINDOW = 6
-#: Non-motif chars between two motif runs above which they belong to different
-#: blocks. Matches ``calibrate._GAP_THRESHOLD``: intra-allele spacers (ATG, ta,
-#: tccata …) are ≤6 chars, so 12 cleanly separates the repeat core from chance
-#: motif hits in the ±100bp flanks of the extraction window.
-DEFAULT_GAP_THRESHOLD = 12
 
-
-def extract_repeat_core(
-    sequence: str,
-    motifs: list[str],
-    *,
-    strand: str = "+",
-    gap_threshold: int = DEFAULT_GAP_THRESHOLD,
-) -> str:
-    """Reduce a flank-inclusive consensus to its repeat-core substring.
-
-    FRONTStr clusters carry the full ±100bp extraction window; catalog entries
-    store only the repeat core. This finds the motif runs, groups runs separated
-    by ≤ ``gap_threshold`` non-motif chars, and returns the nucleotide substring
-    spanning the unit-richest group (internal spacers preserved, flanks and
-    chance flank motif hits dropped). Returns the input unchanged if no run is
-    found. Reverse-strand markers are canonicalised first.
-    """
-    if not sequence or not motifs:
-        return sequence
-    seq = _rc(sequence) if strand == "-" else sequence
-    runs = find_motif_runs(seq, motifs)
-    if not runs:
-        return seq
-
-    groups: list[list[MotifRun]] = [[runs[0]]]
-    for run in runs[1:]:
-        if run.start - groups[-1][-1].end <= gap_threshold:
-            groups[-1].append(run)
-        else:
-            groups.append([run])
-
-    core = max(groups, key=lambda g: sum(r.length_bp for r in g))
-    return seq[core[0].start : core[-1].end]
+__all__ = [
+    "DEFAULT_EXACT_EPS",
+    "DEFAULT_GAP_THRESHOLD",
+    "DEFAULT_LEN_WINDOW",
+    "CatalogMatch",
+    "annotate_alleles",
+    "annotate_with_catalog",
+    "best_catalog_hit",
+    "extract_repeat_core",
+]
 
 
 @dataclass(slots=True)

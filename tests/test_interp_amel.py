@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pysam
-import pytest
 
 from frontstr.interp.amel import interpret_amel
 from frontstr.interp.models import CallRule
@@ -14,8 +13,8 @@ from frontstr.panel.models import System
 # Synthetic AMEL coordinates (0-based half-open in BAM; 1-based in System)
 _CHROM_X = "chrX"
 _CHROM_Y = "chrY"
-_X_START = 1000   # ref_start (1-based) in System
-_X_END = 1100     # ref_end (1-based) in System  → pileup window [999, 1100)
+_X_START = 1000  # ref_start (1-based) in System
+_X_END = 1100  # ref_end (1-based) in System  → pileup window [999, 1100)
 _Y_START = 2000
 _Y_END = 2100
 _CHR_LEN = 10_000
@@ -23,16 +22,16 @@ _FLANK = 50
 
 
 def _amel_system(*, with_y: bool = True) -> System:
-    s = dict(
-        name="AMEL",
-        marker_type="amel",
-        chromosome=_CHROM_X,
-        ref_start=_X_START,
-        ref_end=_X_END,
-        motif="A",
-        period=1,
-        category="x_chromosomal",
-    )
+    s: dict[str, object] = {
+        "name": "AMEL",
+        "marker_type": "amel",
+        "chromosome": _CHROM_X,
+        "ref_start": _X_START,
+        "ref_end": _X_END,
+        "motif": "A",
+        "period": 1,
+        "category": "x_chromosomal",
+    }
     if with_y:
         s["y_chromosome"] = _CHROM_Y
         s["y_ref_start"] = _Y_START
@@ -81,6 +80,7 @@ def _write_amel_bam(out_path: Path, x_reads: int, y_reads: int) -> Path:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_amel_female(tmp_path: Path) -> None:
     """Only X reads → female (X, HOMOZYGOUS)."""

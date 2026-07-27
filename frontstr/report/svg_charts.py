@@ -175,7 +175,7 @@ def _nice_y_axis_max(raw: float) -> float:
         return float(math.ceil(headroom))
     step = 10 ** math.floor(math.log10(headroom))
     nice_step = step if headroom / step <= 5 else step * 2
-    return math.ceil(headroom / nice_step) * nice_step
+    return float(math.ceil(headroom / nice_step) * nice_step)
 
 
 def coverage_bar_svg(
@@ -230,7 +230,7 @@ def coverage_bar_svg(
         parts.append(
             f'<rect x="{margin_left}" y="{y}" width="{bar_w:.1f}" '
             f'height="{height_per_row - 6}" fill="{color}" rx="2" ry="2">'
-            f'<title>{_xml(marker)}: {cov} reads ({chip})</title></rect>'
+            f"<title>{_xml(marker)}: {cov} reads ({chip})</title></rect>"
         )
         parts.append(
             f'<text x="{margin_left + bar_w + 4:.1f}" y="{y + height_per_row / 2 + 3:.1f}" '
@@ -278,7 +278,7 @@ def haplotype_stack_svg(
             parts.append(
                 f'<rect x="{bar_x:.1f}" y="{y_floor:.1f}" width="{bar_w}" '
                 f'height="{h:.1f}" fill="{color}" rx="1">'
-                f'<title>{_xml(label)}: {value}</title></rect>'
+                f"<title>{_xml(label)}: {value}</title></rect>"
             )
         ce = a.get("ce")
         label = f"CE{ce}" if ce is not None else f"#{idx}"
@@ -362,8 +362,5 @@ def _empty_chart_svg(width: int, height: int, message: str) -> str:
 def _xml(value: str) -> str:
     """Minimal XML attribute / text escape."""
     return (
-        value.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )

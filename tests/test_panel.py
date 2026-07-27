@@ -48,7 +48,8 @@ def test_load_yaml_with_invalid_motif(tmp_path: Path) -> None:
 
 def test_panel_by_chromosome_grouping() -> None:
     panel = Panel(
-        name="t", version="0",
+        name="t",
+        version="0",
         systems=[
             System(name="A", chromosome="chr1", ref_start=100, ref_end=120, motif="AG", period=2),
             System(name="B", chromosome="chr1", ref_start=50, ref_end=80, motif="AG", period=2),
@@ -63,7 +64,8 @@ def test_panel_by_chromosome_grouping() -> None:
 def test_panel_rejects_duplicate_names() -> None:
     with pytest.raises(Exception, match="duplicate"):
         Panel(
-            name="t", version="0",
+            name="t",
+            version="0",
             systems=[
                 System(name="X", chromosome="chr1", ref_start=1, ref_end=2, motif="AG", period=2),
                 System(name="X", chromosome="chr1", ref_start=3, ref_end=4, motif="AG", period=2),

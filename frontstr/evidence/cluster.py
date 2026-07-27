@@ -3,23 +3,42 @@
 Two-stage clustering (plan-longtr-improved.md §5.3):
 
 1. **Length binning** — observations of equal (or near-equal, within
-   ``len_tolerance_bp``) length are gathered together.
+   ``len_tolerance_bp``) length are gathered together. When ``motifs`` are
+   supplied the binning key is the **repeat-core length** rather than the raw
+   window length; see :func:`_binning_key`.
 2. **Identity merge inside the bin** — seed-and-grow over edlib edit distance;
    anything within ``identity_threshold`` of the seed joins the cluster.
-3. **Consensus** — POA via ``pyabpoa`` if installed, else the most common
-   sequence in the cluster (lossy fallback adequate for HiFi / clean ONT).
+3. **Consensus** — partial-order alignment via
+   :mod:`frontstr.evidence.consensus`, which records *how* the consensus was
+   derived on each cluster (see :class:`ConsensusMethod`).
 
 Result objects carry per-haplotype tallies so the report can render HP-stacks
 without re-iterating the BAM.
+
+Why the binning key is the repeat core
+--------------------------------------
+
+Panel windows are the repeat array plus ±100 bp of flank, so roughly 80% of a
+window is flank. Binning on raw window length makes every ONT indel error in
+that flank — the large majority of errors — split one real allele into two
+clusters, which then surfaces downstream as a phantom third allele. Binning on
+the repeat-core length ignores flank errors entirely while staying exact inside
+the array, so genuine microvariants survive: ``[AATG]9`` (36 bp core) and
+``[AATG]6 ATG [AATG]3`` (39 bp core) still land in different bins even though
+both are 9 repeat units. That distinction is TH01 9 vs 9.3 — precisely the
+thing a length-rounding scheme would destroy.
 """
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from frontstr.errors import EvidenceError
+from frontstr.evidence.consensus import ConsensusMethod, build_consensus
 from frontstr.evidence.pileup import Observation
+from frontstr.motifs import repeat_core_length
 
 
 @dataclass(slots=True)
@@ -28,6 +47,10 @@ class Cluster:
 
     consensus: str
     members: list[Observation] = field(default_factory=list)
+    #: How :attr:`consensus` was derived. ``MODE`` means no POA backend was
+    #: installed and the consensus is an unpolished single read — the
+    #: interpretation layer raises ``CONSENSUS_FALLBACK`` for those.
+    consensus_method: ConsensusMethod = ConsensusMethod.SINGLE
 
     @property
     def n_reads(self) -> int:
@@ -72,36 +95,43 @@ def cluster_observations(
     *,
     len_tolerance_bp: int = 0,
     identity_threshold: float = _DEFAULT_IDENTITY_THRESHOLD,
+    motifs: Sequence[str] | None = None,
+    strand: str = "+",
 ) -> list[Cluster]:
     """Cluster :class:`Observation` instances by length and sequence identity.
 
     Args:
         obs: Observations from :func:`pileup_locus`.
         len_tolerance_bp: Merge length bins that differ by at most this many bp.
-            Use ``0`` for compound motifs (must not collapse isoalleles); use
-            ``1`` or ``2`` for homopolymer-heavy loci on ONT.
+            Leave at ``0``: with repeat-core binning the flank errors this was
+            meant to absorb are already gone, and a non-zero tolerance would
+            merge genuine microvariants (TH01 9 vs 9.3 are 3 bp apart).
         identity_threshold: Pairwise identity (``1 - edit_distance / max_len``)
             required to join an existing cluster's seed.
+        motifs: Marker motifs. When given, reads are binned by repeat-core
+            length instead of raw window length, so indel errors in the ±100 bp
+            flanks stop splitting real alleles. Reads with no detectable core
+            fall back to their window length.
+        strand: ``"-"`` for markers whose canonical motif reads on the minus
+            strand; the sequence is reverse-complemented before the core is
+            located.
 
     Returns:
         Clusters sorted by ``n_reads`` descending. Each consensus string is in
         reference orientation.
     """
     if not 0.0 < identity_threshold <= 1.0:
-        raise EvidenceError(
-            f"identity_threshold must be in (0, 1], got {identity_threshold!r}"
-        )
+        raise EvidenceError(f"identity_threshold must be in (0, 1], got {identity_threshold!r}")
     if len_tolerance_bp < 0:
-        raise EvidenceError(
-            f"len_tolerance_bp must be >= 0, got {len_tolerance_bp!r}"
-        )
+        raise EvidenceError(f"len_tolerance_bp must be >= 0, got {len_tolerance_bp!r}")
 
     if not obs:
         return []
 
+    motif_list = [m for m in (motifs or []) if m]
     bins: dict[int, list[Observation]] = defaultdict(list)
     for o in obs:
-        bins[len(o.sequence)].append(o)
+        bins[_binning_key(o.sequence, motif_list, strand)].append(o)
 
     if len_tolerance_bp > 0:
         bins = _merge_close_length_bins(bins, len_tolerance_bp)
@@ -112,6 +142,19 @@ def cluster_observations(
 
     clusters.sort(key=lambda c: c.n_reads, reverse=True)
     return clusters
+
+
+def _binning_key(sequence: str, motifs: list[str], strand: str) -> int:
+    """Length used to bin a read: the repeat core when locatable, else the window.
+
+    A read whose core cannot be located (heavily corrupted array, or no motifs
+    configured) falls back to raw window length rather than being dropped or
+    lumped together with unrelated reads.
+    """
+    if not motifs:
+        return len(sequence)
+    core = repeat_core_length(sequence, motifs, strand=strand)
+    return core if core is not None else len(sequence)
 
 
 def _merge_close_length_bins(
@@ -133,9 +176,7 @@ def _merge_close_length_bins(
     return merged
 
 
-def _cluster_by_identity(
-    members: list[Observation], identity_threshold: float
-) -> list[Cluster]:
+def _cluster_by_identity(members: list[Observation], identity_threshold: float) -> list[Cluster]:
     """Seed-and-grow clustering: each seed is the first uncovered observation."""
     clusters: list[Cluster] = []
     remaining = list(members)
@@ -149,8 +190,14 @@ def _cluster_by_identity(
             else:
                 leftover.append(m)
         remaining = leftover
-        consensus = _consensus_of([m.sequence for m in cluster_members])
-        clusters.append(Cluster(consensus=consensus, members=cluster_members))
+        consensus, method = build_consensus([m.sequence for m in cluster_members])
+        clusters.append(
+            Cluster(
+                consensus=consensus,
+                members=cluster_members,
+                consensus_method=method,
+            )
+        )
     return clusters
 
 
@@ -171,47 +218,4 @@ def _identity(a: str, b: str) -> float:
     return 1.0 - d / max(len(a), len(b))
 
 
-def _consensus_of(seqs: list[str]) -> str:
-    """Compute a consensus sequence for a cluster.
-
-    Strategy:
-
-    1. If only one sequence, return it verbatim.
-    2. If :mod:`pyabpoa` is installed, run POA and return its consensus.
-    3. Otherwise fall back to the most common sequence in the group
-       (sufficient for HiFi / clean ONT; only used when POA is unavailable
-       e.g. on macOS arm64 without prebuilt wheels).
-    """
-    if not seqs:
-        return ""
-    if len(seqs) == 1:
-        return seqs[0]
-
-    poa = _poa_aligner()
-    if poa is not None:
-        try:
-            result = poa.msa(seqs, out_cons=True, out_msa=False)
-            cons = getattr(result, "cons_seq", None)
-            if cons:
-                return str(cons[0])
-        except Exception:
-            pass
-
-    counter = Counter(seqs)
-    return counter.most_common(1)[0][0]
-
-
-_POA_SINGLETON: object | None | bool = False  # False = not yet attempted
-
-
-def _poa_aligner() -> object | None:
-    """Lazy-load the POA aligner, returning ``None`` if pyabpoa is unavailable."""
-    global _POA_SINGLETON
-    if _POA_SINGLETON is False:
-        try:
-            import pyabpoa  # type: ignore[import-not-found]
-
-            _POA_SINGLETON = pyabpoa.msa_aligner()
-        except ImportError:
-            _POA_SINGLETON = None
-    return _POA_SINGLETON  # type: ignore[return-value]
+__all__ = ["Cluster", "ConsensusMethod", "cluster_observations"]

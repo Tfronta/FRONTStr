@@ -40,12 +40,20 @@ def test_run_not_implemented(tmp_path: Path) -> None:
     runner = CliRunner()
     p = tmp_path / "x.fastq"
     p.write_text("@r\nA\n+\nI\n")
-    result = runner.invoke(app, [
-        "run",
-        "--input", str(p),
-        "--sample", "S001",
-        "--panel", str(tmp_path / "panel.yaml"),
-        "--reference", str(tmp_path / "ref.fa"),
-        "--out", str(tmp_path / "out"),
-    ])
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--input",
+            str(p),
+            "--sample",
+            "S001",
+            "--panel",
+            str(tmp_path / "panel.yaml"),
+            "--reference",
+            str(tmp_path / "ref.fa"),
+            "--out",
+            str(tmp_path / "out"),
+        ],
+    )
     assert result.exit_code == 64

@@ -8,7 +8,7 @@ files) and a stub ``run`` that orchestrates the full pipeline.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -16,6 +16,8 @@ from rich.table import Table
 
 from frontstr.errors import FrontstrError
 from frontstr.ingest import detect_input, validate_bam
+from frontstr.interp.models import Allele
+from frontstr.interp.qc import QcThresholds
 from frontstr.version import __version__
 
 app = typer.Typer(
@@ -27,24 +29,14 @@ app = typer.Typer(
 console = Console()
 
 
-def _interpret_allele_cell(a) -> str:
-    """Format one genotype line: numeric allele … (reads).
+def _interpret_allele_cell(a: Allele) -> str:
+    """Format one genotype cell: canonical allele label … (reads).
 
-    Mirrors :mod:`frontstr.interp.allele_numeric` — CE / Δ / len fallback."""
-    cov = a.n_reads_total
-    ns = getattr(a, "allele_numeric_source", "") or ""
-    num = getattr(a, "allele_numeric", None)
-    if num is not None and ns not in ("", "deletion", "unavailable"):
-        v = float(num)
-        body = f"{v:.10f}".rstrip("0").rstrip(".")
-        if ns == "delta_only" and abs(v) > 1e-9:
-            body = f"Δ{body}"
-        return f"{body}({cov})"
-    ce = getattr(a, "ce", None)
-    if ce is not None:
-        body = f"{float(ce):.10f}".rstrip("0").rstrip(".")
-        return f"{body}({cov})"
-    return f"len{getattr(a, 'length_bp', 0)}({cov})"
+    Reads :attr:`Allele.number_label` rather than re-deriving a number, so the
+    CLI can never disagree with the report or the exports about what an allele
+    is called.
+    """
+    return f"{a.number_label or '?'}({a.n_reads_total})"
 
 
 def _version_callback(value: bool) -> None:
@@ -58,7 +50,8 @@ def main(
     _version: Annotated[
         bool | None,
         typer.Option(
-            "--version", "-V",
+            "--version",
+            "-V",
             callback=_version_callback,
             is_eager=True,
             help="Show version and exit.",
@@ -153,10 +146,7 @@ def batch(
         str,
         typer.Option(
             "--formats",
-            help=(
-                "Comma-separated list. One or more of: "
-                "profile,evidence,seqs,json,html."
-            ),
+            help=("Comma-separated list. One or more of: profile,evidence,seqs,json,html."),
         ),
     ] = "profile,evidence,seqs,json,html",
     workers: Annotated[
@@ -259,7 +249,9 @@ def batch(
 def call(
     bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM.")],
     panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
-    reference: Annotated[Path, typer.Option("--reference", "-r", help="Reference FASTA (indexed).")],
+    reference: Annotated[
+        Path, typer.Option("--reference", "-r", help="Reference FASTA (indexed).")
+    ],
     out_dir: Annotated[Path, typer.Option("--out", "-o", help="Output directory.")],
     platform: Annotated[str, typer.Option("--platform", help="ont|hifi.")] = "ont",
     chrom: Annotated[
@@ -292,8 +284,11 @@ def call(
         try:
             panel = load_panel(panel_path)
             runner = LongTRRunner(
-                panel=panel, reference=reference, platform=platform,
-                phased=phased, binary=binary,
+                panel=panel,
+                reference=reference,
+                platform=platform,
+                phased=phased,
+                binary=binary,
             )
             run = runner.run(bam=bam, out_dir=out_dir, chrom=chrom)
             results = run.results
@@ -312,11 +307,7 @@ def call(
     t.add_column("Alleles (bp_diff)")
     for r in results:
         sample = next(iter(r.samples.values()), None)
-        gt = (
-            "/".join(str(i) for i in sample.gt_indices)
-            if sample and sample.gt_indices
-            else "."
-        )
+        gt = "/".join(str(i) for i in sample.gt_indices) if sample and sample.gt_indices else "."
         q = f"{sample.posterior:.2f}" if sample and sample.posterior is not None else "."
         dp = str(sample.depth) if sample else "."
         bp_diffs = ",".join(str(a.bp_diff) for a in r.alleles)
@@ -345,8 +336,19 @@ def doctor(
     """
     import pysam
 
+    from frontstr.evidence.consensus import poa_backend_name
     from frontstr.evidence.pileup import pileup_locus
     from frontstr.panel.loader import load_panel
+
+    backend = poa_backend_name()
+    if backend:
+        console.print(f"[green]POA backend:[/green] {backend}")
+    else:
+        console.print(
+            "[red]POA backend: none[/red] — cluster consensus will fall back to a "
+            "single unpolished read, degrading ISFG strings and iso-allele calls.\n"
+            "  Fix: [bold]pip install 'frontstr[poa]'[/bold]"
+        )
 
     try:
         panel = load_panel(panel_path)
@@ -358,7 +360,7 @@ def doctor(
     if is_cram and reference is None:
         console.print("[red]error:[/red] CRAM input requires --reference <fasta>")
         raise typer.Exit(code=2)
-    open_kwargs: dict = {"reference_filename": str(reference)} if is_cram else {}
+    open_kwargs: dict[str, Any] = {"reference_filename": str(reference)} if is_cram else {}
     try:
         af = pysam.AlignmentFile(str(bam), "rc" if is_cram else "rb", **open_kwargs)
     except (OSError, ValueError) as exc:
@@ -377,9 +379,7 @@ def doctor(
                 "Use a panel without 'chr' or rename BAM @SQ headers."
             )
         elif missing.issubset({f"chr{c}" for c in without_chr}):
-            console.print(
-                "[yellow]Hint:[/yellow] BAM has 'chr' prefix; panel does not."
-            )
+            console.print("[yellow]Hint:[/yellow] BAM has 'chr' prefix; panel does not.")
 
     t = Table(title=f"FRONTStr doctor — {panel.name} vs {bam.name}")
     t.add_column("Marker", style="bold")
@@ -396,17 +396,32 @@ def doctor(
         if chrom_ok:
             try:
                 obs_raw = pileup_locus(
-                    bam, s.chromosome, s.ref_start - 1, s.ref_end, min_mapq=0,
+                    bam,
+                    s.chromosome,
+                    s.ref_start - 1,
+                    s.ref_end,
+                    min_mapq=0,
                     reference_fasta=reference,
                 )
                 obs_filt = pileup_locus(
-                    bam, s.chromosome, s.ref_start - 1, s.ref_end, min_mapq=min_mapq,
+                    bam,
+                    s.chromosome,
+                    s.ref_start - 1,
+                    s.ref_end,
+                    min_mapq=min_mapq,
                     reference_fasta=reference,
                 )
                 n_raw, n_filtered = len(obs_raw), len(obs_filt)
             except FrontstrError as exc:
-                t.add_row(s.name, s.chromosome, f"{s.ref_start}-{s.ref_end}",
-                          "yes", "?", "?", f"[red]{exc}[/red]")
+                t.add_row(
+                    s.name,
+                    s.chromosome,
+                    f"{s.ref_start}-{s.ref_end}",
+                    "yes",
+                    "?",
+                    "?",
+                    f"[red]{exc}[/red]",
+                )
                 continue
         status: str
         if not chrom_ok:
@@ -420,9 +435,13 @@ def doctor(
         else:
             status = "[green]ok[/green]"
         t.add_row(
-            s.name, s.chromosome, f"{s.ref_start}-{s.ref_end}",
+            s.name,
+            s.chromosome,
+            f"{s.ref_start}-{s.ref_end}",
             "yes" if chrom_ok else "no",
-            str(n_raw), str(n_filtered), status,
+            str(n_raw),
+            str(n_filtered),
+            status,
         )
     console.print(t)
     af.close()
@@ -460,14 +479,29 @@ def export_cmd(
         Path | None,
         typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
     ] = None,
+    low_coverage_reads: Annotated[
+        int,
+        typer.Option(
+            "--low-coverage-reads",
+            help="Called loci below this many reads raise LOW_COVERAGE.",
+        ),
+    ] = QcThresholds.model_fields["low_coverage_reads"].default,
+    verbose: Annotated[
+        bool, typer.Option("--verbose", "-v", help="Log every marker call, not just the run.")
+    ] = False,
 ) -> None:
     """Run the full pipeline and write one or more export files.
+
+    A JSONL process log is always written to ``<out-dir>/frontstr.log.jsonl``
+    alongside the exports; the canonical JSON carries the audit record.
 
     Example::
 
         frontstr export --bam s.bam --panel p.yaml -o exports/ \
             --formats profile,evidence,seqs,json,html
     """
+    import logging
+
     from frontstr.caller import parse_longtr_vcf
     from frontstr.exports import (
         write_evidence_csv,
@@ -476,6 +510,7 @@ def export_cmd(
         write_seqs_csv,
     )
     from frontstr.interp import index_longtr_results, interpret_run
+    from frontstr.log import PROCESS_LOG_NAME, configure_logging
     from frontstr.panel.loader import load_panel
     from frontstr.report import RunContext, build_report, serialize_run
 
@@ -485,16 +520,24 @@ def export_cmd(
         console.print(f"[red]Unknown formats:[/red] {sorted(unknown)}")
         raise typer.Exit(code=2)
 
+    out_dir.mkdir(parents=True, exist_ok=True)
+    log_path = out_dir / PROCESS_LOG_NAME
+    configure_logging(log_path, level=logging.DEBUG if verbose else logging.INFO)
+    qc_thresholds = QcThresholds(low_coverage_reads=low_coverage_reads)
+
     try:
         panel = load_panel(panel_path)
-        longtr_map = (
-            index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
-        )
+        longtr_map = index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
         results = interpret_run(
-            bam=bam, panel=panel, longtr_results=longtr_map,
-            min_mapq=min_mapq, identity_threshold=identity,
-            analytical_thresh=analytical_thresh, calling_thresh=calling_thresh,
+            bam=bam,
+            panel=panel,
+            longtr_results=longtr_map,
+            min_mapq=min_mapq,
+            identity_threshold=identity,
+            analytical_thresh=analytical_thresh,
+            calling_thresh=calling_thresh,
             reference_fasta=reference,
+            qc_thresholds=qc_thresholds,
         )
         context = RunContext(
             sample_name=sample_name or bam.stem,
@@ -506,13 +549,13 @@ def export_cmd(
             operator=operator,
             run_id=run_id,
             reference_build=panel.reference_build,
+            qc_thresholds=qc_thresholds,
         )
         payload = serialize_run(results, context)
     except FrontstrError as exc:
         console.print(f"[red]export error:[/red] {exc}")
         raise typer.Exit(code=2) from exc
 
-    out_dir.mkdir(parents=True, exist_ok=True)
     stem = context.sample_name
     written: list[Path] = []
     if "profile" in wanted:
@@ -524,15 +567,26 @@ def export_cmd(
     if "json" in wanted:
         written.append(write_run_json(payload, out_dir / f"{stem}.json", mode="pretty"))
     if "json-compact" in wanted:
-        written.append(
-            write_run_json(payload, out_dir / f"{stem}.min.json", mode="compact")
-        )
+        written.append(write_run_json(payload, out_dir / f"{stem}.min.json", mode="compact"))
     if "html" in wanted:
         written.append(build_report(results, context, out_dir / f"{stem}.html"))
 
     for path in written:
         size_kb = path.stat().st_size / 1024
         console.print(f"[green]wrote[/green] {path}  ({size_kb:.1f} KB)")
+
+    audit = payload["audit"]
+    sev = audit["severity_counts"]
+    console.print(f"[green]wrote[/green] {log_path}  (process log)")
+    if sev.get("error") or sev.get("warn"):
+        console.print(
+            f"[yellow]review:[/yellow] {sev.get('error', 0)} error / "
+            f"{sev.get('warn', 0)} warning flag(s) across "
+            f"{len(audit['markers_needing_review'])} marker(s): "
+            f"{', '.join(audit['markers_needing_review'])}"
+        )
+    else:
+        console.print("[green]no review flags raised[/green]")
 
 
 @app.command("report")
@@ -571,13 +625,15 @@ def report(
 
     try:
         panel = load_panel(panel_path)
-        longtr_map = (
-            index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
-        )
+        longtr_map = index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
         results = interpret_run(
-            bam=bam, panel=panel, longtr_results=longtr_map,
-            min_mapq=min_mapq, identity_threshold=identity,
-            analytical_thresh=analytical_thresh, calling_thresh=calling_thresh,
+            bam=bam,
+            panel=panel,
+            longtr_results=longtr_map,
+            min_mapq=min_mapq,
+            identity_threshold=identity,
+            analytical_thresh=analytical_thresh,
+            calling_thresh=calling_thresh,
             reference_fasta=reference,
         )
         context = RunContext(
@@ -598,6 +654,110 @@ def report(
 
     size_kb = out_path.stat().st_size / 1024
     console.print(f"[green]✓ Report written:[/green] {out_path} ({size_kb:.1f} KB)")
+
+
+@app.command("calibrate-stutter")
+def calibrate_stutter(
+    bams: Annotated[
+        list[Path],
+        typer.Option("--bam", help="Indexed BAM/CRAM. Repeat for each sample."),
+    ],
+    panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
+    out: Annotated[
+        Path | None, typer.Option("--out", "-o", help="Write the fitted model as JSON.")
+    ] = None,
+    protocol: Annotated[
+        str,
+        typer.Option(
+            "--protocol",
+            help="Library protocol the samples came from: wgs_pcr_free | amplicon. "
+            "Recorded in the model — a PCR-free fit has no PCR slippage in it.",
+        ),
+    ] = "unknown",
+    min_mapq: Annotated[int, typer.Option("--min-mapq")] = 20,
+    reference: Annotated[
+        Path | None,
+        typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
+    ] = None,
+) -> None:
+    """Measure stutter rates from real data and fit a :class:`StutterModel`.
+
+    This is a calibration pass, not a per-case step: the model is a property of
+    the chemistry and the library protocol, not of the sample. Run it once per
+    platform + protocol, commit the JSON, and pass it to the pipeline.
+
+    Only loci where a stutter position cannot be confused with a real allele
+    are used (homozygotes, or heterozygotes ≥3 repeat units apart), so expect
+    roughly half the loci to be discarded. Prints the breakdown by step, by LUS
+    and by marker so a thin fit is visible rather than silently shipped.
+    """
+    from frontstr.panel.loader import load_panel
+    from frontstr.panel.stutter_calib import (
+        collect_observations,
+        dump_stutter_model,
+        fit_stutter_model,
+        summarise,
+    )
+
+    try:
+        panel = load_panel(panel_path)
+    except FrontstrError as exc:
+        console.print(f"[red]panel error:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+
+    obs = collect_observations(list(bams), panel, min_mapq=min_mapq, reference_fasta=reference)
+    if not obs:
+        console.print("[red]no usable observations[/red] — every locus was ambiguous.")
+        raise typer.Exit(code=1)
+
+    stats = summarise(obs)
+    by_step: dict[str, dict[str, float]] = stats["by_step"]  # type: ignore[assignment]
+    t = Table(title=f"Observed stutter — {len(bams)} sample(s), {panel.name}")
+    t.add_column("Step", style="bold")
+    t.add_column("n", justify="right")
+    t.add_column("Pooled ratio", justify="right")
+    t.add_column("Zero-stutter", justify="right")
+    for step, row in by_step.items():
+        t.add_row(step, str(row["n"]), f"{row['pooled_ratio']:.4f}", str(row["n_zero"]))
+    console.print(t)
+
+    lus_rows: dict[int, dict[str, float]] = stats["minus1_by_lus"]  # type: ignore[assignment]
+    t2 = Table(title="-1 step by parent LUS (the covariate being fitted)")
+    t2.add_column("LUS", justify="right")
+    t2.add_column("n", justify="right")
+    t2.add_column("Pooled ratio", justify="right")
+    for lus, row in lus_rows.items():
+        style = "" if row["n"] >= 7 else "dim"
+        t2.add_row(str(lus), str(row["n"]), f"{row['pooled_ratio']:.4f}", style=style)
+    console.print(t2)
+    console.print("[dim]dim rows have thin support (n < 7) — widen the sample set.[/dim]")
+
+    try:
+        model = fit_stutter_model(
+            obs,
+            source=f"{len(bams)} sample(s): {', '.join(b.name for b in bams)}",
+            protocol=protocol,
+        )
+    except ValueError as exc:
+        console.print(f"[red]fit failed:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(
+        f"\n[green]rate(-1) = exp({model.log_intercept:+.4f} "
+        f"+ {model.log_slope:.4f} * LUS)[/green]   "
+        f"R²={model.r_squared}  LUS calibrado {model.lus_min}-{model.lus_max}"
+    )
+    console.print(f"step factors: {model.step_factors}   n={model.n_observations}")
+    if protocol == "unknown":
+        console.print(
+            "[yellow]warning:[/yellow] --protocol not set. A model fitted on "
+            "PCR-free data has no PCR slippage component and will under-predict "
+            "stutter on amplicon casework."
+        )
+
+    if out is not None:
+        dump_stutter_model(model, out)
+        console.print(f"[green]✓ Model written:[/green] {out}")
 
 
 @app.command("interpret")
@@ -622,7 +782,9 @@ def interpret(
     ] = None,
     catalog_path: Annotated[
         Path | None,
-        typer.Option("--catalog", help="Optional allele catalog JSON for ISFG/iso-allele annotation."),
+        typer.Option(
+            "--catalog", help="Optional allele catalog JSON for ISFG/iso-allele annotation."
+        ),
     ] = None,
 ) -> None:
     """End-to-end forensic call: pileup → cluster → ISFG → classify → call.
@@ -639,15 +801,18 @@ def interpret(
     try:
         panel = load_panel(panel_path)
         catalog = load_catalog(catalog_path) if catalog_path else None
-        longtr_map = (
-            index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
-        )
+        longtr_map = index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
         results = interpret_run(
-            bam=bam, panel=panel, longtr_results=longtr_map,
-            min_mapq=min_mapq, identity_threshold=identity,
+            bam=bam,
+            panel=panel,
+            longtr_results=longtr_map,
+            min_mapq=min_mapq,
+            identity_threshold=identity,
             len_tolerance_bp=len_tolerance,
-            analytical_thresh=analytical_thresh, calling_thresh=calling_thresh,
-            reference_fasta=reference, catalog=catalog,
+            analytical_thresh=analytical_thresh,
+            calling_thresh=calling_thresh,
+            reference_fasta=reference,
+            catalog=catalog,
         )
     except FrontstrError as exc:
         console.print(f"[red]interpret error:[/red] {exc}")
@@ -663,8 +828,7 @@ def interpret(
     for r in results:
         called = ", ".join(_interpret_allele_cell(a) for a in r.alleles_called)
         longtr_flag = (
-            "[red]discordant[/red]" if r.discordant
-            else ("ok" if r.longtr_result else "-")
+            "[red]discordant[/red]" if r.discordant else ("ok" if r.longtr_result else "-")
         )
         t.add_row(
             r.marker_name,
@@ -690,6 +854,17 @@ def evidence(
     len_tolerance: Annotated[
         int, typer.Option("--len-tolerance", help="bp tolerance for length binning.")
     ] = 0,
+    motif: Annotated[
+        str,
+        typer.Option(
+            "--motif",
+            help="Comma-separated marker motifs (e.g. TCTA,TCTG). Enables "
+            "repeat-core binning — pass it to reproduce what `interpret` does.",
+        ),
+    ] = "",
+    strand: Annotated[
+        str, typer.Option("--strand", help="Motif strand relative to the reference: + or -.")
+    ] = "+",
     reference: Annotated[
         Path | None,
         typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
@@ -705,15 +880,18 @@ def evidence(
     from frontstr.evidence.pileup import pileup_locus
 
     try:
-        obs = pileup_locus(bam, chrom, start - 1, end, min_mapq=min_mapq,
-                           reference_fasta=reference)
+        obs = pileup_locus(bam, chrom, start - 1, end, min_mapq=min_mapq, reference_fasta=reference)
     except FrontstrError as exc:
         console.print(f"[red]pileup error:[/red] {exc}")
         raise typer.Exit(code=2) from exc
 
     try:
         clusters = cluster_observations(
-            obs, identity_threshold=identity, len_tolerance_bp=len_tolerance
+            obs,
+            identity_threshold=identity,
+            len_tolerance_bp=len_tolerance,
+            motifs=[m for m in motif.split(",") if m],
+            strand=strand,
         )
     except FrontstrError as exc:
         console.print(f"[red]cluster error:[/red] {exc}")

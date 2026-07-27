@@ -23,10 +23,16 @@ science with real labs in week 4.
 - [x] Directory structure: `frontstr/`, `tests/`, `docker/`, `examples/`, `docs/`
 - [x] `pyproject.toml` with pinned deps (Python 3.11+)
 - [x] `.gitignore`, `LICENSE`, `README.md`
-- [ ] `conftest.py` with shared fixtures (tmp paths, panels, etc.)
+- [x] `conftest.py` with shared fixtures (tmp paths, panels, etc.)
 - [ ] `pre‑commit` config: `ruff`, `black`, `mypy --strict`
-- [ ] GitHub Actions: lint + test on push
-- [ ] `frontstr/__main__.py` runnable: `python -m frontstr --help`
+- [x] GitHub Actions: lint + test on push — **green** as of Jul 2026
+      (`ruff check`, `ruff format --check`, `mypy` and `pytest` all clean)
+- [x] `frontstr/__main__.py` runnable: `python -m frontstr --help`
+- [x] `tests/test_regression_hg00113.py` — end-to-end regression on a real ONT
+      slice, asserting all 25 marker genotypes plus no dropouts, no false
+      mixtures across the 5 single-source samples, POA active, and TH01 9.3
+      structurally intact. Skips cleanly when the (unversioned) BAM slices are
+      absent, so CI stays green while local runs get real coverage.
 
 **Acceptance**: `pytest` passes (with no tests yet); `frontstr --help` prints.
 
@@ -60,13 +66,37 @@ science with real labs in week 4.
 - [x] CLI `frontstr call` with `--parse-only` for offline VCF inspection
 - [x] Unit tests for argv (ONT vs HiFi), BED writer, VCF parser (het, hom, `<DEL>`, INEXACT_ALLELE, phased, missing GT), subprocess failure paths
 
-### 1.4 Evidence layer (the unique value) (4–5 days)
+### 1.4 Evidence layer (the unique value) — DONE
 
-- [ ] `evidence/pileup.py` — `pileup_locus` with pysam
-- [ ] `evidence/cluster.py` — cluster by length + edit distance + POA consensus
-  (use `pyabpoa`; fallback to `spoa` if not installable)
-- [ ] Tests with synthetic ONT reads: known clusters in/out
-- [ ] CLI subcommand `frontstr evidence <bam> <bed>` (debug)
+- [x] `evidence/pileup.py` — `pileup_locus` with pysam
+- [x] `evidence/cluster.py` — cluster by length + edit distance
+- [x] `evidence/consensus.py` — POA backend chain with an auditable
+      `ConsensusMethod` on every cluster. `pyabpoa` does **not** build on macOS
+      arm64 (hardcoded AVX2 x86 intrinsics), so `pyspoa` (SPOA, global
+      alignment) is the default backend; the old most-common-sequence path
+      survives only as a flagged fallback (`CONSENSUS_FALLBACK`, WARN).
+      Measured on the 5 ONT R10 slices: the fallback produced **4 false
+      microvariants out of 202 called alleles** (TH01 6.3→7, TH01 6.1→6,
+      D13S317 14.1→14, D18S51 11.3→12). POA fixed all four.
+- [x] Tests with synthetic ONT reads: known clusters in/out
+- [x] CLI subcommand `frontstr evidence <bam> <bed>` (debug)
+- [x] **Repeat-core binning.** Reads are binned by the length of their repeat
+      core (`frontstr/motifs.py::repeat_core_length`) instead of raw window
+      length, so ONT indel errors in the ±100 bp flanks — the large majority —
+      no longer split one allele into two clusters. Binning on *unit count*
+      was rejected: `[AATG]9` and `[AATG]6 ATG [AATG]3` are both 9 units, so it
+      would destroy TH01 9 vs 9.3. Core length keeps them at 36 vs 39 bp.
+      `System.ont_len_tolerance` (previously dead config) is now honoured as a
+      per-marker override.
+      Measured on the 5 ONT slices: cluster fragmentation **1469 → 1038
+      (−29%)**, false `mixture_suspected` **5 → 0 on binning alone**, HG00113
+      reference profile unchanged with TH01 9.3 intact and per-allele coverage
+      up across the board (TH01 9.3 7→10 reads, D12S391 14→20).
+- [ ] Recalibrate `identity_threshold`. The 0.97 default was set as if
+      comparing a read to a consensus; it actually compares raw read to raw
+      read, where two ONT reads of one allele diverge by ~2–4%. Derive it from
+      the measured read-vs-read distribution, or switch to consensus-refined
+      reassignment (seed → POA consensus → reassign).
 
 ### 1.5 Interpretation — DONE
 
@@ -138,11 +168,58 @@ science with real labs in week 4.
 - [ ] HTML report: visible discordance chip + side‑by‑side panel
 - [ ] Tests: forced discordance → flag set, never silently overridden
 
-### 2.4 Stutter overrides per marker (2 days)
+### 2.4 Stutter model — calibrated from data
 
-- [ ] Panel YAML `stutter_overrides: {plus1A: 0.12, minus1A: 0.20}`
-- [ ] Override path tested with D21S11 (compound motif)
-- [ ] D3S1358 also (TCTA/TCTG mix)
+- [x] `panel/stutter_calib.py` — measures stutter from real BAMs and fits a
+      `StutterModel`; CLI `frontstr calibrate-stutter`. Replaces the flat
+      toaSTR/CE constants (10% LUS, 5% SLUS, forward at half) with
+      `rate(-1) = exp(-12.1125 + 0.7159 × clamp(LUS, 10, 14))`, R² 0.965, and
+      -2 / +1 as multipliers (0.242 / 0.726) rather than a geometric decay.
+      **First pass on the 5 ONT R10 slices; see `docs/stutter_calibration.md`.**
+      Headline findings: the flat -1 rate was 2.3× too high; forward stutter
+      runs at 0.73 of reverse, not 0.5; and the rate spans >10× across LUS
+      10-14, which no constant can express.
+- [x] Panel YAML `stutter_overrides` honoured per marker
+      (`log_intercept` / `log_slope` / `slus_factor` / `step_-1` / `step_-2` /
+      `step_1`, plus the legacy flat `lus` key)
+- [ ] **Re-fit on more R10 + Dorado samples.** The shipped model rests on 76
+      observations over 52 loci, and only LUS 10-14 has usable support —
+      everything outside is clamped. Widening that range is the main goal.
+- [ ] **Re-fit on amplicon data before casework.** The shipped model is
+      PCR-free WGS, so it contains no PCR slippage component and will
+      under-predict stutter on an amplicon panel. `StutterModel.protocol`
+      records which regime a model came from.
+- [ ] Derive the analytical / calling thresholds (0.02 / 0.10) from data too —
+      they are still chosen numbers, not measured ones.
+
+### 2.6 Audit trail — DONE
+
+Three layers, built Jul 2026:
+
+- [x] `frontstr/log.py` — JSONL process log, one event per line, written to
+      `<out-dir>/frontstr.log.jsonl` by `frontstr export`. Deliberately free of
+      FRONTStr imports so the domain does not depend on the audit trail and
+      vice versa. Quiet by default: importing the library configures nothing,
+      because a library that writes to someone else's stdout is broken.
+- [x] `frontstr/audit.py` — `AuditRecord` embedded in the canonical JSON and
+      rendered on the report's audit page: tool version, POA backend, stutter
+      model + protocol, every threshold that moved a call, input hashes, the
+      flag census, and `markers_needing_review`. Sealed with a SHA-256 over its
+      own canonical form (tamper evidence, not a signature).
+- [x] `AuditRecord.flags_checked` — every code the pipeline *can* raise, so a
+      code absent from the counts provably means "checked and not found"
+      rather than "never looked at".
+- [x] `frontstr/interp/qc.py` — the five declared-but-never-emitted FlagCodes
+      now fire: DROPOUT, LOW_COVERAGE, STRAND_BIAS (exact two-sided binomial,
+      no SciPy), INEXACT_ALLELE, CE_NOMENCLATURE_OFFSET.
+      `QcThresholds.low_coverage_reads` defaults to 20, *derived*: it is where
+      the dropout risk for the most unbalanced heterozygote the caller still
+      accepts settles at ~1%.
+- [ ] Process log for `frontstr batch` — worker processes need per-process
+      logging configuration. The audit record already lands in each sample's
+      JSON; only the JSONL process log is missing in batch mode.
+
+---
 
 ### 2.5 Validation (one full week)
 
@@ -167,7 +244,19 @@ panel of known samples and signs off on a validation report.
 
 ### 3.2 Phasing (2 days)
 
-- [ ] `ingest/phase.py` — whatshap haplotag (scoped to panel ± 10 kb)
+- [x] `interp/haplotype.py` — haplotype-aware suppression of split-allele
+      phantoms. Consumes HP tags already present in phased BAMs; a no-op on
+      unphased input and on `allow_triallelic` markers. Demotes a candidate to
+      `HP_PHANTOM` only when it shares a confident haplotype with a stronger
+      cluster **and** sits within 2 bp of it, records the absorbed reads on the
+      owner, and raises `HP_PHANTOM_COLLAPSED` for audit.
+      **Closes known-bug #6**: false `mixture_suspected` on the 5 single-source
+      1000G slices went 5 → 0, with the HG00113 reference profile unchanged and
+      no real allele lost (incl. GM19038 D12S391, where the genuine HP2 allele
+      is the 5-read cluster that a read-count floor would have deleted).
+- [ ] `ingest/phase.py` — whatshap haplotag (scoped to panel ± 10 kb), so
+      unphased input can be phased in-pipeline rather than relying on
+      pre-phased BAMs
 - [ ] CLI flag `--phase`
 - [ ] HTML report: HP partition columns/charts active
 

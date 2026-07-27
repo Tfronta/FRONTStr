@@ -126,9 +126,7 @@ def _stamp_self_hash(out_path: Path) -> None:
 def _load_static(name: str) -> str:
     """Read a vendored asset from :mod:`frontstr.report.static`."""
     try:
-        return (resources.files("frontstr.report") / "static" / name).read_text(
-            encoding="utf-8"
-        )
+        return (resources.files("frontstr.report") / "static" / name).read_text(encoding="utf-8")
     except (FileNotFoundError, ModuleNotFoundError, AttributeError) as exc:
         # Editable installs sometimes can't resolve via importlib.resources
         # → fall back to the filesystem location of this module.

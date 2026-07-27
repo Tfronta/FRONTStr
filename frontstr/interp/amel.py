@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from frontstr.evidence.pileup import pileup_locus
+from frontstr.evidence.pileup import Observation, pileup_locus
 from frontstr.interp.models import Allele, AlleleStatus, CallRule, MarkerResult, TriType
 from frontstr.panel.models import System
 
@@ -44,14 +44,24 @@ def interpret_amel(
         reference_fasta: Reference FASTA path; required when ``bam`` is a CRAM.
     """
     x_count = len(
-        _safe_pileup(bam, system.chromosome, system.ref_start - 1, system.ref_end, min_mapq,
-                     reference_fasta=reference_fasta)
+        _safe_pileup(
+            bam,
+            system.chromosome,
+            system.ref_start - 1,
+            system.ref_end,
+            min_mapq,
+            reference_fasta=reference_fasta,
+        )
     )
     y_count = 0
     if system.y_chromosome and system.y_ref_start and system.y_ref_end:
         y_count = len(
             _safe_pileup(
-                bam, system.y_chromosome, system.y_ref_start - 1, system.y_ref_end, min_mapq,
+                bam,
+                system.y_chromosome,
+                system.y_ref_start - 1,
+                system.y_ref_end,
+                min_mapq,
                 reference_fasta=reference_fasta,
             )
         )
@@ -114,11 +124,17 @@ def _no_data(system: System) -> MarkerResult:
 
 
 def _safe_pileup(
-    bam: Path, chrom: str, start: int, end: int, min_mapq: int,
-    *, reference_fasta: Path | None = None,
-) -> list:
+    bam: Path,
+    chrom: str,
+    start: int,
+    end: int,
+    min_mapq: int,
+    *,
+    reference_fasta: Path | None = None,
+) -> list[Observation]:
     try:
-        return pileup_locus(bam, chrom, start, end, min_mapq=min_mapq,
-                            reference_fasta=reference_fasta)
+        return pileup_locus(
+            bam, chrom, start, end, min_mapq=min_mapq, reference_fasta=reference_fasta
+        )
     except Exception:
         return []

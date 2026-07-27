@@ -6,8 +6,9 @@ Producers append flags at the point a condition is decided:
 - :func:`frontstr.interp.concordance.cross_check` emits ``LONGTR_DISCORDANT``.
 - :func:`derive_marker_flags` (called at the end of ``interpret_marker``) emits
   the conditions that are intrinsic to the finished :class:`MarkerResult`
-  (triallelic / mixture). Coverage / dropout / strand-bias flags that need a
-  run-level threshold are added by the QC layer, not here.
+  (triallelic / mixture / iso-allele / unpolished consensus). Coverage /
+  dropout / strand-bias flags that need a run-level threshold are added by the
+  QC layer, not here.
 
 Derivation is idempotent: a code already present on the result is not added
 again, so callers may run it after other producers without duplication.
@@ -15,7 +16,15 @@ again, so callers may run it after other producers without duplication.
 
 from __future__ import annotations
 
-from frontstr.interp.models import Allele, Flag, FlagCode, MarkerResult, TriType
+from frontstr.evidence.consensus import ConsensusMethod
+from frontstr.interp.models import (
+    Allele,
+    AlleleStatus,
+    Flag,
+    FlagCode,
+    MarkerResult,
+    TriType,
+)
 
 
 def derive_marker_flags(result: MarkerResult) -> None:
@@ -44,6 +53,26 @@ def derive_marker_flags(result: MarkerResult) -> None:
             FlagCode.ISOALLELE,
             f"Iso-alleles at {result.marker_name}: same allele number, "
             "different sequence — see the Sequences view.",
+        )
+
+    phantoms = [a for a in result.alleles if a.status == AlleleStatus.HP_PHANTOM]
+    if phantoms:
+        detail = ", ".join(f"{a.length_bp} bp / {a.n_reads_total} reads" for a in phantoms)
+        add(
+            FlagCode.HP_PHANTOM_COLLAPSED,
+            f"{len(phantoms)} candidate(s) at {result.marker_name} suppressed as "
+            f"same-haplotype splits of a stronger allele ({detail}); their reads "
+            "are counted in the owning allele's n_reads_absorbed.",
+        )
+
+    unpolished = [a for a in result.alleles_called if a.consensus_method == ConsensusMethod.MODE]
+    if unpolished:
+        add(
+            FlagCode.CONSENSUS_FALLBACK,
+            f"No POA backend installed: {len(unpolished)} called allele(s) at "
+            f"{result.marker_name} use an unpolished single-read consensus. "
+            "ISFG string and iso-allele match are not reliable — install "
+            "pyabpoa or pyspoa (pip install 'frontstr[poa]').",
         )
 
 

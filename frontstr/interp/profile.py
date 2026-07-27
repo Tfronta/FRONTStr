@@ -7,6 +7,7 @@ or :func:`interpret_run` (full panel).
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -19,10 +20,13 @@ from frontstr.interp.catalog import annotate_alleles
 from frontstr.interp.classify import classify_allele
 from frontstr.interp.concordance import cross_check
 from frontstr.interp.flags import derive_marker_flags
+from frontstr.interp.haplotype import suppress_hp_phantoms
 from frontstr.interp.isfg import ce_from_brackets, ce_from_length, compress_isfg
 from frontstr.interp.models import Allele, MarkerResult
+from frontstr.interp.qc import QcThresholds, derive_run_qc_flags
 from frontstr.interp.stutter import build_expected_stutter
 from frontstr.interp.triallelic import call_profile
+from frontstr.log import get_logger
 from frontstr.panel.catalog import AlleleCatalog
 from frontstr.panel.models import Panel, System
 
@@ -64,19 +68,17 @@ def interpret_marker(
     )
 
     alleles = [
-        _allele_from_cluster(idx, c, system, ref_length_bp)
-        for idx, c in enumerate(clusters)
+        _allele_from_cluster(idx, c, system, ref_length_bp) for idx, c in enumerate(clusters)
     ]
 
     parents = [
-        c for c, a in zip(clusters, alleles, strict=True)
+        c
+        for c, a in zip(clusters, alleles, strict=True)
         if a.fraction(total_reads) >= parent_fraction and not a.is_deletion
     ]
     expected = build_expected_stutter(parents, system)
 
-    inexact_seqs = frozenset(
-        a.sequence for a in (longtr.alleles if longtr else []) if a.inexact
-    )
+    inexact_seqs = frozenset(a.sequence for a in (longtr.alleles if longtr else []) if a.inexact)
 
     for a in alleles:
         a.expected_stutter = expected.get(a.consensus, 0.0)
@@ -88,6 +90,11 @@ def interpret_marker(
             calling_thresh=calling_thresh,
             longtr_inexact_seqs=inexact_seqs,
         )
+
+    # Suppress same-haplotype split-allele phantoms before the profile is
+    # called, so a phantom can neither be reported nor raise a false mixture.
+    # No-op on unphased BAMs and on allow_triallelic markers.
+    suppress_hp_phantoms(alleles, system)
 
     # Enrich ISFG / CE / iso-allele suffix from the curated catalog (no-op if None).
     annotate_alleles(alleles, system, catalog)
@@ -125,6 +132,7 @@ def interpret_run(
     calling_thresh: float = DEFAULT_CALLING_THRESH,
     reference_fasta: Path | None = None,
     catalog: AlleleCatalog | None = None,
+    qc_thresholds: QcThresholds | None = None,
 ) -> list[MarkerResult]:
     """End-to-end: for each marker in ``panel``, pileup → cluster → interpret.
 
@@ -135,46 +143,90 @@ def interpret_run(
             concordance checks. Markers without an entry are interpreted
             from evidence alone.
         reference_fasta: Reference FASTA path; required when ``bam`` is a CRAM.
+        qc_thresholds: Laboratory QC policy for the run-level flags (coverage,
+            strand bias). Defaults apply when omitted.
 
     Returns:
-        One :class:`MarkerResult` per marker in panel order. Empty pileups
-        produce a ``NO_DATA`` result rather than failing.
+        One :class:`MarkerResult` per marker in panel order, each carrying its
+        marker-level *and* run-level QC flags. Empty pileups produce a
+        ``NO_DATA`` result rather than failing.
     """
+    log = get_logger(__name__)
     longtr_results = longtr_results or {}
     out: list[MarkerResult] = []
+    log.info(
+        "run.start",
+        bam=str(bam),
+        panel=panel.name,
+        panel_version=panel.version,
+        n_markers=len(panel.systems),
+        min_mapq=min_mapq,
+        identity_threshold=identity_threshold,
+        analytical_thresh=analytical_thresh,
+        calling_thresh=calling_thresh,
+        catalog=bool(catalog),
+    )
     for system in panel.systems:
         if system.marker_type == "amel":
-            out.append(interpret_amel(system, bam, min_mapq=min_mapq,
-                                      reference_fasta=reference_fasta))
+            out.append(
+                interpret_amel(system, bam, min_mapq=min_mapq, reference_fasta=reference_fasta)
+            )
             continue
         clusters = _safe_pileup_and_cluster(
-            bam=bam, system=system, min_mapq=min_mapq,
-            identity_threshold=identity_threshold, len_tolerance_bp=len_tolerance_bp,
+            bam=bam,
+            system=system,
+            min_mapq=min_mapq,
+            identity_threshold=identity_threshold,
+            len_tolerance_bp=len_tolerance_bp,
             reference_fasta=reference_fasta,
         )
-        out.append(
-            interpret_marker(
-                system=system,
-                clusters=clusters,
-                longtr=longtr_results.get(system.name),
-                analytical_thresh=analytical_thresh,
-                calling_thresh=calling_thresh,
-                catalog=catalog,
-            )
+        result = interpret_marker(
+            system=system,
+            clusters=clusters,
+            longtr=longtr_results.get(system.name),
+            analytical_thresh=analytical_thresh,
+            calling_thresh=calling_thresh,
+            catalog=catalog,
         )
+        log.debug(
+            "marker.called",
+            marker=system.name,
+            call_rule=result.call_rule.value,
+            total_reads=result.total_reads,
+            n_clusters=len(clusters),
+            alleles=[a.number_label for a in result.alleles_called],
+        )
+        out.append(result)
+
+    thresholds = derive_run_qc_flags(out, qc_thresholds)
+    log.info(
+        "run.complete",
+        n_markers=len(out),
+        n_called=sum(1 for r in out if r.alleles_called),
+        flags=dict(sorted(Counter(f.code.value for r in out for f in r.flags).items())),
+        low_coverage_reads=thresholds.low_coverage_reads,
+    )
     return out
 
 
 def _safe_pileup_and_cluster(
-    *, bam: Path, system: System, min_mapq: int,
-    identity_threshold: float, len_tolerance_bp: int,
+    *,
+    bam: Path,
+    system: System,
+    min_mapq: int,
+    identity_threshold: float,
+    len_tolerance_bp: int,
     reference_fasta: Path | None = None,
 ) -> list[Cluster]:
     """Pileup+cluster wrapper that returns ``[]`` instead of raising on empty loci."""
     try:
         obs = pileup_locus(
-            bam, system.chromosome, system.ref_start - 1, system.ref_end,
-            min_mapq=min_mapq, reference_fasta=reference_fasta,
+            bam,
+            system.chromosome,
+            system.ref_start - 1,
+            system.ref_end,
+            min_mapq=min_mapq,
+            reference_fasta=reference_fasta,
         )
     except Exception:
         return []
@@ -183,12 +235,18 @@ def _safe_pileup_and_cluster(
     return cluster_observations(
         obs,
         identity_threshold=identity_threshold,
-        len_tolerance_bp=len_tolerance_bp,
+        # A per-marker override in the panel wins over the run-wide default.
+        len_tolerance_bp=system.ont_len_tolerance or len_tolerance_bp,
+        motifs=[m for m in system.motif.split(",") if m],
+        strand=system.strand,
     )
 
 
 def _allele_from_cluster(
-    idx: int, c: Cluster, system: System, ref_length_bp: int,
+    idx: int,
+    c: Cluster,
+    system: System,
+    ref_length_bp: int,
 ) -> Allele:
     """Build an unclassified :class:`Allele` from one :class:`Cluster`."""
     consensus = c.consensus
@@ -199,14 +257,8 @@ def _allele_from_cluster(
         ce = (raw_ce - system.corr_value) if raw_ce is not None else None
     else:
         ce = ce_from_length(len(consensus), system.period, system.corr_value)
-    bp_diff = (
-        len(consensus) - ref_length_bp
-        if ref_length_bp is not None
-        else 0
-    )
-    allele_num, allele_src = compute_allele_numeric(
-        len(consensus), system, ref_length_bp
-    )
+    bp_diff = len(consensus) - ref_length_bp if ref_length_bp is not None else 0
+    allele_num, allele_src = compute_allele_numeric(len(consensus), system, ref_length_bp)
     return Allele(
         cluster_index=idx,
         consensus=consensus,
@@ -222,6 +274,7 @@ def _allele_from_cluster(
         isfg=isfg,
         bp_diff=bp_diff,
         is_deletion=is_deletion,
+        consensus_method=c.consensus_method.value,
         allele_numeric=allele_num,
         allele_numeric_source=allele_src,
     )

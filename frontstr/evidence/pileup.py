@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from frontstr.errors import EvidenceError
 
@@ -102,8 +103,8 @@ def pileup_locus(
     is_cram = bam_path.suffix.lower() == ".cram"
     if is_cram and reference_fasta is None:
         raise EvidenceError(
-            f"CRAM file requires a reference FASTA — "
-            f"pass reference_fasta= to pileup_locus (or --reference on the CLI)"
+            "CRAM file requires a reference FASTA — "
+            "pass reference_fasta= to pileup_locus (or --reference on the CLI)"
         )
 
     try:
@@ -111,7 +112,7 @@ def pileup_locus(
     except ImportError as exc:
         raise EvidenceError("pysam is required for pileup_locus") from exc
 
-    open_kwargs: dict = {"reference_filename": str(reference_fasta)} if is_cram else {}
+    open_kwargs: dict[str, Any] = {"reference_filename": str(reference_fasta)} if is_cram else {}
     try:
         bam = pysam.AlignmentFile(str(bam_path), "rc" if is_cram else "rb", **open_kwargs)
     except (ValueError, OSError) as exc:
@@ -237,4 +238,4 @@ def _mean_quality(read: object, qstart: int, qend: int) -> float:
     window = list(quals)[qstart:qend]
     if not window:
         return 0.0
-    return sum(window) / len(window)
+    return float(sum(window)) / len(window)

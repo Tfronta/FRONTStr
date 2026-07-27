@@ -1,11 +1,9 @@
-"""Stutter expectation model (LUS / SLUS) ported from toaSTR v1.
+"""Stutter expectation model (LUS / SLUS).
 
 For each parent allele observed in the reads we build a set of **virtual
 stutter sequences** by manipulating the longest and second-longest
 uninterrupted stretches of the motif (LUS and SLUS). Each virtual stutter
-contributes an *expected coverage* that scales as ``ST^k * parent_coverage``
-where ``k`` is the number of stutter steps and ``ST`` is the per-step
-stutter rate.
+carries an *expected coverage* = ``rate * parent_coverage``.
 
 We emit -1, -2 and +1 stutters; isometric variants (substitutions inside
 the LUS) are skipped because LongTR's INEXACT_ALLELE flag is a stronger
@@ -15,75 +13,46 @@ The function returns a mapping ``virtual_sequence -> expected_coverage``.
 When a real cluster's consensus matches one of these keys, its expected
 stutter is the value at that key (see :mod:`frontstr.interp.classify`).
 
-Reference: research-toastr.md §8 step 4 and plan-longtr-improved.md §6.2.
+Where the rates come from
+-------------------------
+
+They are measured, not assumed. :mod:`frontstr.panel.stutter_calib` fits
+``rate(-1) = max(0, intercept + slope * LUS)`` to real data, with -2 and +1 as
+multipliers of that rate.
+
+This replaces the flat toaSTR-inherited constants (10% LUS, 5% SLUS, forward
+stutter at half the reverse rate), which are CE / Illumina figures. Measured on
+ONT R10 they are wrong in ways that matter: the flat 10% overestimates the -1
+step by 2.3x on average while *missing* the dominant effect, which is that the
+rate scales with LUS — from 0.012 at LUS 11 to 0.122 at LUS 14, a 10x range
+that no single constant can cover. Forward stutter also runs at 0.73 of the
+reverse rate rather than 0.5, because on PCR-free ONT this signal is largely
+sequencing error inside the repeat array, which is more symmetric than
+polymerase slippage.
+
+See ``docs/stutter_calibration.md`` for the measurement and its caveats — in
+particular that the shipped model is fitted on PCR-free WGS and therefore has
+no PCR slippage component in it.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
 
 from frontstr.evidence.cluster import Cluster
+from frontstr.motifs import MotifRun, find_motif_runs, top_two_runs
 from frontstr.panel.models import System
+from frontstr.panel.stutter_calib import DEFAULT_STUTTER_MODEL, StutterModel
 
-
-@dataclass(frozen=True, slots=True)
-class MotifRun:
-    """One uninterrupted run of a motif inside a sequence."""
-
-    motif: str
-    start: int
-    n_copies: int
-
-    @property
-    def length_bp(self) -> int:
-        return self.n_copies * len(self.motif)
-
-    @property
-    def end(self) -> int:
-        return self.start + self.length_bp
-
-
-def find_motif_runs(sequence: str, motifs: Iterable[str]) -> list[MotifRun]:
-    """Greedy scan for all maximal runs of each motif in ``sequence``.
-
-    Runs of different motifs may not overlap if they share a leading prefix;
-    we resolve ties by preferring the longest run starting at each position.
-    """
-    motif_list = [m for m in motifs if m]
-    if not motif_list or not sequence:
-        return []
-    n = len(sequence)
-    runs: list[MotifRun] = []
-    i = 0
-    while i < n:
-        best: MotifRun | None = None
-        for m in motif_list:
-            k = len(m)
-            if i + k > n or sequence[i : i + k] != m:
-                continue
-            cnt = 1
-            j = i + k
-            while j + k <= n and sequence[j : j + k] == m:
-                cnt += 1
-                j += k
-            cand = MotifRun(motif=m, start=i, n_copies=cnt)
-            if best is None or cand.length_bp > best.length_bp:
-                best = cand
-        if best is not None:
-            runs.append(best)
-            i = best.end
-        else:
-            i += 1
-    return runs
-
-
-def top_two_runs(runs: list[MotifRun]) -> tuple[MotifRun | None, MotifRun | None]:
-    """Return (LUS, SLUS) — the two longest runs ordered by copy count then position."""
-    if not runs:
-        return None, None
-    sorted_runs = sorted(runs, key=lambda r: (-r.n_copies, r.start))
-    return sorted_runs[0], (sorted_runs[1] if len(sorted_runs) > 1 else None)
+__all__ = [
+    "DEFAULT_STUTTER_MODEL",
+    "MotifRun",
+    "StutterModel",
+    "build_expected_stutter",
+    "find_motif_runs",
+    "top_two_runs",
+    "virtual_stutters",
+]
 
 
 def _modify_run(sequence: str, run: MotifRun, delta_copies: int) -> str | None:
@@ -105,8 +74,19 @@ def virtual_stutters(parent_seq: str, motifs: Iterable[str]) -> Iterator[tuple[s
 
     ``step`` is 1 or 2 (forensic stutter levels we model). ``source`` is
     ``"LUS"`` or ``"SLUS"``. Plus-stutters (+1) come back as ``step=1``
-    too; the difference between minus and plus contribution lives in the
-    coefficient table in :func:`build_expected_stutter`.
+    too; :func:`build_expected_stutter` recovers the sign from the length.
+    """
+    for variant, _run, step, source in _virtual_stutters_with_run(parent_seq, motifs):
+        yield variant, abs(step), source
+
+
+def _virtual_stutters_with_run(
+    parent_seq: str, motifs: Iterable[str]
+) -> Iterator[tuple[str, MotifRun, int, str]]:
+    """As :func:`virtual_stutters`, but keeping the signed step and source run.
+
+    The rate depends on the length of the run that actually slipped, so the
+    expectation model needs the run itself, not just which of the two it was.
     """
     runs = find_motif_runs(parent_seq, motifs)
     lus, slus = top_two_runs(runs)
@@ -117,53 +97,81 @@ def virtual_stutters(parent_seq: str, motifs: Iterable[str]) -> Iterator[tuple[s
             variant = _modify_run(parent_seq, run, delta)
             if variant is None or variant == parent_seq:
                 continue
-            yield variant, abs(delta), source
+            yield variant, run, delta, source
 
 
 def build_expected_stutter(
     parents: list[Cluster],
     system: System,
     *,
-    default_lus: float = 0.10,
-    default_slus: float = 0.05,
-    plus_factor: float = 0.5,
+    model: StutterModel | None = None,
 ) -> dict[str, float]:
     """Compute expected stutter coverage per virtual stutter sequence.
 
+    The rate is a function of the length of the run that slipped, so a parent
+    whose LUS is 14 units gets a far higher expectation than one at 11 — the
+    effect a flat per-marker constant cannot express.
+
     Args:
         parents: Strong cluster candidates (above ``calling_thresh``).
-        system: The marker definition. ``system.stutter_overrides`` may
-            contain ``"lus"`` / ``"slus"`` / ``"plus_factor"`` to tune the
-            model per-locus.
-        default_lus: Per-step rate inside the LUS (default 10%).
-        default_slus: Per-step rate inside the SLUS (default 5%).
-        plus_factor: Scale for ``+1`` stutters relative to ``-1`` (default 0.5,
-            reflecting that forward stutters are roughly half as frequent).
+        system: The marker definition. ``system.stutter_overrides`` may carry
+            per-locus tuning, all optional:
+            ``log_intercept`` / ``log_slope`` (replace the fitted curve),
+            ``slus_factor``, and ``step_-1`` / ``step_-2`` / ``step_1``
+            (replace a step multiplier). The legacy ``lus`` key is still
+            honoured as a flat, LUS-independent rate for labs that validated
+            against it.
+        model: Calibrated model to use. Defaults to
+            :data:`~frontstr.panel.stutter_calib.DEFAULT_STUTTER_MODEL`.
 
     Returns:
         Mapping ``virtual_sequence -> expected_coverage``. The same key may
         be hit by multiple parents; their contributions accumulate.
     """
-    overrides = system.stutter_overrides or {}
-    st_lus = float(overrides.get("lus", default_lus))
-    st_slus = float(overrides.get("slus", default_slus))
-    pf = float(overrides.get("plus_factor", plus_factor))
     motifs = [m for m in system.motif.split(",") if m]
     if not motifs:
         return {}
+    effective = _apply_overrides(model or DEFAULT_STUTTER_MODEL, system)
+    flat_rate = _legacy_flat_rate(system)
 
     expected: dict[str, float] = {}
     for parent in parents:
         cov = parent.n_reads
         if cov <= 0 or not parent.consensus:
             continue
-        for variant_seq, step, source in virtual_stutters(parent.consensus, motifs):
-            base = st_lus if source == "LUS" else st_slus
-            sign_factor = pf if _is_plus_stutter(parent.consensus, variant_seq) else 1.0
-            expected[variant_seq] = expected.get(variant_seq, 0.0) + (base**step) * cov * sign_factor
+        for variant_seq, run, step, source in _virtual_stutters_with_run(parent.consensus, motifs):
+            if flat_rate is not None:
+                rate = flat_rate ** abs(step) * effective.step_factors.get(str(step), 1.0)
+            else:
+                rate = effective.rate(run.n_copies, step)
+            if source == "SLUS":
+                rate *= effective.slus_factor
+            if rate <= 0:
+                continue
+            expected[variant_seq] = expected.get(variant_seq, 0.0) + rate * cov
     return expected
 
 
-def _is_plus_stutter(parent_seq: str, variant_seq: str) -> bool:
-    """A ``+`` stutter makes the variant longer than the parent."""
-    return len(variant_seq) > len(parent_seq)
+def _apply_overrides(model: StutterModel, system: System) -> StutterModel:
+    """Return ``model`` with any per-marker ``stutter_overrides`` folded in."""
+    ov = system.stutter_overrides or {}
+    if not ov:
+        return model
+    step_factors = dict(model.step_factors)
+    for step in ("-1", "-2", "1"):
+        if f"step_{step}" in ov:
+            step_factors[step] = float(ov[f"step_{step}"])
+    return model.model_copy(
+        update={
+            "log_intercept": float(ov.get("log_intercept", model.log_intercept)),
+            "log_slope": float(ov.get("log_slope", model.log_slope)),
+            "slus_factor": float(ov.get("slus_factor", model.slus_factor)),
+            "step_factors": step_factors,
+        }
+    )
+
+
+def _legacy_flat_rate(system: System) -> float | None:
+    """The pre-calibration flat ``lus`` override, if a panel still sets one."""
+    ov = system.stutter_overrides or {}
+    return float(ov["lus"]) if "lus" in ov else None

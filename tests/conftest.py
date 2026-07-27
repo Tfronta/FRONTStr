@@ -103,7 +103,7 @@ def _build_read(spec: SynthRead, header: pysam.AlignmentHeader) -> pysam.Aligned
     a.mapping_quality = spec.mapq
     a.flag = 16 if spec.reverse else 0  # reverse strand bit, no other flags
 
-    ref_tr_len = (SYNTH_TR_END - SYNTH_TR_START)  # 48
+    ref_tr_len = SYNTH_TR_END - SYNTH_TR_START  # 48
     read_tr_len = 4 * spec.n_repeats
     diff = ref_tr_len - read_tr_len
     if diff == 0:
@@ -166,10 +166,7 @@ def synth_bam_heterozygous(tmp_path: Path) -> Path:
 @pytest.fixture
 def synth_bam_homozygous(tmp_path: Path) -> Path:
     """8 reads all CE12, mixed strands, no HP tags."""
-    specs = [
-        SynthRead(name=f"r{i}", n_repeats=12, reverse=(i % 2 == 0))
-        for i in range(8)
-    ]
+    specs = [SynthRead(name=f"r{i}", n_repeats=12, reverse=(i % 2 == 0)) for i in range(8)]
     return write_synth_bam(tmp_path / "hom.bam", specs)
 
 

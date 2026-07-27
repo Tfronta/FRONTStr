@@ -40,21 +40,20 @@ from __future__ import annotations
 
 import csv
 import traceback
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import Future, ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from frontstr.errors import FrontstrError
+from frontstr.interp.models import MarkerResult
 from frontstr.panel.models import Panel
 
 VALID_ROLES: frozenset[str] = frozenset(
     {"sample", "positive_ctrl", "negative_ctrl", "reagent_blank"}
 )
 
-DEFAULT_FORMATS: frozenset[str] = frozenset(
-    {"profile", "evidence", "seqs", "json", "html"}
-)
+DEFAULT_FORMATS: frozenset[str] = frozenset({"profile", "evidence", "seqs", "json", "html"})
 
 SUMMARY_BASE_HEADERS = ("sample_id", "role", "status", "error")
 
@@ -62,6 +61,7 @@ SUMMARY_BASE_HEADERS = ("sample_id", "role", "status", "error")
 @dataclass(slots=True)
 class ManifestEntry:
     """One row from the batch manifest."""
+
     sample_id: str
     bam: Path
     role: str = "sample"
@@ -70,9 +70,10 @@ class ManifestEntry:
 @dataclass(slots=True)
 class BatchResult:
     """Outcome for one sample in a batch run."""
+
     sample_id: str
     role: str
-    status: str                    # "ok" | "error"
+    status: str  # "ok" | "error"
     error: str = ""
     files: list[Path] = field(default_factory=list)
     marker_ces: dict[str, str] = field(default_factory=dict)
@@ -103,7 +104,11 @@ def parse_manifest(path: Path) -> list[ManifestEntry]:
         raise FrontstrError(f"Manifest {path} is empty (no non-comment lines)")
 
     reader = csv.DictReader(data_lines, delimiter="\t")
-    if reader.fieldnames is None or "sample_id" not in reader.fieldnames or "bam" not in reader.fieldnames:
+    if (
+        reader.fieldnames is None
+        or "sample_id" not in reader.fieldnames
+        or "bam" not in reader.fieldnames
+    ):
         raise FrontstrError(
             f"Manifest {path} must have tab-separated columns: sample_id, bam[, role]"
         )
@@ -168,18 +173,24 @@ def run_batch(
     """
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    futures_to_entry: dict = {}
+    futures_to_entry: dict[Future[BatchResult], ManifestEntry] = {}
     results_map: dict[str, BatchResult] = {}
 
     if workers <= 1:
         for entry in entries:
             r = _process_one_sample(
-                entry=entry, panel=panel, out_dir=out_dir,
-                reference_fasta=reference_fasta, formats=formats,
-                min_mapq=min_mapq, identity=identity,
+                entry=entry,
+                panel=panel,
+                out_dir=out_dir,
+                reference_fasta=reference_fasta,
+                formats=formats,
+                min_mapq=min_mapq,
+                identity=identity,
                 analytical_thresh=analytical_thresh,
                 calling_thresh=calling_thresh,
-                platform=platform, operator=operator, run_id=run_id,
+                platform=platform,
+                operator=operator,
+                run_id=run_id,
             )
             results_map[entry.sample_id] = r
             if progress_callback:
@@ -189,12 +200,18 @@ def run_batch(
             for entry in entries:
                 fut = pool.submit(
                     _process_one_sample,
-                    entry=entry, panel=panel, out_dir=out_dir,
-                    reference_fasta=reference_fasta, formats=formats,
-                    min_mapq=min_mapq, identity=identity,
+                    entry=entry,
+                    panel=panel,
+                    out_dir=out_dir,
+                    reference_fasta=reference_fasta,
+                    formats=formats,
+                    min_mapq=min_mapq,
+                    identity=identity,
                     analytical_thresh=analytical_thresh,
                     calling_thresh=calling_thresh,
-                    platform=platform, operator=operator, run_id=run_id,
+                    platform=platform,
+                    operator=operator,
+                    run_id=run_id,
                 )
                 futures_to_entry[fut] = entry
             for fut in as_completed(futures_to_entry):
@@ -303,7 +320,7 @@ def _process_one_sample(
         )
 
 
-def _extract_marker_ces(marker_results: list) -> dict[str, str]:
+def _extract_marker_ces(marker_results: list[MarkerResult]) -> dict[str, str]:
     """Build a {marker_name: CE_string} dict from called alleles.
 
     CE_string is e.g. ``"12.0,14.0"`` for het or ``"13.0"`` for hom.
@@ -318,9 +335,7 @@ def _extract_marker_ces(marker_results: list) -> dict[str, str]:
     return out
 
 
-def _write_batch_summary(
-    results: list[BatchResult], panel: Panel, out_dir: Path
-) -> Path:
+def _write_batch_summary(results: list[BatchResult], panel: Panel, out_dir: Path) -> Path:
     """Write ``batch_summary.csv`` to ``out_dir``."""
     marker_names = [s.name for s in panel.systems]
     headers = list(SUMMARY_BASE_HEADERS) + marker_names

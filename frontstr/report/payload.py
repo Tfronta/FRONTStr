@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from frontstr.audit import InputFile, build_audit_record
 from frontstr.interp.isfg import motif_repeat_summary
 from frontstr.interp.models import (
     Allele,
@@ -27,6 +28,7 @@ from frontstr.interp.models import (
     MarkerResult,
     TriType,
 )
+from frontstr.interp.qc import QcThresholds
 from frontstr.report.ngs_display import build_ngs_panel, build_strhub_projection
 from frontstr.version import __version__
 
@@ -57,6 +59,9 @@ class RunContext:
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     pipeline_argv: list[str] = field(default_factory=list)
     dropout_floor: int = DEFAULT_DROPOUT_FLOOR
+    #: QC policy applied during interpretation, carried through so the audit
+    #: record states the thresholds the calls were actually made under.
+    qc_thresholds: QcThresholds = field(default_factory=QcThresholds)
 
 
 def serialize_run(
@@ -99,9 +104,7 @@ def serialize_run(
             "panel_sha256": context.panel_sha256,
             "bam_path": str(context.bam_path) if context.bam_path else None,
             "bam_sha256": context.bam_sha256,
-            "longtr_vcf_path": (
-                str(context.longtr_vcf_path) if context.longtr_vcf_path else None
-            ),
+            "longtr_vcf_path": (str(context.longtr_vcf_path) if context.longtr_vcf_path else None),
             "longtr_vcf_sha256": context.longtr_vcf_sha256,
             "longtr_version": context.longtr_version,
             "pipeline_argv": context.pipeline_argv,
@@ -109,12 +112,39 @@ def serialize_run(
         },
         "summary": summary,
         "qc": qc,
+        "audit": _build_audit(results, context),
         "profile_rows": [_profile_row(r) for r in results],
         "seq_rows": _seq_rows(results),
         "results": serialized_results,
     }
     payload["strhub"] = build_strhub_projection(payload)
     return payload
+
+
+def _build_audit(results: list[MarkerResult], context: RunContext) -> dict[str, Any]:
+    """Assemble the audit record from the run's inputs and its results.
+
+    Placed in the canonical payload rather than only in the HTML: the audit
+    trail has to travel with the data, or it is not an audit trail.
+    """
+    inputs = [
+        InputFile(role=role, path=str(path), sha256=sha)
+        for role, path, sha in (
+            ("bam", context.bam_path, context.bam_sha256),
+            ("panel", None, context.panel_sha256),
+            ("longtr_vcf", context.longtr_vcf_path, context.longtr_vcf_sha256),
+        )
+        if path is not None or sha is not None
+    ]
+    first = results[0] if results else None
+    record = build_audit_record(
+        results,
+        inputs=inputs,
+        qc_thresholds=context.qc_thresholds,
+        analytical_thresh=first.analytical_thresh if first else None,
+        calling_thresh=first.calling_thresh if first else None,
+    )
+    return record.model_dump(mode="json")
 
 
 def _serialize_marker(r: MarkerResult) -> dict[str, Any]:
@@ -141,9 +171,12 @@ def _serialize_marker(r: MarkerResult) -> dict[str, Any]:
         "calling_thresh": r.calling_thresh,
         "discordant": r.discordant,
         "flags": [f.model_dump(mode="json") for f in r.flags],
-        "alleles": [_serialize_allele(a, r.total_reads, r.system.motif, r.system.strand) for a in r.alleles],
+        "alleles": [
+            _serialize_allele(a, r.total_reads, r.system.motif, r.system.strand) for a in r.alleles
+        ],
         "alleles_called": [
-            _serialize_allele(a, r.total_reads, r.system.motif, r.system.strand) for a in r.alleles_called
+            _serialize_allele(a, r.total_reads, r.system.motif, r.system.strand)
+            for a in r.alleles_called
         ],
         "longtr": _serialize_longtr(r),
     }
@@ -165,6 +198,7 @@ def _serialize_allele(a: Allele, total_reads: int, motif: str, strand: str = "+"
         "motif_repeat_summary": motif_repeat_summary(a.consensus, motif, strand=strand),
         "bp_diff": a.bp_diff,
         "is_deletion": a.is_deletion,
+        "consensus_method": a.consensus_method,
         "n_reads_total": a.n_reads_total,
         "n_reads_hp1": a.n_reads_hp1,
         "n_reads_hp2": a.n_reads_hp2,
@@ -172,6 +206,7 @@ def _serialize_allele(a: Allele, total_reads: int, motif: str, strand: str = "+"
         "n_forward": a.n_forward,
         "n_reverse": a.n_reverse,
         "mean_qual": round(a.mean_qual, 2),
+        "n_reads_absorbed": a.n_reads_absorbed,
         "expected_stutter": round(a.expected_stutter, 3),
         "status": a.status.value,
         "longtr_match": a.longtr_match,
@@ -203,7 +238,9 @@ def _serialize_longtr(r: MarkerResult) -> dict[str, Any] | None:
             }
             for a in lt.alleles
         ],
-        "gt_indices": list(sample_call.gt_indices) if sample_call and sample_call.gt_indices else None,
+        "gt_indices": list(sample_call.gt_indices)
+        if sample_call and sample_call.gt_indices
+        else None,
         "posterior": (
             round(sample_call.posterior, 4)
             if sample_call and sample_call.posterior is not None
@@ -219,28 +256,18 @@ def _trim_ce_display(ce: float) -> str:
     """Pretty CE string from a forensic CE value."""
     x = round(float(ce), 4)
     if abs(x - int(x)) < 1e-9:
-        return str(int(round(x)))
+        return str(round(x))
     return f"{x:.10f}".rstrip("0").rstrip(".")
 
 
-def _format_allele_number(
-    number: float | None, method: str
-) -> tuple[float | None, str | None, bool]:
-    """Format the model's canonical allele number for the table.
+def _format_allele_number(a: Allele) -> tuple[float | None, str | None, bool]:
+    """Table cell for an allele: ``(sort key, label, is_absolute_number)``.
 
-    Pure presentation: the *decision* of which number to report (and how it
-    was derived) lives on :meth:`Allele.number` / :attr:`Allele.number_method`.
-    Here we only turn that into ``(sort key, cell label, confident_absolute)``.
+    A thin adapter over the model. The number, its label and whether it is a
+    real absolute allele number are all decided on :class:`Allele` so that no
+    view can render an allele differently from another.
     """
-    if number is None:
-        return (None, None, False)
-    trimmed = _trim_ce_display(number)
-    if method == "delta":
-        return (number, f"Δ{trimmed}" if abs(number) > 1e-9 else trimmed, False)
-    if method == "bp_sizing":
-        return (number, f"{int(number)} bp TR", False)
-    # period_ce | reference_offset | bracket_count → a real absolute allele number
-    return (number, trimmed, True)
+    return (a.number, a.number_label or None, a.number_is_absolute)
 
 
 def _profile_row(r: MarkerResult) -> dict[str, Any]:
@@ -262,9 +289,7 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
                 slot.consensus, r.system.motif, strand=r.system.strand
             )
             row[f"allele{i + 1}_ce"] = slot.ce
-            ce_sort, ce_label, ce_is_kit = _format_allele_number(
-                slot.number, slot.number_method
-            )
+            ce_sort, ce_label, ce_is_kit = _format_allele_number(slot)
             row[f"allele{i + 1}_ce_sort"] = ce_sort
             row[f"allele{i + 1}_ce_label"] = ce_label
             row[f"allele{i + 1}_ce_is_kit_ce"] = ce_is_kit
@@ -295,9 +320,8 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
 
 
 def _allele_number_label(a: Allele) -> str | None:
-    """The absolute allele-number cell for one allele (same logic as the CE table)."""
-    _, label, _ = _format_allele_number(a.number, a.number_method)
-    return label
+    """The allele-number cell for one allele (identical to the CE table's)."""
+    return a.number_label or None
 
 
 def _seq_rows(results: list[MarkerResult]) -> list[dict[str, Any]]:
@@ -356,10 +380,7 @@ def _compute_summary(results: list[MarkerResult], dropout_floor: int) -> dict[st
     mixture_count = sum(1 for r in results if r.tri_type == TriType.MIXTURE_SUSPECTED)
     discordant = sum(1 for r in results if r.discordant)
     dropouts = sum(
-        1
-        for r in results
-        if 0 < r.total_reads < dropout_floor
-        or r.call_rule == CallRule.NO_DATA
+        1 for r in results if 0 < r.total_reads < dropout_floor or r.call_rule == CallRule.NO_DATA
     )
     return {
         "loci_total": loci_total,
@@ -387,9 +408,7 @@ def _compute_qc(results: list[MarkerResult]) -> dict[str, Any]:
         "min_coverage": min(covs) if covs else 0,
         "max_coverage": max(covs) if covs else 0,
         "coverage_table": coverage_table,
-        "status_breakdown": [
-            {"status": s, "count": c} for s, c in sorted(statuses.items())
-        ],
+        "status_breakdown": [{"status": s, "count": c} for s, c in sorted(statuses.items())],
     }
 
 

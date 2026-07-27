@@ -106,6 +106,7 @@ SEQS_HEADERS: tuple[str, ...] = (
     "length_bp",
     "bp_diff",
     "consensus",
+    "consensus_method",
     "n_reads_total",
     "n_reads_hp1",
     "n_reads_hp2",
@@ -231,6 +232,7 @@ def write_seqs_csv(payload: dict[str, Any], out_path: Path) -> Path:
                     "length_bp": a["length_bp"],
                     "bp_diff": a["bp_diff"],
                     "consensus": a["consensus"],
+                    "consensus_method": a.get("consensus_method", ""),
                     "n_reads_total": a["n_reads_total"],
                     "n_reads_hp1": a["n_reads_hp1"],
                     "n_reads_hp2": a["n_reads_hp2"],
@@ -265,9 +267,7 @@ def _fmt_number(value: Any) -> str:
     return str(value)
 
 
-def _write_csv(
-    out_path: Path, headers: tuple[str, ...], rows: list[dict[str, Any]]
-) -> Path:
+def _write_csv(out_path: Path, headers: tuple[str, ...], rows: list[dict[str, Any]]) -> Path:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=headers, lineterminator="\n")

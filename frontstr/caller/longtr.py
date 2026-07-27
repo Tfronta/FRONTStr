@@ -74,21 +74,30 @@ def build_longtr_argv(
 
     argv: list[str] = [
         binary or _resolve_binary(),
-        "--bams", str(bam),
-        "--fasta", str(fasta),
-        "--regions", str(bed),
-        "--tr-vcf", str(vcf_out),
-        "--min-reads", str(min_reads),
-        "--max-tr-len", str(max_tr_len),
-        "--min-mapq", str(min_mapq),
-        "--indel-flank-len", str(indel_flank_len),
+        "--bams",
+        str(bam),
+        "--fasta",
+        str(fasta),
+        "--regions",
+        str(bed),
+        "--tr-vcf",
+        str(vcf_out),
+        "--min-reads",
+        str(min_reads),
+        "--max-tr-len",
+        str(max_tr_len),
+        "--min-mapq",
+        str(min_mapq),
+        "--indel-flank-len",
+        str(indel_flank_len),
         "--lib-from-samp",
     ]
     if chrom:
         argv += ["--chrom", chrom]
     if platform == "ont":
         argv += [
-            "--min-mean-qual", "10",
+            "--min-mean-qual",
+            "10",
             "--alignment-params",
             "-1.0,-0.458675,-1.0,-0.458675,-0.00005800168,-1.0,-1.0",
         ]

@@ -26,9 +26,7 @@ def cross_check(result: MarkerResult, longtr: LongTRResult | None) -> None:
     if longtr is None:
         return
 
-    inexact_sequences = {
-        a.sequence for a in longtr.alleles if a.inexact and not a.is_deletion
-    }
+    inexact_sequences = {a.sequence for a in longtr.alleles if a.inexact and not a.is_deletion}
     for evidence_allele in result.alleles:
         for la in longtr.alleles:
             if _matches_longtr(evidence_allele, la):
@@ -61,8 +59,7 @@ def cross_check(result: MarkerResult, longtr: LongTRResult | None) -> None:
         result.flags.append(
             Flag.of(
                 FlagCode.LONGTR_DISCORDANT,
-                f"LongTR called bp={longtr_bp_set} but evidence layer called "
-                f"bp={evidence_bp_set}",
+                f"LongTR called bp={longtr_bp_set} but evidence layer called bp={evidence_bp_set}",
             )
         )
 

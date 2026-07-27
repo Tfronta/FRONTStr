@@ -6,16 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from frontstr.batch import BatchResult, ManifestEntry, parse_manifest, run_batch
+from frontstr.batch import ManifestEntry, parse_manifest, run_batch
 from frontstr.errors import FrontstrError
 from frontstr.panel.models import Panel, System
 
 from .conftest import SYNTH_CHROM, SYNTH_TR_END, SYNTH_TR_START, SynthRead, write_synth_bam
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _write_manifest(path: Path, lines: list[str]) -> Path:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -44,12 +44,16 @@ def _synth_panel() -> Panel:
 # parse_manifest
 # ---------------------------------------------------------------------------
 
+
 def test_parse_manifest_minimal(tmp_path: Path) -> None:
     """Two-column manifest (no role column) defaults to role='sample'."""
-    p = _write_manifest(tmp_path / "m.tsv", [
-        "sample_id\tbam",
-        "HG00113\t/data/HG00113.bam",
-    ])
+    p = _write_manifest(
+        tmp_path / "m.tsv",
+        [
+            "sample_id\tbam",
+            "HG00113\t/data/HG00113.bam",
+        ],
+    )
     entries = parse_manifest(p)
     assert len(entries) == 1
     assert entries[0].sample_id == "HG00113"
@@ -58,26 +62,35 @@ def test_parse_manifest_minimal(tmp_path: Path) -> None:
 
 
 def test_parse_manifest_with_roles(tmp_path: Path) -> None:
-    p = _write_manifest(tmp_path / "m.tsv", [
-        "sample_id\tbam\trole",
-        "S1\t/a.bam\tsample",
-        "CTRL\t/b.bam\tpositive_ctrl",
-        "NEG\t/c.bam\tnegative_ctrl",
-        "BLANK\t/d.bam\treagent_blank",
-    ])
+    p = _write_manifest(
+        tmp_path / "m.tsv",
+        [
+            "sample_id\tbam\trole",
+            "S1\t/a.bam\tsample",
+            "CTRL\t/b.bam\tpositive_ctrl",
+            "NEG\t/c.bam\tnegative_ctrl",
+            "BLANK\t/d.bam\treagent_blank",
+        ],
+    )
     entries = parse_manifest(p)
     assert [e.role for e in entries] == [
-        "sample", "positive_ctrl", "negative_ctrl", "reagent_blank"
+        "sample",
+        "positive_ctrl",
+        "negative_ctrl",
+        "reagent_blank",
     ]
 
 
 def test_parse_manifest_skips_comments(tmp_path: Path) -> None:
-    p = _write_manifest(tmp_path / "m.tsv", [
-        "# FRONTStr batch manifest",
-        "sample_id\tbam\trole",
-        "# another comment",
-        "S1\t/a.bam\tsample",
-    ])
+    p = _write_manifest(
+        tmp_path / "m.tsv",
+        [
+            "# FRONTStr batch manifest",
+            "sample_id\tbam\trole",
+            "# another comment",
+            "S1\t/a.bam\tsample",
+        ],
+    )
     entries = parse_manifest(p)
     assert len(entries) == 1
     assert entries[0].sample_id == "S1"
@@ -102,20 +115,26 @@ def test_parse_manifest_bad_header(tmp_path: Path) -> None:
 
 
 def test_parse_manifest_unknown_role(tmp_path: Path) -> None:
-    p = _write_manifest(tmp_path / "m.tsv", [
-        "sample_id\tbam\trole",
-        "S1\t/a.bam\tunknown_role",
-    ])
+    p = _write_manifest(
+        tmp_path / "m.tsv",
+        [
+            "sample_id\tbam\trole",
+            "S1\t/a.bam\tunknown_role",
+        ],
+    )
     with pytest.raises(FrontstrError, match="unknown role"):
         parse_manifest(p)
 
 
 def test_parse_manifest_duplicate_sample_id(tmp_path: Path) -> None:
-    p = _write_manifest(tmp_path / "m.tsv", [
-        "sample_id\tbam",
-        "S1\t/a.bam",
-        "S1\t/b.bam",
-    ])
+    p = _write_manifest(
+        tmp_path / "m.tsv",
+        [
+            "sample_id\tbam",
+            "S1\t/a.bam",
+            "S1\t/b.bam",
+        ],
+    )
     with pytest.raises(FrontstrError, match="duplicate"):
         parse_manifest(p)
 
@@ -124,22 +143,20 @@ def test_parse_manifest_duplicate_sample_id(tmp_path: Path) -> None:
 # run_batch (single-process, workers=1)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def two_sample_bams(tmp_path: Path) -> tuple[Path, Path]:
     """Two synthetic BAMs: one het (CE 12+11), one hom (CE 12)."""
-    specs_het = (
-        [SynthRead(name=f"a{i}", n_repeats=12, hp=1) for i in range(10)]
-        + [SynthRead(name=f"b{i}", n_repeats=11, hp=2) for i in range(8)]
-    )
+    specs_het = [SynthRead(name=f"a{i}", n_repeats=12, hp=1) for i in range(10)] + [
+        SynthRead(name=f"b{i}", n_repeats=11, hp=2) for i in range(8)
+    ]
     specs_hom = [SynthRead(name=f"h{i}", n_repeats=12) for i in range(10)]
     bam_het = write_synth_bam(tmp_path / "het.bam", specs_het)
     bam_hom = write_synth_bam(tmp_path / "hom.bam", specs_hom)
     return bam_het, bam_hom
 
 
-def test_run_batch_two_samples(
-    tmp_path: Path, two_sample_bams: tuple[Path, Path]
-) -> None:
+def test_run_batch_two_samples(tmp_path: Path, two_sample_bams: tuple[Path, Path]) -> None:
     """Both samples succeed; per-sample dirs and batch_summary.csv are created."""
     bam_het, bam_hom = two_sample_bams
     entries = [
@@ -166,9 +183,7 @@ def test_run_batch_two_samples(
     assert (out / "batch_summary.csv").exists()
 
 
-def test_run_batch_summary_content(
-    tmp_path: Path, two_sample_bams: tuple[Path, Path]
-) -> None:
+def test_run_batch_summary_content(tmp_path: Path, two_sample_bams: tuple[Path, Path]) -> None:
     """batch_summary.csv must have a row per sample with role and CE columns."""
     bam_het, bam_hom = two_sample_bams
     entries = [
@@ -180,6 +195,7 @@ def test_run_batch_summary_content(
     run_batch(entries=entries, panel=panel, out_dir=out, formats=frozenset({"json"}), workers=1)
 
     import csv as csv_mod
+
     with (out / "batch_summary.csv").open(encoding="utf-8", newline="") as fh:
         rows = list(csv_mod.DictReader(fh))
 
@@ -206,9 +222,7 @@ def test_run_batch_missing_bam_is_error(tmp_path: Path) -> None:
     assert (out / "batch_summary.csv").exists()
 
 
-def test_run_batch_progress_callback(
-    tmp_path: Path, two_sample_bams: tuple[Path, Path]
-) -> None:
+def test_run_batch_progress_callback(tmp_path: Path, two_sample_bams: tuple[Path, Path]) -> None:
     """progress_callback is called once per sample."""
     bam_het, bam_hom = two_sample_bams
     entries = [
@@ -219,16 +233,17 @@ def test_run_batch_progress_callback(
     out = tmp_path / "batch_out"
     ticks: list[str] = []
     run_batch(
-        entries=entries, panel=panel, out_dir=out, workers=1,
+        entries=entries,
+        panel=panel,
+        out_dir=out,
+        workers=1,
         progress_callback=ticks.append,
         formats=frozenset({"json"}),
     )
     assert sorted(ticks) == ["S1", "S2"]
 
 
-def test_run_batch_formats_respected(
-    tmp_path: Path, two_sample_bams: tuple[Path, Path]
-) -> None:
+def test_run_batch_formats_respected(tmp_path: Path, two_sample_bams: tuple[Path, Path]) -> None:
     """Only requested formats are written; others are absent."""
     bam_het, _ = two_sample_bams
     entries = [ManifestEntry("S1", bam_het, "sample")]
@@ -245,6 +260,7 @@ def test_run_batch_formats_respected(
 # CLI smoke test
 # ---------------------------------------------------------------------------
 
+
 def test_batch_cli_two_samples(
     tmp_path: Path, two_sample_bams: tuple[Path, Path], codis_panel_yaml: Path
 ) -> None:
@@ -252,7 +268,6 @@ def test_batch_cli_two_samples(
     from typer.testing import CliRunner
 
     from frontstr.cli import app
-    from frontstr.panel.loader import load_panel
 
     # Write a minimal panel YAML for the synth marker
     synth_panel_yaml = tmp_path / "synth.yaml"
@@ -272,17 +287,24 @@ def test_batch_cli_two_samples(
     bam_het, bam_hom = two_sample_bams
     manifest = tmp_path / "manifest.tsv"
     manifest.write_text(
-        f"sample_id\tbam\trole\n"
-        f"HET\t{bam_het}\tsample\n"
-        f"HOM\t{bam_hom}\tsample\n",
+        f"sample_id\tbam\trole\nHET\t{bam_het}\tsample\nHOM\t{bam_hom}\tsample\n",
         encoding="utf-8",
     )
 
     runner = CliRunner()
     result = runner.invoke(
         app,
-        ["batch", "--manifest", str(manifest), "--panel", str(synth_panel_yaml),
-         "--out", str(tmp_path / "out"), "--formats", "json"],
+        [
+            "batch",
+            "--manifest",
+            str(manifest),
+            "--panel",
+            str(synth_panel_yaml),
+            "--out",
+            str(tmp_path / "out"),
+            "--formats",
+            "json",
+        ],
     )
     assert result.exit_code == 0, result.output
     assert (tmp_path / "out" / "batch_summary.csv").exists()

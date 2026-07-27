@@ -23,6 +23,8 @@ def test_highlight_repeat_spans_all_flank_when_no_motif_match() -> None:
     html = highlight_repeat_spans("ACGTACGT", "TAGA")
     assert "seq-flank" in html
     assert "repeat-highlight" not in html
+
+
 def test_build_ngs_panel_isoallele_order_and_stack() -> None:
     marker = {
         "marker_name": "vWA",
@@ -86,7 +88,9 @@ def test_build_strhub_projection_roundtrip_keys() -> None:
         "alleles": [],
     }
     marker["ngs_panel"] = build_ngs_panel(marker)
-    hub = build_strhub_projection({"meta": {"app_version": "0", "sample_name": "S"}, "results": [marker]})
+    hub = build_strhub_projection(
+        {"meta": {"app_version": "0", "sample_name": "S"}, "results": [marker]}
+    )
     assert hub["schema"] == "strhub.ngs_panel/v1"
     assert hub["sample"] == "S"
     assert hub["markers"][0]["locus"] == "TH01"

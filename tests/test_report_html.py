@@ -25,27 +25,46 @@ from frontstr.panel.models import System
 from frontstr.report import RunContext, build_report
 
 
-def _allele(idx: int, ce: float, cov: int, status: AlleleStatus,
-            consensus_motif: str = "AATG") -> Allele:
+def _allele(
+    idx: int, ce: float, cov: int, status: AlleleStatus, consensus_motif: str = "AATG"
+) -> Allele:
     return Allele(
-        cluster_index=idx, consensus=consensus_motif * int(ce),
+        cluster_index=idx,
+        consensus=consensus_motif * int(ce),
         length_bp=len(consensus_motif) * int(ce),
-        n_reads_total=cov, n_reads_hp1=cov // 2, n_reads_hp2=cov - cov // 2,
-        n_reads_hp_none=0, n_forward=cov, n_reverse=0,
-        mean_qual=30.0, ce=ce, isfg=f"[{consensus_motif}]{int(ce)}",
-        bp_diff=0, is_deletion=False, status=status,
+        n_reads_total=cov,
+        n_reads_hp1=cov // 2,
+        n_reads_hp2=cov - cov // 2,
+        n_reads_hp_none=0,
+        n_forward=cov,
+        n_reverse=0,
+        mean_qual=30.0,
+        ce=ce,
+        isfg=f"[{consensus_motif}]{int(ce)}",
+        bp_diff=0,
+        is_deletion=False,
+        status=status,
     )
 
 
 def _make_results() -> list[MarkerResult]:
     th01_system = System(
-        name="TH01", chromosome="chr11", ref_start=2_171_000, ref_end=2_171_050,
-        motif="AATG", period=4,
+        name="TH01",
+        chromosome="chr11",
+        ref_start=2_171_000,
+        ref_end=2_171_050,
+        motif="AATG",
+        period=4,
     )
     tpox_system = System(
-        name="TPOX", chromosome="chr2", ref_start=1_489_651, ref_end=1_489_684,
-        motif="AATG", period=4,
-        allow_triallelic=True, tri_balanced_thr=0.5,
+        name="TPOX",
+        chromosome="chr2",
+        ref_start=1_489_651,
+        ref_end=1_489_684,
+        motif="AATG",
+        period=4,
+        allow_triallelic=True,
+        tri_balanced_thr=0.5,
     )
     th01_alleles = [
         _allele(0, 9.0, 60, AlleleStatus.ALLELE),
@@ -59,15 +78,21 @@ def _make_results() -> list[MarkerResult]:
     ]
     return [
         MarkerResult(
-            marker_name="TH01", system=th01_system,
-            alleles=th01_alleles, alleles_called=th01_alleles[:2],
-            call_rule=CallRule.HETEROZYGOUS, tri_type=TriType.NONE,
+            marker_name="TH01",
+            system=th01_system,
+            alleles=th01_alleles,
+            alleles_called=th01_alleles[:2],
+            call_rule=CallRule.HETEROZYGOUS,
+            tri_type=TriType.NONE,
             total_reads=sum(a.n_reads_total for a in th01_alleles),
         ),
         MarkerResult(
-            marker_name="TPOX", system=tpox_system,
-            alleles=tpox_alleles, alleles_called=tpox_alleles,
-            call_rule=CallRule.TRIALLELIC_TYPE_II, tri_type=TriType.TYPE_II_BALANCED,
+            marker_name="TPOX",
+            system=tpox_system,
+            alleles=tpox_alleles,
+            alleles_called=tpox_alleles,
+            call_rule=CallRule.TRIALLELIC_TYPE_II,
+            tri_type=TriType.TYPE_II_BALANCED,
             total_reads=sum(a.n_reads_total for a in tpox_alleles),
         ),
     ]
@@ -77,8 +102,9 @@ def test_build_report_writes_valid_html(tmp_path: Path) -> None:
     out = tmp_path / "r.html"
     build_report(
         _make_results(),
-        RunContext(sample_name="S001", panel_name="forensic-panel", panel_version="0.1",
-                   operator="J. Diaz"),
+        RunContext(
+            sample_name="S001", panel_name="forensic-panel", panel_version="0.1", operator="J. Diaz"
+        ),
         out,
     )
     assert out.exists()
@@ -233,5 +259,5 @@ def test_build_report_includes_chips_for_special_calls(tmp_path: Path) -> None:
     assert "tri_II_balanced" in html
     assert "TPOX" in html
     # Status chips for both alleles
-    assert html.count("class=\"chip ok\"") > 0
+    assert html.count('class="chip ok"') > 0
     assert "triallelic_type_II" in html

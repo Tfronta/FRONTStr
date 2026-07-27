@@ -60,6 +60,14 @@ systems:
     corr_value: 8  # 1 left-flank + 7 right-flank TCTA/TCTG from GRCh38 reference
     strand: "-"
     category: autosomal
+    kit_nomenclature_note: >-
+      Bracket count and kit designation differ by +1 and -1 in OPPOSITE
+      directions for the two common alleles, so no single corr_value can
+      reconcile them: allele 16's core includes a post-tcca TCTA unit the
+      convention does not count, while allele 14's microvariant structure
+      (TCTA TCTG TCTA [TCTG]4 [TCTA]3 tcca [TCTA]3) the convention counts as
+      14 and bracket counting gives 13. The ISFG string is structurally
+      correct either way; only the number differs.
 
   - name: FGA
     chromosome: chr4
@@ -90,6 +98,12 @@ systems:
     corr_value: 3  # 1 left-flank TCTG + 2 right-flank TCTG from GRCh38 reference
     category: autosomal
     allow_triallelic: true
+    kit_nomenclature_note: >-
+      D21S11 uses the Gill et al. 1994 convention, in which the total
+      TCTA+TCTG unit count is not the allele number: the structural elements
+      (ta, tca, tccata, tcg, tccag) produce a bracket count that does not map
+      1:1 onto the kit designation. Observed offset on HG00113 is +4 per
+      allele (bracket 35/33 vs kit 29/31).
 
   - name: D18S51
     chromosome: chr18
