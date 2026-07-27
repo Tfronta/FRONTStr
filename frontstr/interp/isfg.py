@@ -1,11 +1,19 @@
 """ISFG bracketed nomenclature compression.
 
-Ported from toaSTR v1 ``Scripts/Library.pm::compressor`` (Perl).
-
 For each cluster consensus, identify runs of the locus motif(s) and emit a
 canonical bracketed notation, e.g. ``[AGAT]12 AGAC [AGAT]3`` for D3S1358.
 
-Phase 1.5 of ROADMAP.md. See research-toastr.md §15 and §8 step 4.
+Implementation is a greedy left-to-right scan taking the longest motif run at
+each position — the direct reading of the ISFG bracket convention, written in
+Python here.
+
+An earlier docstring described this as a port of toaSTR v1's Perl
+``Scripts/Library.pm::compressor``. That was wrong and is corrected here: no
+toaSTR source exists in this project or in toaSTR's public repository, which
+ships only a Docker Compose file and a SQL schema (verified 2026-07). What the
+notation itself owes to prior art is cited in the README.
+
+Phase 1.5 of ROADMAP.md.
 """
 
 from __future__ import annotations
