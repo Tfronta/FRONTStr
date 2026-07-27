@@ -1,84 +1,171 @@
 # Architecture
 
-FRONTStr is organised as **three layers with strict, one-way dependencies**.
-The boundaries are not negotiable: if LongTR ships a new version, only Layer 1
-needs work; if the lab changes its forensic thresholds, only Layer 3 changes.
+The module map and the dependency rules between them. For what the pipeline
+*does* at each stage, see [`how_it_works.md`](how_it_works.md); this document
+is about where the code lives and why.
 
-## Layer 1 — Caller (`frontstr.caller`)
+## The dependency rule
 
-Wraps the external caller (LongTR) and parses its VCF.
+Dependencies run **one way**: Evidence may not import Interpretation, and
+neither may import the report or export layers. The rule is enforced by review,
+not by tooling, but it is currently unbroken — `frontstr.evidence` and
+`frontstr.caller` contain no import of `frontstr.interp`.
 
-- `caller.longtr.build_longtr_argv` — deterministic argv for a given run.
-- `caller.longtr.run_longtr` — subprocess invocation.
-- `caller.vcf` — cyvcf2 → in-memory result objects.
+It buys two things. Changing a forensic threshold touches only Interpretation.
+Changing how reads are extracted or clustered touches only Evidence, and cannot
+quietly alter a calling rule.
 
-What this layer **never** produces: per-allele integer coverage. That is the
-job of Layer 2.
+Two modules exist specifically to keep that rule intact:
 
-## Layer 2 — Evidence (`frontstr.evidence`)
+- **`frontstr/motifs.py`** — motif-run scanning, repeat-core location,
+  reverse-complement. Pure sequence functions with no forensic opinion, sitting
+  outside the layering because *all three* of Evidence, Interpretation and
+  Panel need them. Evidence bins reads by repeat-core length; Interpretation
+  needs the same primitives for stutter, ISFG and catalog lookup. Without this
+  module, Evidence would have to import Interpretation.
+- **`frontstr/log.py`** — structured logging, deliberately free of any FRONTStr
+  import. Logging and the audit record started as one module and produced a
+  circular import: `interp/profile.py` needs a logger, while the audit record
+  needs the interp models. Splitting them is both the fix and the correct
+  layering — the domain should not depend on the audit trail.
 
-Sequence-level pileup straight from the BAM.
+---
 
-- `evidence.pileup.pileup_locus` — pysam-driven per-locus extractor.
-- `evidence.cluster.cluster_observations` — length-binned + edit-distance
-  clustering with POA local consensus.
+## Evidence — `frontstr.evidence`
 
-Result: a list of `Cluster` objects per locus with integer `n_reads`,
-per-haplotype counts (`HP1`/`HP2`/none), and a consensus sequence ready for
-ISFG compression.
+Reads to allele candidates. Everything here is measurement; nothing decides
+whether something is an allele.
 
-## Layer 3 — Interpretation (`frontstr.interp`)
+| Module | Responsibility |
+|---|---|
+| `pileup` | Per-locus extraction with pysam. One `Observation` per read that spans the whole window, carrying sequence in reference orientation, `HP` tag, strand and mean quality. |
+| `cluster` | Two-stage grouping: bin by **repeat-core length**, then merge by edit-distance identity within the bin. |
+| `consensus` | POA backend chain (`pyabpoa` → `pyspoa` → mode fallback) using **global** alignment. Records which method produced each consensus. |
 
-Forensic decision rules.
+Output: `Cluster` objects with integer `n_reads`, per-haplotype counts, a
+consensus sequence and a `consensus_method`.
 
-- `interp.isfg` — bracketed nomenclature compression.
-- `interp.stutter` — LUS/SLUS expected-stutter model + per-marker overrides.
-- `interp.classify` — `allele | stutter | artefact | noise | inexact | deletion`.
-- `interp.triallelic` — `call_profile` supporting 1, 2, or 3+ alleles plus
-  mixture detection.
-- `interp.concordance` — cross-check with LongTR's GT; flag discordances.
+Global alignment is not an incidental choice. Clusters are length-binned, so
+members are equal-length full-window sequences; local alignment would be free
+to trim flanks and silently change the called length, which *is* the CE number.
+
+---
+
+## Interpretation — `frontstr.interp`
+
+Allele candidates to a forensic genotype. Every decision rule lives here.
+
+| Module | Responsibility |
+|---|---|
+| `models` | `Allele`, `MarkerResult`, `Flag`, `IsoAllele` and the enums. The canonical allele number, its derivation method and its display label are computed here so no view can disagree about them. |
+| `isfg` | Bracketed nomenclature compression; CE from length or from bracket count. |
+| `allele_numeric` | Reference-anchored allele numbering for compound markers. |
+| `stutter` | Builds expected stutter coverage per virtual stutter sequence, from a calibrated `StutterModel`. |
+| `classify` | `allele \| stutter \| artefact \| noise \| inexact_allele \| deletion \| hp_phantom`. |
+| `haplotype` | Suppresses same-haplotype split-allele phantoms. No-op on unphased BAMs. |
+| `catalog` | Annotates alleles against a curated iso-allele catalog (optional). |
+| `triallelic` | `call_profile` — 1, 2 or 3+ alleles, plus mixture suspicion. |
+| `amel` | Amelogenin sex typing. Not a tandem repeat, so it bypasses the STR path entirely. |
+| `concordance` | Cross-check against LongTR when a VCF was supplied; raises a flag, never changes a call. |
+| `flags` | Marker-level flags intrinsic to a finished call (triallelic, iso-allele, unpolished consensus). |
+| `qc` | Run-level flags that depend on a laboratory threshold (coverage, strand bias, kit nomenclature). |
+| `profile` | The orchestrator: `interpret_marker` and `interpret_run`. |
+
+---
+
+## Caller — `frontstr.caller` (optional)
+
+Wraps LongTR. **Not part of the pipeline**: it runs only when the CLI is given
+`--longtr-vcf`, and its output feeds only `interp.concordance`, which raises a
+`LONGTR_DISCORDANT` flag on disagreement. FRONTStr produces complete profiles
+with LongTR absent from the machine.
+
+| Module | Responsibility |
+|---|---|
+| `longtr` | argv construction and subprocess invocation |
+| `bed` | Panel → BED, whole-panel and per-chromosome |
+| `vcf` | cyvcf2 → in-memory result objects |
+
+What this layer never produces: per-allele coverage. That comes from Evidence.
+
+---
 
 ## Cross-cutting
 
-- `panel` — versioned forensic panel + (later) allele catalog.
-- `ingest` — input format detection, BAM validation, alignment.
-- `report` — HTML / PDF / batch generators sharing one serializer.
-- `exports` — CSV, XLSX, VCF-extended, CODIS CMF, MIDST, ZIP bundle.
+| Module | Responsibility |
+|---|---|
+| `panel.models`, `panel.loader` | Versioned panel and marker definitions from YAML |
+| `panel.catalog` | Iso-allele catalog model and JSON I/O |
+| `panel.calibrate` | Derives per-marker `corr_value` from a reference FASTA |
+| `panel.stutter_calib` | Measures stutter from real BAMs and fits a `StutterModel` |
+| `panel.seed_strseq` | STRSeq catalog builder — assembly done, the NCBI fetch is a stub |
+| `ingest.detect`, `ingest.validate` | Input format sniffing and BAM header checks |
+| `ingest.align` | minimap2 wrapper — **not implemented**, raises |
+| `report.payload` | `serialize_run`: the single serializer every consumer shares |
+| `report.html`, `svg_charts`, `ngs_display` | Self-contained HTML report |
+| `exports.csv`, `json`, `xlsx`, `vcf` | Output formats |
+| `audit` | `AuditRecord`: run configuration, flag census, integrity seal |
+| `log` | JSONL process log |
+| `batch` | Multi-sample orchestration from a manifest |
+| `cli` | Typer entry point; every subcommand |
+| `errors` | The `FrontstrError` hierarchy |
+| `motifs` | Motif-run primitives shared by all layers — see the dependency rule above |
+
+Not built, despite appearing in earlier plans: PDF report, batch report
+generator, CODIS CMF, NIST MIDST, ZIP bundle, tidy/Parquet dataset.
+
+---
 
 ## Data flow
 
 ```
-input file (fastq | bam | cram)
+FASTQ  ──►  ingest.align_to_reference        ✗ NOT IMPLEMENTED — align externally
+                                                (minimap2 -ax map-ont)
+indexed BAM / CRAM
+        │   single source of truth for everything downstream
         │
-        ▼
-ingest.detect_input → ingest.validate_bam OR ingest.align_to_reference
-        │
-        ▼
-sorted, indexed BAM (single source of truth for everything downstream)
-        │
-        ├──► caller.longtr  ─────────────►  tr_calls.vcf
-        │
-        └──► evidence.pileup
+        ├──► caller.longtr ──► tr_calls.vcf ──┐   optional, --longtr-vcf only
+        │                                     │
+        └──► evidence.pileup                  │
+                 │                            │
+                 ▼                            │
+             evidence.cluster                 │
+                 │                            │
+                 ▼                            │
+             evidence.consensus               │
+                 │                            │
+                 ▼                            │
+             interp.profile                   │
+               isfg → stutter → classify      │
+               → haplotype → catalog          │
+               → triallelic                   │
+                 │                            │
+                 ▼                            │
+             interp.concordance  ◄────────────┘   flags disagreement only
                  │
                  ▼
-             cluster_observations
+             interp.flags  →  interp.qc
                  │
                  ▼
-             interp.isfg + interp.classify + interp.triallelic
+             MarkerResult (per locus) + Allele (per cluster)
                  │
                  ▼
-             Result(per locus) + Allele(per cluster)
+             report.payload.serialize_run  +  audit.build_audit_record
                  │
                  ▼
-             report.html  +  exports.{csv,xlsx,vcf_extend,codis,bundle}
+             report.html  ·  exports.{csv, json, xlsx, vcf}  ·  log.jsonl
 ```
 
-## Why this layering matters forensically
+---
 
-- **Auditable provenance**: every cluster knows the read IDs that produced it,
-  every allele knows which cluster it came from, every result knows which
-  pipeline parameters and software versions produced it.
-- **Independent of caller**: if LongTR shifts, our coverage numbers don't
-  change. Layer 2 is the source of truth.
-- **Defensible thresholds**: stutter rules live in Layer 3 and are versioned
-  with the panel, not buried in caller flags.
+## Why the layering matters forensically
+
+- **Provenance is traceable.** Every cluster knows the read IDs that produced
+  it, every allele knows its cluster, and every run records the software
+  versions, backends and thresholds that produced it in a sealed audit record.
+- **Independent of any external caller.** Coverage comes from Evidence. If
+  LongTR changes, or is absent, the numbers do not move.
+- **Thresholds are defensible and located.** Stutter rates live in a versioned
+  `StutterModel`, QC thresholds in a `QcThresholds` object, marker parameters
+  in the panel YAML. None of them are buried in caller flags, and all of them
+  are serialized into the audit record of every run that used them.
