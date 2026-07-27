@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pysam
-import pytest
 
 from frontstr.interp.amel import interpret_amel
 from frontstr.interp.models import CallRule
@@ -23,16 +22,16 @@ _FLANK = 50
 
 
 def _amel_system(*, with_y: bool = True) -> System:
-    s = dict(
-        name="AMEL",
-        marker_type="amel",
-        chromosome=_CHROM_X,
-        ref_start=_X_START,
-        ref_end=_X_END,
-        motif="A",
-        period=1,
-        category="x_chromosomal",
-    )
+    s: dict[str, object] = {
+        "name": "AMEL",
+        "marker_type": "amel",
+        "chromosome": _CHROM_X,
+        "ref_start": _X_START,
+        "ref_end": _X_END,
+        "motif": "A",
+        "period": 1,
+        "category": "x_chromosomal",
+    }
     if with_y:
         s["y_chromosome"] = _CHROM_Y
         s["y_ref_start"] = _Y_START

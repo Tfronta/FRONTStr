@@ -150,6 +150,14 @@ class IsoAllele(BaseModel):
     is_isoallele: bool = False
 
 
+def _trim_number(value: float) -> str:
+    """Render an allele number without trailing zeros (``9.3``, ``14``)."""
+    x = round(float(value), 4)
+    if abs(x - int(x)) < 1e-9:
+        return str(round(x))
+    return f"{x:.10f}".rstrip("0").rstrip(".")
+
+
 class Allele(BaseModel):
     """One forensic allele candidate. There is exactly one per evidence cluster."""
 
@@ -229,6 +237,39 @@ class Allele(BaseModel):
     def number_method(self) -> str:
         """How :attr:`number` was derived (period_ce | bracket_count | …)."""
         return self._number_and_method()[1]
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def number_is_absolute(self) -> bool:
+        """True when :attr:`number` is a real, cross-comparable allele number.
+
+        False for the relative and fallback methods (``delta``, ``bp_sizing``,
+        ``none``), which must not be read as a kit CE designation.
+        """
+        return self.number_method in ("period_ce", "reference_offset", "bracket_count")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def number_label(self) -> str:
+        """The single human-facing label for this allele.
+
+        Every view — the CLI table, the HTML report, the CSV exports — renders
+        this string. Formatting used to be duplicated per view, which let the
+        same allele read as ``Δ-2`` in ``frontstr interpret`` and ``14`` in the
+        report. In a forensic context two numbers for one allele is not a
+        cosmetic problem, so the label is produced once, here, beside the
+        number it describes.
+        """
+        number = self.number
+        if number is None:
+            # Non-numeric markers (AMEL X / Y) carry their designation in ISFG.
+            return self.isfg or ""
+        trimmed = _trim_number(number)
+        if self.number_method == "delta":
+            return f"Δ{trimmed}" if abs(number) > 1e-9 else trimmed
+        if self.number_method == "bp_sizing":
+            return f"{int(number)} bp TR"
+        return trimmed
 
     def fraction(self, total_reads: int) -> float:
         if total_reads <= 0:

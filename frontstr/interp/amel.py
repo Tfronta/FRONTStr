@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from frontstr.evidence.pileup import pileup_locus
+from frontstr.evidence.pileup import Observation, pileup_locus
 from frontstr.interp.models import Allele, AlleleStatus, CallRule, MarkerResult, TriType
 from frontstr.panel.models import System
 
@@ -116,7 +116,7 @@ def _no_data(system: System) -> MarkerResult:
 def _safe_pileup(
     bam: Path, chrom: str, start: int, end: int, min_mapq: int,
     *, reference_fasta: Path | None = None,
-) -> list:
+) -> list[Observation]:
     try:
         return pileup_locus(bam, chrom, start, end, min_mapq=min_mapq,
                             reference_fasta=reference_fasta)

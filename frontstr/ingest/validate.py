@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from frontstr.errors import IngestError
 
@@ -94,7 +95,7 @@ def validate_bam(path: Path, expected_build: str | None = None) -> ValidationRep
         report.warnings.append("BAM index missing; will attempt to create one")
         try:
             pysam.index(str(path))
-        except pysam.SamtoolsError as exc:
+        except pysam.SamtoolsError as exc:  # type: ignore[attr-defined]
             raise IngestError(f"Cannot index BAM {path}: {exc}") from exc
 
     mapqs: list[int] = []
@@ -115,7 +116,7 @@ def validate_bam(path: Path, expected_build: str | None = None) -> ValidationRep
     return report
 
 
-def _validate_reference_md5(sqs: list[dict], expected_build: str) -> list[str]:
+def _validate_reference_md5(sqs: list[dict[str, Any]], expected_build: str) -> list[str]:
     """Compare @SQ M5 fields with a known reference MD5 table.
 
     The actual MD5 table is loaded lazily from :mod:`frontstr.panel.reference`

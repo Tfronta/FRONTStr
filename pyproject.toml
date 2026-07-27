@@ -93,6 +93,10 @@ select = [
     "RUF",               # ruff-specific
 ]
 ignore = ["E501"]
+# This is a scientific codebase: "±100 bp", "12 × 4", "period −1" and "≥ 5 reads"
+# are the notation the domain actually uses. Mangling them to ASCII makes the
+# comments harder to read than the confusable characters ever made them.
+allowed-confusables = ["×", "–", "−", "±", "≥", "≤", "→"]
 
 [tool.ruff.format]
 quote-style = "double"

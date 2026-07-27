@@ -40,12 +40,13 @@ from __future__ import annotations
 
 import csv
 import traceback
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import Future, ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from frontstr.errors import FrontstrError
+from frontstr.interp.models import MarkerResult
 from frontstr.panel.models import Panel
 
 VALID_ROLES: frozenset[str] = frozenset(
@@ -168,7 +169,7 @@ def run_batch(
     """
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    futures_to_entry: dict = {}
+    futures_to_entry: dict[Future[BatchResult], ManifestEntry] = {}
     results_map: dict[str, BatchResult] = {}
 
     if workers <= 1:
@@ -303,7 +304,7 @@ def _process_one_sample(
         )
 
 
-def _extract_marker_ces(marker_results: list) -> dict[str, str]:
+def _extract_marker_ces(marker_results: list[MarkerResult]) -> dict[str, str]:
     """Build a {marker_name: CE_string} dict from called alleles.
 
     CE_string is e.g. ``"12.0,14.0"`` for het or ``"13.0"`` for hom.

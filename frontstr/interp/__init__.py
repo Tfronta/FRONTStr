@@ -14,7 +14,12 @@ Public surface:
 
 from frontstr.interp.classify import classify_allele
 from frontstr.interp.concordance import cross_check
-from frontstr.interp.isfg import ce_from_brackets, ce_from_length, compress_isfg, motif_repeat_summary
+from frontstr.interp.isfg import (
+    ce_from_brackets,
+    ce_from_length,
+    compress_isfg,
+    motif_repeat_summary,
+)
 from frontstr.interp.models import (
     Allele,
     AlleleStatus,

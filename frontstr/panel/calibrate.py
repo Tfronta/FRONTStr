@@ -18,7 +18,7 @@ For period = -1 markers (ce_from_brackets):
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from frontstr.interp.isfg import ce_from_brackets, compress_isfg
@@ -61,7 +61,8 @@ def _motif_tokens(isfg: str) -> list[tuple[int, int, int]]:
     out = []
     for m in _MOTIF_TOKEN_RE.finditer(isfg):
         s = m.group()
-        n = int(re.search(r"\d+", s).group()) if s.startswith("[") else 1
+        count_match = re.search(r"\d+", s) if s.startswith("[") else None
+        n = int(count_match.group()) if count_match else 1
         out.append((m.start(), m.end(), n))
     return out
 

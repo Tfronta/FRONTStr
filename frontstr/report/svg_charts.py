@@ -175,7 +175,7 @@ def _nice_y_axis_max(raw: float) -> float:
         return float(math.ceil(headroom))
     step = 10 ** math.floor(math.log10(headroom))
     nice_step = step if headroom / step <= 5 else step * 2
-    return math.ceil(headroom / nice_step) * nice_step
+    return float(math.ceil(headroom / nice_step) * nice_step)
 
 
 def coverage_bar_svg(
