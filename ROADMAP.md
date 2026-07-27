@@ -23,10 +23,16 @@ science with real labs in week 4.
 - [x] Directory structure: `frontstr/`, `tests/`, `docker/`, `examples/`, `docs/`
 - [x] `pyproject.toml` with pinned deps (Python 3.11+)
 - [x] `.gitignore`, `LICENSE`, `README.md`
-- [ ] `conftest.py` with shared fixtures (tmp paths, panels, etc.)
+- [x] `conftest.py` with shared fixtures (tmp paths, panels, etc.)
 - [ ] `pre‑commit` config: `ruff`, `black`, `mypy --strict`
-- [ ] GitHub Actions: lint + test on push
-- [ ] `frontstr/__main__.py` runnable: `python -m frontstr --help`
+- [x] GitHub Actions: lint + test on push — **green** as of Jul 2026
+      (`ruff check`, `ruff format --check`, `mypy` and `pytest` all clean)
+- [x] `frontstr/__main__.py` runnable: `python -m frontstr --help`
+- [x] `tests/test_regression_hg00113.py` — end-to-end regression on a real ONT
+      slice, asserting all 25 marker genotypes plus no dropouts, no false
+      mixtures across the 5 single-source samples, POA active, and TH01 9.3
+      structurally intact. Skips cleanly when the (unversioned) BAM slices are
+      absent, so CI stays green while local runs get real coverage.
 
 **Acceptance**: `pytest` passes (with no tests yet); `frontstr --help` prints.
 
