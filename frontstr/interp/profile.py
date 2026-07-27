@@ -19,6 +19,7 @@ from frontstr.interp.catalog import annotate_alleles
 from frontstr.interp.classify import classify_allele
 from frontstr.interp.concordance import cross_check
 from frontstr.interp.flags import derive_marker_flags
+from frontstr.interp.haplotype import suppress_hp_phantoms
 from frontstr.interp.isfg import ce_from_brackets, ce_from_length, compress_isfg
 from frontstr.interp.models import Allele, MarkerResult
 from frontstr.interp.stutter import build_expected_stutter
@@ -88,6 +89,11 @@ def interpret_marker(
             calling_thresh=calling_thresh,
             longtr_inexact_seqs=inexact_seqs,
         )
+
+    # Suppress same-haplotype split-allele phantoms before the profile is
+    # called, so a phantom can neither be reported nor raise a false mixture.
+    # No-op on unphased BAMs and on allow_triallelic markers.
+    suppress_hp_phantoms(alleles, system)
 
     # Enrich ISFG / CE / iso-allele suffix from the curated catalog (no-op if None).
     annotate_alleles(alleles, system, catalog)
@@ -183,7 +189,10 @@ def _safe_pileup_and_cluster(
     return cluster_observations(
         obs,
         identity_threshold=identity_threshold,
-        len_tolerance_bp=len_tolerance_bp,
+        # A per-marker override in the panel wins over the run-wide default.
+        len_tolerance_bp=system.ont_len_tolerance or len_tolerance_bp,
+        motifs=[m for m in system.motif.split(",") if m],
+        strand=system.strand,
     )
 
 
@@ -222,6 +231,7 @@ def _allele_from_cluster(
         isfg=isfg,
         bp_diff=bp_diff,
         is_deletion=is_deletion,
+        consensus_method=c.consensus_method.value,
         allele_numeric=allele_num,
         allele_numeric_source=allele_src,
     )

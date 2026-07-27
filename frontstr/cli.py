@@ -345,8 +345,19 @@ def doctor(
     """
     import pysam
 
+    from frontstr.evidence.consensus import poa_backend_name
     from frontstr.evidence.pileup import pileup_locus
     from frontstr.panel.loader import load_panel
+
+    backend = poa_backend_name()
+    if backend:
+        console.print(f"[green]POA backend:[/green] {backend}")
+    else:
+        console.print(
+            "[red]POA backend: none[/red] — cluster consensus will fall back to a "
+            "single unpolished read, degrading ISFG strings and iso-allele calls.\n"
+            "  Fix: [bold]pip install 'frontstr[poa]'[/bold]"
+        )
 
     try:
         panel = load_panel(panel_path)
@@ -690,6 +701,17 @@ def evidence(
     len_tolerance: Annotated[
         int, typer.Option("--len-tolerance", help="bp tolerance for length binning.")
     ] = 0,
+    motif: Annotated[
+        str,
+        typer.Option(
+            "--motif",
+            help="Comma-separated marker motifs (e.g. TCTA,TCTG). Enables "
+            "repeat-core binning — pass it to reproduce what `interpret` does.",
+        ),
+    ] = "",
+    strand: Annotated[
+        str, typer.Option("--strand", help="Motif strand relative to the reference: + or -.")
+    ] = "+",
     reference: Annotated[
         Path | None,
         typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
@@ -713,7 +735,11 @@ def evidence(
 
     try:
         clusters = cluster_observations(
-            obs, identity_threshold=identity, len_tolerance_bp=len_tolerance
+            obs,
+            identity_threshold=identity,
+            len_tolerance_bp=len_tolerance,
+            motifs=[m for m in motif.split(",") if m],
+            strand=strand,
         )
     except FrontstrError as exc:
         console.print(f"[red]cluster error:[/red] {exc}")

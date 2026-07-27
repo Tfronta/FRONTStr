@@ -151,3 +151,96 @@ def test_cluster_dataclass_is_mutable_for_consensus_polish() -> None:
     c = Cluster(consensus="A")
     c.consensus = "AGAT"  # must not raise
     assert c.consensus == "AGAT"
+
+
+def test_cluster_records_how_its_consensus_was_derived() -> None:
+    """The record must distinguish a polished consensus from a single read."""
+    from frontstr.evidence.cluster import ConsensusMethod
+
+    single = cluster_observations([_obs("AGAT" * 5)])
+    assert single[0].consensus_method == ConsensusMethod.SINGLE
+
+    many = cluster_observations([_obs("AGAT" * 5, name=f"r{i}") for i in range(6)])
+    assert many[0].consensus_method in (
+        ConsensusMethod.POA_ABPOA,
+        ConsensusMethod.POA_SPOA,
+        ConsensusMethod.MODE,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Repeat-core binning: flank errors must not split an allele, microvariants must
+# not be merged. See the module docstring in frontstr/evidence/cluster.py.
+# ---------------------------------------------------------------------------
+
+_LFLANK = "GCTTCCGAGTGCAGGTCACAGGGAACACAGACTCCATGGTG"
+_RFLANK = "AGGGAAATAAGGGAGGAACAGGCCAATGGGAATCACCCCAG"
+
+# TH01: allele 9 is [AATG]9 (36 bp core); allele 9.3 is [AATG]6 ATG [AATG]3
+# (39 bp core). Both are 9 repeat units, so a unit-count key would merge them.
+_TH01_9 = "AATG" * 9
+_TH01_93 = "AATG" * 6 + "ATG" + "AATG" * 3
+
+
+def _read(core: str, *, lflank: str = _LFLANK, rflank: str = _RFLANK, name: str = "r"):
+    return _obs(lflank + core + rflank, name=name)
+
+
+def test_flank_indel_does_not_split_an_allele() -> None:
+    """The dominant ONT error mode: a 1 bp indel in the ±100 bp flank.
+
+    Binned on raw window length these are two alleles; binned on the repeat
+    core they are correctly one.
+    """
+    reads = [
+        _read(_TH01_9, name="clean"),
+        _read(_TH01_9, lflank=_LFLANK[:-1], name="del_left"),
+        _read(_TH01_9, rflank=_RFLANK + "T", name="ins_right"),
+    ]
+    assert len(cluster_observations(reads)) == 3, "raw-length binning splits them"
+
+    out = cluster_observations(reads, motifs=["AATG"])
+    assert len(out) == 1
+    assert out[0].n_reads == 3
+
+
+def test_microvariant_is_not_merged_into_the_full_repeat() -> None:
+    """TH01 9 vs 9.3 — same unit count, different core length. Must stay apart."""
+    reads = [_read(_TH01_9, name=f"a{i}") for i in range(6)]
+    reads += [_read(_TH01_93, name=f"b{i}") for i in range(5)]
+
+    out = cluster_observations(reads, motifs=["AATG"])
+    assert len(out) == 2
+    assert sorted(c.n_reads for c in out) == [5, 6]
+
+
+def test_a_real_neighbouring_allele_stays_separate() -> None:
+    """9 vs 10 repeat units differ by a whole unit — never merge."""
+    reads = [_read("AATG" * 9, name=f"a{i}") for i in range(5)]
+    reads += [_read("AATG" * 10, name=f"b{i}") for i in range(5)]
+    assert len(cluster_observations(reads, motifs=["AATG"])) == 2
+
+
+def test_without_motifs_behaviour_is_unchanged() -> None:
+    """Callers that pass no motifs keep the original window-length binning."""
+    reads = [_read(_TH01_9, name="a"), _read(_TH01_9, lflank=_LFLANK[:-1], name="b")]
+    assert len(cluster_observations(reads)) == 2
+
+
+def test_read_without_a_detectable_core_is_kept() -> None:
+    """No motif run must mean 'fall back to window length', never 'drop the read'."""
+    reads = [_read(_TH01_9, name="ok"), _obs("GCGCGCGCGCGCGCGCGCGC", name="nocore")]
+    out = cluster_observations(reads, motifs=["AATG"])
+    assert sum(c.n_reads for c in out) == 2
+
+
+def test_reverse_strand_core_is_located_on_the_canonical_orientation() -> None:
+    """Minus-strand markers must find their core after reverse-complementing."""
+    import frontstr.motifs as m
+
+    rc_reads = [
+        _obs(m.reverse_complement(_LFLANK + _TH01_9 + _RFLANK), name="a"),
+        _obs(m.reverse_complement(_LFLANK[:-1] + _TH01_9 + _RFLANK), name="b"),
+    ]
+    out = cluster_observations(rc_reads, motifs=["AATG"], strand="-")
+    assert len(out) == 1
