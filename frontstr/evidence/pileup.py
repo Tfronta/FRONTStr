@@ -112,9 +112,7 @@ def pileup_locus(
     except ImportError as exc:
         raise EvidenceError("pysam is required for pileup_locus") from exc
 
-    open_kwargs: dict[str, Any] = (
-        {"reference_filename": str(reference_fasta)} if is_cram else {}
-    )
+    open_kwargs: dict[str, Any] = {"reference_filename": str(reference_fasta)} if is_cram else {}
     try:
         bam = pysam.AlignmentFile(str(bam_path), "rc" if is_cram else "rb", **open_kwargs)
     except (ValueError, OSError) as exc:

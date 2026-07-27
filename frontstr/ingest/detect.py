@@ -93,8 +93,7 @@ def detect_input(path: Path) -> InputInfo:
         return InputInfo(kind=InputKind.FASTA, gzipped=False, aligned=None, size_bytes=size)
 
     raise IngestError(
-        f"Unrecognised input format for {path}: "
-        f"head bytes {head[:8]!r} not FASTA/FASTQ/BAM/CRAM"
+        f"Unrecognised input format for {path}: head bytes {head[:8]!r} not FASTA/FASTQ/BAM/CRAM"
     )
 
 
@@ -117,8 +116,7 @@ def _classify_gzipped(path: Path, size: int) -> InputInfo:
         return InputInfo(kind=InputKind.FASTA, gzipped=True, aligned=None, size_bytes=size)
 
     raise IngestError(
-        f"Gzipped input {path} is neither BAM, FASTQ, nor FASTA "
-        f"(inner head: {inner_head[:8]!r})"
+        f"Gzipped input {path} is neither BAM, FASTQ, nor FASTA (inner head: {inner_head[:8]!r})"
     )
 
 

@@ -121,13 +121,9 @@ def cluster_observations(
         reference orientation.
     """
     if not 0.0 < identity_threshold <= 1.0:
-        raise EvidenceError(
-            f"identity_threshold must be in (0, 1], got {identity_threshold!r}"
-        )
+        raise EvidenceError(f"identity_threshold must be in (0, 1], got {identity_threshold!r}")
     if len_tolerance_bp < 0:
-        raise EvidenceError(
-            f"len_tolerance_bp must be >= 0, got {len_tolerance_bp!r}"
-        )
+        raise EvidenceError(f"len_tolerance_bp must be >= 0, got {len_tolerance_bp!r}")
 
     if not obs:
         return []
@@ -180,9 +176,7 @@ def _merge_close_length_bins(
     return merged
 
 
-def _cluster_by_identity(
-    members: list[Observation], identity_threshold: float
-) -> list[Cluster]:
+def _cluster_by_identity(members: list[Observation], identity_threshold: float) -> list[Cluster]:
     """Seed-and-grow clustering: each seed is the first uncovered observation."""
     clusters: list[Cluster] = []
     remaining = list(members)

@@ -126,8 +126,7 @@ def _mutate(seq: str, rng: random.Random, sub: float = 0.01) -> str:
     respected and the comparison isolates base-level correction.
     """
     return "".join(
-        rng.choice([b for b in "ACGT" if b != c]) if rng.random() < sub else c
-        for c in seq
+        rng.choice([b for b in "ACGT" if b != c]) if rng.random() < sub else c for c in seq
     )
 
 

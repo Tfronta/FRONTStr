@@ -13,8 +13,8 @@ from frontstr.panel.models import System
 # Synthetic AMEL coordinates (0-based half-open in BAM; 1-based in System)
 _CHROM_X = "chrX"
 _CHROM_Y = "chrY"
-_X_START = 1000   # ref_start (1-based) in System
-_X_END = 1100     # ref_end (1-based) in System  → pileup window [999, 1100)
+_X_START = 1000  # ref_start (1-based) in System
+_X_END = 1100  # ref_end (1-based) in System  → pileup window [999, 1100)
 _Y_START = 2000
 _Y_END = 2100
 _CHR_LEN = 10_000
@@ -80,6 +80,7 @@ def _write_amel_bam(out_path: Path, x_reads: int, y_reads: int) -> Path:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_amel_female(tmp_path: Path) -> None:
     """Only X reads → female (X, HOMOZYGOUS)."""

@@ -21,8 +21,13 @@ from frontstr.panel.models import System
 def _cluster(consensus: str, n_reads: int) -> Cluster:
     members = [
         Observation(
-            read_id=f"r{i}", sequence=consensus, hp=None, mean_qual=30.0,
-            strand="+", flank_left_ok=True, flank_right_ok=True,
+            read_id=f"r{i}",
+            sequence=consensus,
+            hp=None,
+            mean_qual=30.0,
+            strand="+",
+            flank_left_ok=True,
+            flank_right_ok=True,
         )
         for i in range(n_reads)
     ]
@@ -85,8 +90,12 @@ def test_build_expected_stutter_scales_with_lus() -> None:
     the ONT R10 slice set).
     """
     system = System(
-        name="TEST", chromosome="chr1", ref_start=1, ref_end=200,
-        motif="AGAT", period=4,
+        name="TEST",
+        chromosome="chr1",
+        ref_start=1,
+        ref_end=200,
+        motif="AGAT",
+        period=4,
     )
     short = build_expected_stutter([_cluster("AGAT" * 10, n_reads=100)], system)
     long = build_expected_stutter([_cluster("AGAT" * 14, n_reads=100)], system)
@@ -99,8 +108,12 @@ def test_build_expected_stutter_step_factors() -> None:
     The geometric ``rate ** step`` form underestimates -2 on ONT by ~2.5x.
     """
     system = System(
-        name="TEST", chromosome="chr1", ref_start=1, ref_end=200,
-        motif="AGAT", period=4,
+        name="TEST",
+        chromosome="chr1",
+        ref_start=1,
+        ref_end=200,
+        motif="AGAT",
+        period=4,
     )
     exp = build_expected_stutter([_cluster("AGAT" * 13, n_reads=100)], system)
     minus1 = exp["AGAT" * 12]
@@ -118,8 +131,12 @@ def test_lus_is_clamped_to_the_calibrated_range() -> None:
     and an implausible one at very high LUS; neither is measured.
     """
     system = System(
-        name="TEST", chromosome="chr1", ref_start=1, ref_end=400,
-        motif="AGAT", period=4,
+        name="TEST",
+        chromosome="chr1",
+        ref_start=1,
+        ref_end=400,
+        motif="AGAT",
+        period=4,
     )
     at_min = build_expected_stutter([_cluster("AGAT" * 10, n_reads=100)], system)
     below = build_expected_stutter([_cluster("AGAT" * 6, n_reads=100)], system)
@@ -133,8 +150,12 @@ def test_lus_is_clamped_to_the_calibrated_range() -> None:
 def test_slus_stutter_is_rated_by_its_own_run_length() -> None:
     """A shorter secondary run must produce less stutter than the primary one."""
     system = System(
-        name="D3S1358", chromosome="chr3", ref_start=1, ref_end=200,
-        motif="TCTA,TCTG", period=4,
+        name="D3S1358",
+        chromosome="chr3",
+        ref_start=1,
+        ref_end=200,
+        motif="TCTA,TCTG",
+        period=4,
     )
     parent_seq = "TCTA" * 11 + "TCTG" + "TCTA" * 14
     exp = build_expected_stutter([_cluster(parent_seq, n_reads=100)], system)
@@ -147,8 +168,12 @@ def test_slus_stutter_is_rated_by_its_own_run_length() -> None:
 def test_legacy_flat_lus_override_is_still_honoured() -> None:
     """Labs validated against the old flat rate can pin it per marker."""
     system = System(
-        name="TPOX", chromosome="chr2", ref_start=1, ref_end=200,
-        motif="AATG", period=4,
+        name="TPOX",
+        chromosome="chr2",
+        ref_start=1,
+        ref_end=200,
+        motif="AATG",
+        period=4,
         stutter_overrides={"lus": 0.20},
     )
     exp = build_expected_stutter([_cluster("AATG" * 8, n_reads=200)], system)
@@ -157,8 +182,12 @@ def test_legacy_flat_lus_override_is_still_honoured() -> None:
 
 def test_per_marker_slope_override() -> None:
     system = System(
-        name="TEST", chromosome="chr1", ref_start=1, ref_end=200,
-        motif="AGAT", period=4,
+        name="TEST",
+        chromosome="chr1",
+        ref_start=1,
+        ref_end=200,
+        motif="AGAT",
+        period=4,
         stutter_overrides={"log_intercept": -4.0, "log_slope": 0.0},
     )
     exp = build_expected_stutter([_cluster("AGAT" * 12, n_reads=100)], system)
@@ -168,8 +197,12 @@ def test_per_marker_slope_override() -> None:
 def test_build_expected_stutter_accumulates() -> None:
     """Two parents that share a -1 variant should accumulate their contributions."""
     system = System(
-        name="T", chromosome="chr1", ref_start=1, ref_end=200,
-        motif="AGAT", period=4,
+        name="T",
+        chromosome="chr1",
+        ref_start=1,
+        ref_end=200,
+        motif="AGAT",
+        period=4,
     )
     one = build_expected_stutter([_cluster("AGAT" * 12, n_reads=100)], system)
     two = build_expected_stutter(
@@ -180,7 +213,11 @@ def test_build_expected_stutter_accumulates() -> None:
 
 def test_build_expected_stutter_empty() -> None:
     system = System(
-        name="T", chromosome="chr1", ref_start=1, ref_end=10,
-        motif="AGAT", period=4,
+        name="T",
+        chromosome="chr1",
+        ref_start=1,
+        ref_end=10,
+        motif="AGAT",
+        period=4,
     )
     assert build_expected_stutter([], system) == {}

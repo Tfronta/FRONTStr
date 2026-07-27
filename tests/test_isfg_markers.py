@@ -13,6 +13,7 @@ from frontstr.interp.isfg import ce_from_brackets, compress_isfg
 # D2S441 — strand "+" (TCTA motif on plus strand)
 # ---------------------------------------------------------------------------
 
+
 def test_d2s441_strand_is_plus_not_minus() -> None:
     """D2S441 motif is TCTA on the + strand — strand='+' must produce brackets."""
     # HG00113 allele 1: t [TCTA]10 ttta TCTA  (49 bp)
@@ -20,15 +21,15 @@ def test_d2s441_strand_is_plus_not_minus() -> None:
     assert len(consensus) == 49
     out = compress_isfg(consensus, motif="TCTA,TCAA", strand="+")
     assert "[TCTA]10" in out
-    assert "ttta" in out          # internal intercalation must be lowercase
-    assert out.startswith("t ")   # leading uncounted base must be lowercase
+    assert "ttta" in out  # internal intercalation must be lowercase
+    assert out.startswith("t ")  # leading uncounted base must be lowercase
 
 
 def test_d2s441_strand_minus_is_wrong() -> None:
     """Applying strand='-' to D2S441 must NOT produce TCTA brackets."""
     consensus = "T" + "TCTA" * 10 + "TTTA" + "TCTA"
     out = compress_isfg(consensus, motif="TCTA,TCAA", strand="-")
-    assert "[TCTA]" not in out    # RC destroys the TCTA pattern
+    assert "[TCTA]" not in out  # RC destroys the TCTA pattern
 
 
 def test_d2s441_ce_from_brackets() -> None:
@@ -52,6 +53,7 @@ def test_d2s441_allele2_structure() -> None:
 # D1S1656 — strand "-" (TAGA motif on minus strand)
 # ---------------------------------------------------------------------------
 
+
 def test_d1s1656_strand_minus_produces_taga_brackets() -> None:
     """D1S1656 consensus on + strand is ATCT repeats; RC gives [TAGA]n."""
     # HG00113 allele 1: 11 ATCT on + strand + trailing A = 45 bp
@@ -59,7 +61,7 @@ def test_d1s1656_strand_minus_produces_taga_brackets() -> None:
     assert len(consensus) == 45
     out = compress_isfg(consensus, motif="TAGA,CAGA", strand="-")
     assert "[TAGA]11" in out
-    assert out.endswith("t")      # trailing uncounted base must be lowercase
+    assert out.endswith("t")  # trailing uncounted base must be lowercase
 
 
 def test_d1s1656_strand_plus_fails() -> None:
@@ -80,6 +82,7 @@ def test_d1s1656_ce_from_brackets() -> None:
 # D12S391 — strand "+" (AGAT,AGAC compound motif)
 # ---------------------------------------------------------------------------
 
+
 def test_d12s391_compound_motif() -> None:
     """D12S391 uses two motifs; both runs must be bracketed separately."""
     # HG00113: at [AGAT]6 [AGAC]8 + long non-motif trailer
@@ -96,6 +99,7 @@ def test_d12s391_compound_motif() -> None:
 # D18S51 — trailing 'ag' microvariant (P7)
 # ---------------------------------------------------------------------------
 
+
 def test_d18s51_trailing_ag_lowercase() -> None:
     """D18S51 canonical structure: [AGAA]n ag — trailing 2 bp must be lowercase."""
     # Allele 13: 13 × AGAA + AG = 54 bp (ref_end extended by 1 vs original YAML)
@@ -108,12 +112,14 @@ def test_d18s51_trailing_ag_lowercase() -> None:
 def test_d18s51_ce_allele13() -> None:
     """With corr_value=2 and 54 bp → CE 13.0 (not 12.3)."""
     from frontstr.interp.isfg import ce_from_length
+
     assert ce_from_length(54, period=4, corr_value=2) == 13.0
 
 
 def test_d18s51_ce_allele12() -> None:
     """Allele 12: 50 bp with corr_value=2 → CE 12.0."""
     from frontstr.interp.isfg import ce_from_length
+
     assert ce_from_length(50, period=4, corr_value=2) == 12.0
 
 
@@ -122,7 +128,7 @@ def test_d18s51_old_53bp_gives_truncated_output() -> None:
     # After P3, non-motif is lowercase → was 'a' not 'ag'
     seq_old = "AGAA" * 13 + "A"
     out = compress_isfg(seq_old, motif="AGAA")
-    assert out == "[AGAA]13 a"   # shows truncation — only fixed by coord change
+    assert out == "[AGAA]13 a"  # shows truncation — only fixed by coord change
 
 
 def test_d12s391_ce_from_brackets() -> None:

@@ -15,6 +15,7 @@ from tests.conftest import SYNTH_CHR_LEN, SYNTH_CHROM, SYNTH_FLANK_LEN, SYNTH_TR
 # Helpers for CRAM tests
 # ---------------------------------------------------------------------------
 
+
 def _write_synth_fasta(path: Path) -> Path:
     """Write a minimal FASTA for SYNTH_CHROM and index it with pysam.faidx."""
     seq = "A" * SYNTH_CHR_LEN
@@ -26,7 +27,12 @@ def _write_synth_fasta(path: Path) -> Path:
 def _bam_to_cram(bam_path: Path, cram_path: Path, fasta_path: Path) -> Path:
     """Convert an existing sorted+indexed BAM to CRAM using the given reference."""
     pysam.view(
-        "-C", "-T", str(fasta_path), "-o", str(cram_path), str(bam_path),
+        "-C",
+        "-T",
+        str(fasta_path),
+        "-o",
+        str(cram_path),
+        str(bam_path),
         catch_stdout=False,
     )
     pysam.index(str(cram_path))
@@ -98,17 +104,13 @@ def test_pileup_mean_quality_set(synth_bam_heterozygous: Path) -> None:
 
 
 def test_pileup_drops_low_mapq(synth_bam_low_mapq: Path) -> None:
-    obs = pileup_locus(
-        synth_bam_low_mapq, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END, min_mapq=20
-    )
+    obs = pileup_locus(synth_bam_low_mapq, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END, min_mapq=20)
     assert len(obs) == 3
     assert {o.read_id for o in obs} == {"hi0", "hi1", "hi2"}
 
 
 def test_pileup_keeps_low_mapq_when_threshold_lowered(synth_bam_low_mapq: Path) -> None:
-    obs = pileup_locus(
-        synth_bam_low_mapq, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END, min_mapq=0
-    )
+    obs = pileup_locus(synth_bam_low_mapq, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END, min_mapq=0)
     assert len(obs) == 6
 
 
@@ -142,6 +144,7 @@ def test_pileup_missing_bam(tmp_path: Path) -> None:
 # Bug #3 regression tests: deletion exactly at the TR boundary
 # ---------------------------------------------------------------------------
 
+
 def test_deletion_at_tr_start_not_dropped(tmp_path: Path) -> None:
     """A read with a deletion at rpos==start must not be silently dropped.
 
@@ -153,10 +156,10 @@ def test_deletion_at_tr_start_not_dropped(tmp_path: Path) -> None:
     kept_tr = SYNTH_TR_END - SYNTH_TR_START - del_bp  # 44
     seq = "A" * SYNTH_FLANK_LEN + "AGAT" * (kept_tr // 4) + "T" * SYNTH_FLANK_LEN
     cigar = [
-        (0, SYNTH_FLANK_LEN),   # 100M left flank
-        (2, del_bp),             # 4D — deletion at rpos == SYNTH_TR_START
-        (0, kept_tr),            # 44M — rest of TR
-        (0, SYNTH_FLANK_LEN),   # 100M right flank
+        (0, SYNTH_FLANK_LEN),  # 100M left flank
+        (2, del_bp),  # 4D — deletion at rpos == SYNTH_TR_START
+        (0, kept_tr),  # 44M — rest of TR
+        (0, SYNTH_FLANK_LEN),  # 100M right flank
     ]
     bam = _make_boundary_bam(tmp_path / "del_start.bam", cigar, seq)
     obs = pileup_locus(bam, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END)
@@ -172,14 +175,14 @@ def test_deletion_at_tr_end_not_dropped(tmp_path: Path) -> None:
     The full TR (48 bp) is present in the read; the deletion is in the right flank.
     """
     del_bp = 4
-    full_tr = SYNTH_TR_END - SYNTH_TR_START   # 48
-    right_flank = SYNTH_FLANK_LEN - del_bp    # 96
+    full_tr = SYNTH_TR_END - SYNTH_TR_START  # 48
+    right_flank = SYNTH_FLANK_LEN - del_bp  # 96
     seq = "A" * SYNTH_FLANK_LEN + "AGAT" * (full_tr // 4) + "T" * right_flank
     cigar = [
         (0, SYNTH_FLANK_LEN),  # 100M left flank
-        (0, full_tr),           # 48M full TR
-        (2, del_bp),            # 4D — deletion at rpos == SYNTH_TR_END
-        (0, right_flank),       # 96M right flank (shortened by deletion)
+        (0, full_tr),  # 48M full TR
+        (2, del_bp),  # 4D — deletion at rpos == SYNTH_TR_END
+        (0, right_flank),  # 96M right flank (shortened by deletion)
     ]
     bam = _make_boundary_bam(tmp_path / "del_end.bam", cigar, seq)
     obs = pileup_locus(bam, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END)
@@ -190,6 +193,7 @@ def test_deletion_at_tr_end_not_dropped(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # CRAM support tests
 # ---------------------------------------------------------------------------
+
 
 def test_cram_requires_reference_fasta(tmp_path: Path) -> None:
     """pileup_locus on a .cram file without reference_fasta raises EvidenceError."""
@@ -207,8 +211,7 @@ def test_cram_pileup_returns_same_observations(
     cram = _bam_to_cram(synth_bam_heterozygous, tmp_path / "het.cram", fasta)
 
     obs_bam = pileup_locus(synth_bam_heterozygous, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END)
-    obs_cram = pileup_locus(cram, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END,
-                            reference_fasta=fasta)
+    obs_cram = pileup_locus(cram, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END, reference_fasta=fasta)
 
     assert len(obs_cram) == len(obs_bam)
     bam_lengths = sorted(len(o.sequence) for o in obs_bam)

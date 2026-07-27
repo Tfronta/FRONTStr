@@ -65,19 +65,17 @@ def interpret_marker(
     )
 
     alleles = [
-        _allele_from_cluster(idx, c, system, ref_length_bp)
-        for idx, c in enumerate(clusters)
+        _allele_from_cluster(idx, c, system, ref_length_bp) for idx, c in enumerate(clusters)
     ]
 
     parents = [
-        c for c, a in zip(clusters, alleles, strict=True)
+        c
+        for c, a in zip(clusters, alleles, strict=True)
         if a.fraction(total_reads) >= parent_fraction and not a.is_deletion
     ]
     expected = build_expected_stutter(parents, system)
 
-    inexact_seqs = frozenset(
-        a.sequence for a in (longtr.alleles if longtr else []) if a.inexact
-    )
+    inexact_seqs = frozenset(a.sequence for a in (longtr.alleles if longtr else []) if a.inexact)
 
     for a in alleles:
         a.expected_stutter = expected.get(a.consensus, 0.0)
@@ -150,12 +148,16 @@ def interpret_run(
     out: list[MarkerResult] = []
     for system in panel.systems:
         if system.marker_type == "amel":
-            out.append(interpret_amel(system, bam, min_mapq=min_mapq,
-                                      reference_fasta=reference_fasta))
+            out.append(
+                interpret_amel(system, bam, min_mapq=min_mapq, reference_fasta=reference_fasta)
+            )
             continue
         clusters = _safe_pileup_and_cluster(
-            bam=bam, system=system, min_mapq=min_mapq,
-            identity_threshold=identity_threshold, len_tolerance_bp=len_tolerance_bp,
+            bam=bam,
+            system=system,
+            min_mapq=min_mapq,
+            identity_threshold=identity_threshold,
+            len_tolerance_bp=len_tolerance_bp,
             reference_fasta=reference_fasta,
         )
         out.append(
@@ -172,15 +174,23 @@ def interpret_run(
 
 
 def _safe_pileup_and_cluster(
-    *, bam: Path, system: System, min_mapq: int,
-    identity_threshold: float, len_tolerance_bp: int,
+    *,
+    bam: Path,
+    system: System,
+    min_mapq: int,
+    identity_threshold: float,
+    len_tolerance_bp: int,
     reference_fasta: Path | None = None,
 ) -> list[Cluster]:
     """Pileup+cluster wrapper that returns ``[]`` instead of raising on empty loci."""
     try:
         obs = pileup_locus(
-            bam, system.chromosome, system.ref_start - 1, system.ref_end,
-            min_mapq=min_mapq, reference_fasta=reference_fasta,
+            bam,
+            system.chromosome,
+            system.ref_start - 1,
+            system.ref_end,
+            min_mapq=min_mapq,
+            reference_fasta=reference_fasta,
         )
     except Exception:
         return []
@@ -197,7 +207,10 @@ def _safe_pileup_and_cluster(
 
 
 def _allele_from_cluster(
-    idx: int, c: Cluster, system: System, ref_length_bp: int,
+    idx: int,
+    c: Cluster,
+    system: System,
+    ref_length_bp: int,
 ) -> Allele:
     """Build an unclassified :class:`Allele` from one :class:`Cluster`."""
     consensus = c.consensus
@@ -208,14 +221,8 @@ def _allele_from_cluster(
         ce = (raw_ce - system.corr_value) if raw_ce is not None else None
     else:
         ce = ce_from_length(len(consensus), system.period, system.corr_value)
-    bp_diff = (
-        len(consensus) - ref_length_bp
-        if ref_length_bp is not None
-        else 0
-    )
-    allele_num, allele_src = compute_allele_numeric(
-        len(consensus), system, ref_length_bp
-    )
+    bp_diff = len(consensus) - ref_length_bp if ref_length_bp is not None else 0
+    allele_num, allele_src = compute_allele_numeric(len(consensus), system, ref_length_bp)
     return Allele(
         cluster_index=idx,
         consensus=consensus,

@@ -13,16 +13,28 @@ from frontstr.report.svg_charts import (
 )
 
 
-def _allele(idx: int, ce: float, cov: int, status: str = "allele",
-            expected: float = 0.0, consensus_suffix: str = "") -> dict:
+def _allele(
+    idx: int,
+    ce: float,
+    cov: int,
+    status: str = "allele",
+    expected: float = 0.0,
+    consensus_suffix: str = "",
+) -> dict:
     consensus = ("AATG" * int(ce)) + consensus_suffix
     return {
-        "cluster_index": idx, "ce": ce, "n_reads_total": cov,
-        "n_reads_hp1": cov // 2, "n_reads_hp2": cov - cov // 2,
-        "n_reads_hp_none": 0, "length_bp": len(consensus),
+        "cluster_index": idx,
+        "ce": ce,
+        "n_reads_total": cov,
+        "n_reads_hp1": cov // 2,
+        "n_reads_hp2": cov - cov // 2,
+        "n_reads_hp_none": 0,
+        "length_bp": len(consensus),
         "consensus": consensus,
-        "isfg": f"[AATG]{int(ce)}", "expected_stutter": expected,
-        "status": status, "fraction": cov / 121,
+        "isfg": f"[AATG]{int(ce)}",
+        "expected_stutter": expected,
+        "status": status,
+        "fraction": cov / 121,
     }
 
 
@@ -98,7 +110,8 @@ def test_allele_coverage_stacked_isoallele_group() -> None:
     svg = allele_coverage_svg(marker)
     root = ET.fromstring(svg)
     labeled = [
-        r for r in root.findall(".//{http://www.w3.org/2000/svg}rect")
+        r
+        for r in root.findall(".//{http://www.w3.org/2000/svg}rect")
         if r.get("class") == "ngs-segment"
     ]
     assert len(labeled) == 2
@@ -121,8 +134,11 @@ def test_coverage_bar_includes_dropout_line() -> None:
     svg = coverage_bar_svg(table, floor=30)
     root = ET.fromstring(svg)
     lines = root.findall(".//{http://www.w3.org/2000/svg}line")
-    dashed = [ln for ln in lines if "dasharray" in (ln.get("stroke-dasharray") or "") or
-              ln.get("stroke-dasharray") == "3 2"]
+    dashed = [
+        ln
+        for ln in lines
+        if "dasharray" in (ln.get("stroke-dasharray") or "") or ln.get("stroke-dasharray") == "3 2"
+    ]
     assert dashed, "dropout floor reference line missing"
     text_blob = "".join((t.text or "") for t in root.findall(".//{http://www.w3.org/2000/svg}text"))
     assert "dropout floor" in text_blob

@@ -20,30 +20,52 @@ from frontstr.report.payload import RunContext, serialize_run
 
 def _system(name: str = "TH01") -> System:
     return System(
-        name=name, chromosome="chr11", ref_start=2_171_000, ref_end=2_171_050,
-        motif="AATG", period=4,
+        name=name,
+        chromosome="chr11",
+        ref_start=2_171_000,
+        ref_end=2_171_050,
+        motif="AATG",
+        period=4,
     )
 
 
-def _allele(idx: int, ce: float, n_reads: int, status: AlleleStatus,
-            consensus: str = "AATG") -> Allele:
+def _allele(
+    idx: int, ce: float, n_reads: int, status: AlleleStatus, consensus: str = "AATG"
+) -> Allele:
     return Allele(
-        cluster_index=idx, consensus=consensus * int(ce),
+        cluster_index=idx,
+        consensus=consensus * int(ce),
         length_bp=len(consensus) * int(ce),
-        n_reads_total=n_reads, n_reads_hp1=n_reads // 2, n_reads_hp2=n_reads // 2,
-        n_reads_hp_none=0, n_forward=n_reads, n_reverse=0, mean_qual=30.0,
-        ce=ce, isfg=f"[{consensus}]{int(ce)}", bp_diff=0, is_deletion=False, status=status,
+        n_reads_total=n_reads,
+        n_reads_hp1=n_reads // 2,
+        n_reads_hp2=n_reads // 2,
+        n_reads_hp_none=0,
+        n_forward=n_reads,
+        n_reverse=0,
+        mean_qual=30.0,
+        ce=ce,
+        isfg=f"[{consensus}]{int(ce)}",
+        bp_diff=0,
+        is_deletion=False,
+        status=status,
     )
 
 
-def _marker_result(name: str, alleles: list[Allele], called: list[Allele],
-                   rule: CallRule = CallRule.HETEROZYGOUS,
-                   tri: TriType = TriType.NONE,
-                   discordant: bool = False) -> MarkerResult:
+def _marker_result(
+    name: str,
+    alleles: list[Allele],
+    called: list[Allele],
+    rule: CallRule = CallRule.HETEROZYGOUS,
+    tri: TriType = TriType.NONE,
+    discordant: bool = False,
+) -> MarkerResult:
     return MarkerResult(
-        marker_name=name, system=_system(name),
-        alleles=alleles, alleles_called=called,
-        call_rule=rule, tri_type=tri,
+        marker_name=name,
+        system=_system(name),
+        alleles=alleles,
+        alleles_called=called,
+        call_rule=rule,
+        tri_type=tri,
         total_reads=sum(a.n_reads_total for a in alleles),
         discordant=discordant,
     )
@@ -105,19 +127,43 @@ def test_serialize_run_minimal() -> None:
 def test_iso_alleles_flag_and_designation() -> None:
     """Catalog suffix → iso designation in seq_rows + has_iso on the CE row."""
     a1 = Allele(
-        cluster_index=0, consensus="TCTA" * 15, length_bp=60,
-        n_reads_total=19, n_reads_hp1=18, n_reads_hp2=1, n_reads_hp_none=0,
-        n_forward=12, n_reverse=7, mean_qual=30.0, ce=15.0, isfg="[TCTA]15",
-        bp_diff=0, is_deletion=False, allele_numeric=15.0,
-        allele_numeric_source="period_ce", status=AlleleStatus.ALLELE,
+        cluster_index=0,
+        consensus="TCTA" * 15,
+        length_bp=60,
+        n_reads_total=19,
+        n_reads_hp1=18,
+        n_reads_hp2=1,
+        n_reads_hp_none=0,
+        n_forward=12,
+        n_reverse=7,
+        mean_qual=30.0,
+        ce=15.0,
+        isfg="[TCTA]15",
+        bp_diff=0,
+        is_deletion=False,
+        allele_numeric=15.0,
+        allele_numeric_source="period_ce",
+        status=AlleleStatus.ALLELE,
         iso=IsoAllele(suffix="a", match_type="exact", distance=0, source="STRSeq"),
     )
     a2 = Allele(
-        cluster_index=1, consensus="TCTG" + "TCTA" * 14, length_bp=60,
-        n_reads_total=17, n_reads_hp1=1, n_reads_hp2=16, n_reads_hp_none=0,
-        n_forward=9, n_reverse=8, mean_qual=30.0, ce=15.0, isfg="TCTG [TCTA]14",
-        bp_diff=0, is_deletion=False, allele_numeric=15.0,
-        allele_numeric_source="period_ce", status=AlleleStatus.ALLELE,
+        cluster_index=1,
+        consensus="TCTG" + "TCTA" * 14,
+        length_bp=60,
+        n_reads_total=17,
+        n_reads_hp1=1,
+        n_reads_hp2=16,
+        n_reads_hp_none=0,
+        n_forward=9,
+        n_reverse=8,
+        mean_qual=30.0,
+        ce=15.0,
+        isfg="TCTG [TCTA]14",
+        bp_diff=0,
+        is_deletion=False,
+        allele_numeric=15.0,
+        allele_numeric_source="period_ce",
+        status=AlleleStatus.ALLELE,
         iso=IsoAllele(suffix="b", match_type="exact", distance=0, source="STRSeq"),
     )
     result = _marker_result("D3S1358", [a1, a2], [a1, a2])
@@ -204,8 +250,13 @@ def test_profile_row_compound_shows_bracket_count_not_delta() -> None:
         MarkerResult(
             marker_name="vWA",
             system=System(
-                name="vWA", chromosome="chr12", ref_start=5_983_877,
-                ref_end=5_984_149, motif="TCTA,TCTG", period=-1, corr_value=8,
+                name="vWA",
+                chromosome="chr12",
+                ref_start=5_983_877,
+                ref_end=5_984_149,
+                motif="TCTA,TCTG",
+                period=-1,
+                corr_value=8,
             ),
             alleles=[comp],
             alleles_called=[comp],
@@ -247,12 +298,18 @@ def test_serialize_run_tri_and_mixture_flags() -> None:
     ]
     results = [
         _marker_result(
-            "TPOX_TRI", cands, cands,
-            rule=CallRule.TRIALLELIC_TYPE_II, tri=TriType.TYPE_II_BALANCED,
+            "TPOX_TRI",
+            cands,
+            cands,
+            rule=CallRule.TRIALLELIC_TYPE_II,
+            tri=TriType.TYPE_II_BALANCED,
         ),
         _marker_result(
-            "VWA_MIX", cands, cands[:2],
-            rule=CallRule.TWO_CALLED_THREE_PRESENT, tri=TriType.MIXTURE_SUSPECTED,
+            "VWA_MIX",
+            cands,
+            cands[:2],
+            rule=CallRule.TWO_CALLED_THREE_PRESENT,
+            tri=TriType.MIXTURE_SUSPECTED,
         ),
     ]
     payload = serialize_run(results, RunContext(sample_name="S", panel_name="P"))

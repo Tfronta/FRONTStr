@@ -16,12 +16,7 @@ _BRACKET_REPEAT = re.compile(r"\[([A-Za-z]+)\](\d+)")
 
 
 def _xml_escape(s: str) -> str:
-    return (
-        s.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
 def highlight_repeat_spans(consensus: str, motif_field: str) -> str:

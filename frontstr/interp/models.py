@@ -122,9 +122,7 @@ class Flag(BaseModel):
     message: str
 
     @classmethod
-    def of(
-        cls, code: FlagCode, message: str, severity: FlagSeverity | None = None
-    ) -> Flag:
+    def of(cls, code: FlagCode, message: str, severity: FlagSeverity | None = None) -> Flag:
         """Build a flag, defaulting severity from the code when not given."""
         return cls(
             code=code,
