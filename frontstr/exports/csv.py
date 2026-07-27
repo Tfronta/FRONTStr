@@ -267,9 +267,7 @@ def _fmt_number(value: Any) -> str:
     return str(value)
 
 
-def _write_csv(
-    out_path: Path, headers: tuple[str, ...], rows: list[dict[str, Any]]
-) -> Path:
+def _write_csv(out_path: Path, headers: tuple[str, ...], rows: list[dict[str, Any]]) -> Path:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=headers, lineterminator="\n")

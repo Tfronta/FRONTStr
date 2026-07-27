@@ -57,9 +57,7 @@ def derive_marker_flags(result: MarkerResult) -> None:
 
     phantoms = [a for a in result.alleles if a.status == AlleleStatus.HP_PHANTOM]
     if phantoms:
-        detail = ", ".join(
-            f"{a.length_bp} bp / {a.n_reads_total} reads" for a in phantoms
-        )
+        detail = ", ".join(f"{a.length_bp} bp / {a.n_reads_total} reads" for a in phantoms)
         add(
             FlagCode.HP_PHANTOM_COLLAPSED,
             f"{len(phantoms)} candidate(s) at {result.marker_name} suppressed as "
@@ -67,9 +65,7 @@ def derive_marker_flags(result: MarkerResult) -> None:
             "are counted in the owning allele's n_reads_absorbed.",
         )
 
-    unpolished = [
-        a for a in result.alleles_called if a.consensus_method == ConsensusMethod.MODE
-    ]
+    unpolished = [a for a in result.alleles_called if a.consensus_method == ConsensusMethod.MODE]
     if unpolished:
         add(
             FlagCode.CONSENSUS_FALLBACK,

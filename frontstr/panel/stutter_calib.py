@@ -392,12 +392,8 @@ def summarise(observations: list[StutterObservation]) -> dict[str, object]:
     by_step = {
         str(step): {
             "n": sum(1 for o in observations if o.step == step),
-            "pooled_ratio": round(
-                _pooled_ratio([o for o in observations if o.step == step]), 4
-            ),
-            "n_zero": sum(
-                1 for o in observations if o.step == step and o.stutter_reads == 0
-            ),
+            "pooled_ratio": round(_pooled_ratio([o for o in observations if o.step == step]), 4),
+            "n_zero": sum(1 for o in observations if o.step == step and o.stutter_reads == 0),
         }
         for step in MODELLED_STEPS
     }
@@ -428,7 +424,5 @@ def load_stutter_model(path: Path) -> StutterModel:
 def dump_stutter_model(model: StutterModel, path: Path) -> Path:
     """Write a calibrated model to JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(model.model_dump(mode="json"), indent=2) + "\n", encoding="utf-8"
-    )
+    path.write_text(json.dumps(model.model_dump(mode="json"), indent=2) + "\n", encoding="utf-8")
     return path

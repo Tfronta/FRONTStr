@@ -139,9 +139,7 @@ def build_expected_stutter(
         cov = parent.n_reads
         if cov <= 0 or not parent.consensus:
             continue
-        for variant_seq, run, step, source in _virtual_stutters_with_run(
-            parent.consensus, motifs
-        ):
+        for variant_seq, run, step, source in _virtual_stutters_with_run(parent.consensus, motifs):
             if flat_rate is not None:
                 rate = flat_rate ** abs(step) * effective.step_factors.get(str(step), 1.0)
             else:

@@ -97,6 +97,7 @@ def test_ce_undefined_for_multi_motif() -> None:
 # ce_from_brackets (P4 — compound-motif CE)
 # ---------------------------------------------------------------------------
 
+
 def test_ce_from_brackets_d21s11_allele31() -> None:
     """D21S11 canonical allele 31: sum of all [TCTA]/[TCTG] bracket counts."""
     isfg = "[TCTA]6 [TCTG]5 [TCTA]3 ta [TCTA]3 tca [TCTA]2 tccata [TCTA]12"
@@ -142,6 +143,7 @@ def test_ce_from_brackets_no_motif_found() -> None:
 # ---------------------------------------------------------------------------
 # Lowercase uncounted nucleotides (P3 — Phillips 2018 Rule 2)
 # ---------------------------------------------------------------------------
+
 
 def test_compress_isfg_lowercase_d13s317_like() -> None:
     """D13S317: trailing 'aat' must be lowercase."""

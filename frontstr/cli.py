@@ -49,7 +49,8 @@ def main(
     _version: Annotated[
         bool | None,
         typer.Option(
-            "--version", "-V",
+            "--version",
+            "-V",
             callback=_version_callback,
             is_eager=True,
             help="Show version and exit.",
@@ -144,10 +145,7 @@ def batch(
         str,
         typer.Option(
             "--formats",
-            help=(
-                "Comma-separated list. One or more of: "
-                "profile,evidence,seqs,json,html."
-            ),
+            help=("Comma-separated list. One or more of: profile,evidence,seqs,json,html."),
         ),
     ] = "profile,evidence,seqs,json,html",
     workers: Annotated[
@@ -250,7 +248,9 @@ def batch(
 def call(
     bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM.")],
     panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
-    reference: Annotated[Path, typer.Option("--reference", "-r", help="Reference FASTA (indexed).")],
+    reference: Annotated[
+        Path, typer.Option("--reference", "-r", help="Reference FASTA (indexed).")
+    ],
     out_dir: Annotated[Path, typer.Option("--out", "-o", help="Output directory.")],
     platform: Annotated[str, typer.Option("--platform", help="ont|hifi.")] = "ont",
     chrom: Annotated[
@@ -283,8 +283,11 @@ def call(
         try:
             panel = load_panel(panel_path)
             runner = LongTRRunner(
-                panel=panel, reference=reference, platform=platform,
-                phased=phased, binary=binary,
+                panel=panel,
+                reference=reference,
+                platform=platform,
+                phased=phased,
+                binary=binary,
             )
             run = runner.run(bam=bam, out_dir=out_dir, chrom=chrom)
             results = run.results
@@ -303,11 +306,7 @@ def call(
     t.add_column("Alleles (bp_diff)")
     for r in results:
         sample = next(iter(r.samples.values()), None)
-        gt = (
-            "/".join(str(i) for i in sample.gt_indices)
-            if sample and sample.gt_indices
-            else "."
-        )
+        gt = "/".join(str(i) for i in sample.gt_indices) if sample and sample.gt_indices else "."
         q = f"{sample.posterior:.2f}" if sample and sample.posterior is not None else "."
         dp = str(sample.depth) if sample else "."
         bp_diffs = ",".join(str(a.bp_diff) for a in r.alleles)
@@ -360,9 +359,7 @@ def doctor(
     if is_cram and reference is None:
         console.print("[red]error:[/red] CRAM input requires --reference <fasta>")
         raise typer.Exit(code=2)
-    open_kwargs: dict[str, Any] = (
-        {"reference_filename": str(reference)} if is_cram else {}
-    )
+    open_kwargs: dict[str, Any] = {"reference_filename": str(reference)} if is_cram else {}
     try:
         af = pysam.AlignmentFile(str(bam), "rc" if is_cram else "rb", **open_kwargs)
     except (OSError, ValueError) as exc:
@@ -381,9 +378,7 @@ def doctor(
                 "Use a panel without 'chr' or rename BAM @SQ headers."
             )
         elif missing.issubset({f"chr{c}" for c in without_chr}):
-            console.print(
-                "[yellow]Hint:[/yellow] BAM has 'chr' prefix; panel does not."
-            )
+            console.print("[yellow]Hint:[/yellow] BAM has 'chr' prefix; panel does not.")
 
     t = Table(title=f"FRONTStr doctor — {panel.name} vs {bam.name}")
     t.add_column("Marker", style="bold")
@@ -400,17 +395,32 @@ def doctor(
         if chrom_ok:
             try:
                 obs_raw = pileup_locus(
-                    bam, s.chromosome, s.ref_start - 1, s.ref_end, min_mapq=0,
+                    bam,
+                    s.chromosome,
+                    s.ref_start - 1,
+                    s.ref_end,
+                    min_mapq=0,
                     reference_fasta=reference,
                 )
                 obs_filt = pileup_locus(
-                    bam, s.chromosome, s.ref_start - 1, s.ref_end, min_mapq=min_mapq,
+                    bam,
+                    s.chromosome,
+                    s.ref_start - 1,
+                    s.ref_end,
+                    min_mapq=min_mapq,
                     reference_fasta=reference,
                 )
                 n_raw, n_filtered = len(obs_raw), len(obs_filt)
             except FrontstrError as exc:
-                t.add_row(s.name, s.chromosome, f"{s.ref_start}-{s.ref_end}",
-                          "yes", "?", "?", f"[red]{exc}[/red]")
+                t.add_row(
+                    s.name,
+                    s.chromosome,
+                    f"{s.ref_start}-{s.ref_end}",
+                    "yes",
+                    "?",
+                    "?",
+                    f"[red]{exc}[/red]",
+                )
                 continue
         status: str
         if not chrom_ok:
@@ -424,9 +434,13 @@ def doctor(
         else:
             status = "[green]ok[/green]"
         t.add_row(
-            s.name, s.chromosome, f"{s.ref_start}-{s.ref_end}",
+            s.name,
+            s.chromosome,
+            f"{s.ref_start}-{s.ref_end}",
             "yes" if chrom_ok else "no",
-            str(n_raw), str(n_filtered), status,
+            str(n_raw),
+            str(n_filtered),
+            status,
         )
     console.print(t)
     af.close()
@@ -491,13 +505,15 @@ def export_cmd(
 
     try:
         panel = load_panel(panel_path)
-        longtr_map = (
-            index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
-        )
+        longtr_map = index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
         results = interpret_run(
-            bam=bam, panel=panel, longtr_results=longtr_map,
-            min_mapq=min_mapq, identity_threshold=identity,
-            analytical_thresh=analytical_thresh, calling_thresh=calling_thresh,
+            bam=bam,
+            panel=panel,
+            longtr_results=longtr_map,
+            min_mapq=min_mapq,
+            identity_threshold=identity,
+            analytical_thresh=analytical_thresh,
+            calling_thresh=calling_thresh,
             reference_fasta=reference,
         )
         context = RunContext(
@@ -528,9 +544,7 @@ def export_cmd(
     if "json" in wanted:
         written.append(write_run_json(payload, out_dir / f"{stem}.json", mode="pretty"))
     if "json-compact" in wanted:
-        written.append(
-            write_run_json(payload, out_dir / f"{stem}.min.json", mode="compact")
-        )
+        written.append(write_run_json(payload, out_dir / f"{stem}.min.json", mode="compact"))
     if "html" in wanted:
         written.append(build_report(results, context, out_dir / f"{stem}.html"))
 
@@ -575,13 +589,15 @@ def report(
 
     try:
         panel = load_panel(panel_path)
-        longtr_map = (
-            index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
-        )
+        longtr_map = index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
         results = interpret_run(
-            bam=bam, panel=panel, longtr_results=longtr_map,
-            min_mapq=min_mapq, identity_threshold=identity,
-            analytical_thresh=analytical_thresh, calling_thresh=calling_thresh,
+            bam=bam,
+            panel=panel,
+            longtr_results=longtr_map,
+            min_mapq=min_mapq,
+            identity_threshold=identity,
+            analytical_thresh=analytical_thresh,
+            calling_thresh=calling_thresh,
             reference_fasta=reference,
         )
         context = RunContext(
@@ -653,9 +669,7 @@ def calibrate_stutter(
         console.print(f"[red]panel error:[/red] {exc}")
         raise typer.Exit(code=2) from exc
 
-    obs = collect_observations(
-        list(bams), panel, min_mapq=min_mapq, reference_fasta=reference
-    )
+    obs = collect_observations(list(bams), panel, min_mapq=min_mapq, reference_fasta=reference)
     if not obs:
         console.print("[red]no usable observations[/red] — every locus was ambiguous.")
         raise typer.Exit(code=1)
@@ -732,7 +746,9 @@ def interpret(
     ] = None,
     catalog_path: Annotated[
         Path | None,
-        typer.Option("--catalog", help="Optional allele catalog JSON for ISFG/iso-allele annotation."),
+        typer.Option(
+            "--catalog", help="Optional allele catalog JSON for ISFG/iso-allele annotation."
+        ),
     ] = None,
 ) -> None:
     """End-to-end forensic call: pileup → cluster → ISFG → classify → call.
@@ -749,15 +765,18 @@ def interpret(
     try:
         panel = load_panel(panel_path)
         catalog = load_catalog(catalog_path) if catalog_path else None
-        longtr_map = (
-            index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
-        )
+        longtr_map = index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
         results = interpret_run(
-            bam=bam, panel=panel, longtr_results=longtr_map,
-            min_mapq=min_mapq, identity_threshold=identity,
+            bam=bam,
+            panel=panel,
+            longtr_results=longtr_map,
+            min_mapq=min_mapq,
+            identity_threshold=identity,
             len_tolerance_bp=len_tolerance,
-            analytical_thresh=analytical_thresh, calling_thresh=calling_thresh,
-            reference_fasta=reference, catalog=catalog,
+            analytical_thresh=analytical_thresh,
+            calling_thresh=calling_thresh,
+            reference_fasta=reference,
+            catalog=catalog,
         )
     except FrontstrError as exc:
         console.print(f"[red]interpret error:[/red] {exc}")
@@ -773,8 +792,7 @@ def interpret(
     for r in results:
         called = ", ".join(_interpret_allele_cell(a) for a in r.alleles_called)
         longtr_flag = (
-            "[red]discordant[/red]" if r.discordant
-            else ("ok" if r.longtr_result else "-")
+            "[red]discordant[/red]" if r.discordant else ("ok" if r.longtr_result else "-")
         )
         t.add_row(
             r.marker_name,
@@ -826,8 +844,7 @@ def evidence(
     from frontstr.evidence.pileup import pileup_locus
 
     try:
-        obs = pileup_locus(bam, chrom, start - 1, end, min_mapq=min_mapq,
-                           reference_fasta=reference)
+        obs = pileup_locus(bam, chrom, start - 1, end, min_mapq=min_mapq, reference_fasta=reference)
     except FrontstrError as exc:
         console.print(f"[red]pileup error:[/red] {exc}")
         raise typer.Exit(code=2) from exc

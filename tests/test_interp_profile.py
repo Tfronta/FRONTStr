@@ -53,7 +53,11 @@ def test_interpret_marker_low_coverage_phantom_not_mixture(
     floor (default 5). It is an ONT basecaller phantom, not a 3rd contributor,
     so FRONTStr calls heterozygous instead of raising a false mixture flag."""
     obs = pileup_locus(
-        synth_bam_heterozygous, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END, min_mapq=20,
+        synth_bam_heterozygous,
+        SYNTH_CHROM,
+        SYNTH_TR_START,
+        SYNTH_TR_END,
+        min_mapq=20,
     )
     clusters = cluster_observations(obs)
     result = interpret_marker(system=_synth_system(), clusters=clusters)
@@ -64,7 +68,11 @@ def test_interpret_marker_low_coverage_phantom_not_mixture(
 
 def test_interpret_marker_homozygous(synth_bam_homozygous: Path) -> None:
     obs = pileup_locus(
-        synth_bam_homozygous, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END, min_mapq=20,
+        synth_bam_homozygous,
+        SYNTH_CHROM,
+        SYNTH_TR_START,
+        SYNTH_TR_END,
+        min_mapq=20,
     )
     clusters = cluster_observations(obs)
     result = interpret_marker(system=_synth_system(), clusters=clusters)
@@ -80,7 +88,11 @@ def test_interpret_marker_homozygous(synth_bam_homozygous: Path) -> None:
 def test_interpret_marker_low_mapq_filtered(synth_bam_low_mapq: Path) -> None:
     """Low-MAPQ reads must be filtered before clustering — only CE12 reaches call."""
     obs = pileup_locus(
-        synth_bam_low_mapq, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END, min_mapq=20,
+        synth_bam_low_mapq,
+        SYNTH_CHROM,
+        SYNTH_TR_START,
+        SYNTH_TR_END,
+        min_mapq=20,
     )
     clusters = cluster_observations(obs)
     result = interpret_marker(system=_synth_system(), clusters=clusters)
@@ -93,7 +105,8 @@ def test_interpret_run_empty_locus_returns_no_data(tmp_path: Path) -> None:
     """A marker with zero reads must produce a NO_DATA result, not raise."""
     bam = write_synth_bam(tmp_path / "empty.bam", [])
     panel = Panel(
-        name="t", version="0",
+        name="t",
+        version="0",
         systems=[_synth_system()],
     )
     results = interpret_run(bam=bam, panel=panel)
@@ -105,7 +118,11 @@ def test_interpret_run_empty_locus_returns_no_data(tmp_path: Path) -> None:
 def test_interpret_marker_isfg_compression(synth_bam_homozygous: Path) -> None:
     """ISFG nomenclature should compress 12 AGATs to ``[AGAT]12``."""
     obs = pileup_locus(
-        synth_bam_homozygous, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END, min_mapq=20,
+        synth_bam_homozygous,
+        SYNTH_CHROM,
+        SYNTH_TR_START,
+        SYNTH_TR_END,
+        min_mapq=20,
     )
     clusters = cluster_observations(obs)
     result = interpret_marker(system=_synth_system(), clusters=clusters)
@@ -117,23 +134,38 @@ def test_interpret_marker_uses_longtr_inexact_flag(synth_bam_heterozygous: Path)
     from frontstr.caller.vcf import LongTRAlleleSpec, LongTRResult, LongTRSampleCall
 
     obs = pileup_locus(
-        synth_bam_heterozygous, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END, min_mapq=20,
+        synth_bam_heterozygous,
+        SYNTH_CHROM,
+        SYNTH_TR_START,
+        SYNTH_TR_END,
+        min_mapq=20,
     )
     clusters = cluster_observations(obs)
     ref = "AGAT" * 12
     longtr = LongTRResult(
-        marker_name="SYNTH", chrom=SYNTH_CHROM, pos=SYNTH_TR_START + 1,
-        motif="AGAT", period="4",
+        marker_name="SYNTH",
+        chrom=SYNTH_CHROM,
+        pos=SYNTH_TR_START + 1,
+        motif="AGAT",
+        period="4",
         alleles=[
             LongTRAlleleSpec(sequence=ref, bp_diff=0, inexact=False, is_deletion=False),
             LongTRAlleleSpec(sequence="AGAT" * 11, bp_diff=-4, inexact=True, is_deletion=False),
         ],
-        samples={"S1": LongTRSampleCall(
-            sample="S1", gt_indices=(0, 1), phased=False, posterior=0.99, depth=9,
-        )},
+        samples={
+            "S1": LongTRSampleCall(
+                sample="S1",
+                gt_indices=(0, 1),
+                phased=False,
+                posterior=0.99,
+                depth=9,
+            )
+        },
     )
     result = interpret_marker(
-        system=_synth_system(), clusters=clusters, longtr=longtr,
+        system=_synth_system(),
+        clusters=clusters,
+        longtr=longtr,
     )
     inexact_alleles = [a for a in result.alleles if a.longtr_inexact]
     assert any(a.consensus == "AGAT" * 11 for a in inexact_alleles)

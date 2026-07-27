@@ -30,8 +30,12 @@ FLANK_R = "AGGGAAATAAGGGAGGAACAGGCCTTTGGGAATCACCCCAG"
 
 def _system(name: str = "TH01", **kw: object) -> System:
     base: dict[str, object] = {
-        "name": name, "chromosome": "chr11", "ref_start": 1, "ref_end": 400,
-        "motif": "AATG", "period": 4,
+        "name": name,
+        "chromosome": "chr11",
+        "ref_start": 1,
+        "ref_end": 400,
+        "motif": "AATG",
+        "period": 4,
     }
     base.update(kw)
     return System(**base)  # type: ignore[arg-type]
@@ -71,8 +75,10 @@ def test_zero_stutter_positions_are_recorded() -> None:
     the estimate is conditioned on stutter being present.
     """
     out = observe_marker(
-        sample="S", system=_system(),
-        alleles=[(_seq(9), 30)], called=[_seq(9)],
+        sample="S",
+        system=_system(),
+        alleles=[(_seq(9), 30)],
+        called=[_seq(9)],
     )
     assert {o.step for o in out} == {-1, -2, 1}
     assert all(o.stutter_reads == 0 for o in out)
@@ -81,7 +87,8 @@ def test_zero_stutter_positions_are_recorded() -> None:
 def test_reads_at_a_position_are_summed_across_clusters() -> None:
     """A stutter peak split into two clusters must not measure as half a peak."""
     out = observe_marker(
-        sample="S", system=_system(),
+        sample="S",
+        system=_system(),
         alleles=[(_seq(9), 30), (_seq(8), 2), (_seq(8) + "", 1)],
         called=[_seq(9)],
     )
@@ -93,16 +100,20 @@ def test_reads_at_a_position_are_summed_across_clusters() -> None:
 def test_close_heterozygote_is_excluded() -> None:
     """Alleles 1 unit apart: the -1 position of one IS the other allele."""
     out = observe_marker(
-        sample="S", system=_system(),
-        alleles=[(_seq(9), 30), (_seq(8), 25)], called=[_seq(9), _seq(8)],
+        sample="S",
+        system=_system(),
+        alleles=[(_seq(9), 30), (_seq(8), 25)],
+        called=[_seq(9), _seq(8)],
     )
     assert out == []
 
 
 def test_well_separated_heterozygote_is_used() -> None:
     out = observe_marker(
-        sample="S", system=_system(),
-        alleles=[(_seq(14), 30), (_seq(8), 25)], called=[_seq(14), _seq(8)],
+        sample="S",
+        system=_system(),
+        alleles=[(_seq(14), 30), (_seq(8), 25)],
+        called=[_seq(14), _seq(8)],
     )
     assert {o.lus for o in out} == {14, 8}
 
@@ -110,8 +121,10 @@ def test_well_separated_heterozygote_is_used() -> None:
 def test_low_coverage_parent_is_skipped() -> None:
     """A ratio from 4 reads carries no information."""
     out = observe_marker(
-        sample="S", system=_system(),
-        alleles=[(_seq(9), 4)], called=[_seq(9)],
+        sample="S",
+        system=_system(),
+        alleles=[(_seq(9), 4)],
+        called=[_seq(9)],
     )
     assert out == []
 
@@ -119,8 +132,10 @@ def test_low_coverage_parent_is_skipped() -> None:
 def test_parent_reads_come_from_the_position_not_the_cluster() -> None:
     """Coverage at the parent position also sums across split clusters."""
     out = observe_marker(
-        sample="S", system=_system(),
-        alleles=[(_seq(9), 6), (_seq(9), 6), (_seq(8), 3)], called=[_seq(9)],
+        sample="S",
+        system=_system(),
+        alleles=[(_seq(9), 6), (_seq(9), 6), (_seq(8), 3)],
+        called=[_seq(9)],
     )
     minus_one = next(o for o in out if o.step == -1)
     assert minus_one.parent_reads == 12
@@ -132,9 +147,7 @@ def test_parent_reads_come_from_the_position_not_the_cluster() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _obs(
-    lus: int, ratio: float, n: int = 8, parent: int = 10_000
-) -> list[StutterObservation]:
+def _obs(lus: int, ratio: float, n: int = 8, parent: int = 10_000) -> list[StutterObservation]:
     """Synthetic observations at a known ratio.
 
     ``parent`` is large so that rounding reads to integers does not quantise
@@ -143,8 +156,12 @@ def _obs(
     """
     return [
         StutterObservation(
-            sample=f"s{i}", marker="M", step=-1, lus=lus,
-            parent_reads=parent, stutter_reads=round(ratio * parent),
+            sample=f"s{i}",
+            marker="M",
+            step=-1,
+            lus=lus,
+            parent_reads=parent,
+            stutter_reads=round(ratio * parent),
         )
         for i in range(n)
     ]
@@ -187,10 +204,12 @@ def test_fit_needs_minus_one_observations() -> None:
 def test_step_factors_are_ratios_of_the_minus_one_rate() -> None:
     obs = _obs(11, 0.02) + _obs(13, 0.06)
     obs += [
-        StutterObservation(sample="s", marker="M", step=-2, lus=11,
-                           parent_reads=100, stutter_reads=1),
-        StutterObservation(sample="s", marker="M", step=1, lus=11,
-                           parent_reads=100, stutter_reads=2),
+        StutterObservation(
+            sample="s", marker="M", step=-2, lus=11, parent_reads=100, stutter_reads=1
+        ),
+        StutterObservation(
+            sample="s", marker="M", step=1, lus=11, parent_reads=100, stutter_reads=2
+        ),
     ]
     model = fit_stutter_model(obs)
     pooled_minus1 = sum(o.stutter_reads for o in obs if o.step == -1) / sum(

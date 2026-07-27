@@ -99,9 +99,7 @@ def serialize_run(
             "panel_sha256": context.panel_sha256,
             "bam_path": str(context.bam_path) if context.bam_path else None,
             "bam_sha256": context.bam_sha256,
-            "longtr_vcf_path": (
-                str(context.longtr_vcf_path) if context.longtr_vcf_path else None
-            ),
+            "longtr_vcf_path": (str(context.longtr_vcf_path) if context.longtr_vcf_path else None),
             "longtr_vcf_sha256": context.longtr_vcf_sha256,
             "longtr_version": context.longtr_version,
             "pipeline_argv": context.pipeline_argv,
@@ -141,9 +139,12 @@ def _serialize_marker(r: MarkerResult) -> dict[str, Any]:
         "calling_thresh": r.calling_thresh,
         "discordant": r.discordant,
         "flags": [f.model_dump(mode="json") for f in r.flags],
-        "alleles": [_serialize_allele(a, r.total_reads, r.system.motif, r.system.strand) for a in r.alleles],
+        "alleles": [
+            _serialize_allele(a, r.total_reads, r.system.motif, r.system.strand) for a in r.alleles
+        ],
         "alleles_called": [
-            _serialize_allele(a, r.total_reads, r.system.motif, r.system.strand) for a in r.alleles_called
+            _serialize_allele(a, r.total_reads, r.system.motif, r.system.strand)
+            for a in r.alleles_called
         ],
         "longtr": _serialize_longtr(r),
     }
@@ -205,7 +206,9 @@ def _serialize_longtr(r: MarkerResult) -> dict[str, Any] | None:
             }
             for a in lt.alleles
         ],
-        "gt_indices": list(sample_call.gt_indices) if sample_call and sample_call.gt_indices else None,
+        "gt_indices": list(sample_call.gt_indices)
+        if sample_call and sample_call.gt_indices
+        else None,
         "posterior": (
             round(sample_call.posterior, 4)
             if sample_call and sample_call.posterior is not None
@@ -345,10 +348,7 @@ def _compute_summary(results: list[MarkerResult], dropout_floor: int) -> dict[st
     mixture_count = sum(1 for r in results if r.tri_type == TriType.MIXTURE_SUSPECTED)
     discordant = sum(1 for r in results if r.discordant)
     dropouts = sum(
-        1
-        for r in results
-        if 0 < r.total_reads < dropout_floor
-        or r.call_rule == CallRule.NO_DATA
+        1 for r in results if 0 < r.total_reads < dropout_floor or r.call_rule == CallRule.NO_DATA
     )
     return {
         "loci_total": loci_total,
@@ -376,9 +376,7 @@ def _compute_qc(results: list[MarkerResult]) -> dict[str, Any]:
         "min_coverage": min(covs) if covs else 0,
         "max_coverage": max(covs) if covs else 0,
         "coverage_table": coverage_table,
-        "status_breakdown": [
-            {"status": s, "count": c} for s, c in sorted(statuses.items())
-        ],
+        "status_breakdown": [{"status": s, "count": c} for s, c in sorted(statuses.items())],
     }
 
 

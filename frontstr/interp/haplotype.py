@@ -136,8 +136,7 @@ def suppress_hp_phantoms(
     candidates = [
         a
         for a in alleles
-        if a.status in (AlleleStatus.ALLELE, AlleleStatus.INEXACT_ALLELE)
-        and not a.is_deletion
+        if a.status in (AlleleStatus.ALLELE, AlleleStatus.INEXACT_ALLELE) and not a.is_deletion
     ]
     if len(candidates) < 2:
         return 0

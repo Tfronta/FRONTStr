@@ -34,8 +34,15 @@ from frontstr.panel.models import System
 from frontstr.report.payload import RunContext, serialize_run
 
 
-def _allele(idx: int, ce: float | None, cov: int, status: AlleleStatus,
-            *, consensus: str = "AATGAATGAATG", is_del: bool = False) -> Allele:
+def _allele(
+    idx: int,
+    ce: float | None,
+    cov: int,
+    status: AlleleStatus,
+    *,
+    consensus: str = "AATGAATGAATG",
+    is_del: bool = False,
+) -> Allele:
     return Allele(
         cluster_index=idx,
         consensus="" if is_del else consensus,
@@ -44,24 +51,35 @@ def _allele(idx: int, ce: float | None, cov: int, status: AlleleStatus,
         n_reads_hp1=cov // 2,
         n_reads_hp2=cov - cov // 2,
         n_reads_hp_none=0,
-        n_forward=cov, n_reverse=0, mean_qual=30.0,
-        ce=ce, isfg=f"[AATG]{int(ce)}" if ce is not None else "",
-        bp_diff=-12 if is_del else 0, is_deletion=is_del, status=status,
+        n_forward=cov,
+        n_reverse=0,
+        mean_qual=30.0,
+        ce=ce,
+        isfg=f"[AATG]{int(ce)}" if ce is not None else "",
+        bp_diff=-12 if is_del else 0,
+        is_deletion=is_del,
+        status=status,
     )
 
 
 def _system(name: str, tri: bool = False) -> System:
     return System(
-        name=name, chromosome="chr2", ref_start=1_489_651, ref_end=1_489_684,
-        motif="AATG", period=4,
-        allow_triallelic=tri, tri_balanced_thr=0.5 if tri else None,
+        name=name,
+        chromosome="chr2",
+        ref_start=1_489_651,
+        ref_end=1_489_684,
+        motif="AATG",
+        period=4,
+        allow_triallelic=tri,
+        tri_balanced_thr=0.5 if tri else None,
     )
 
 
 @pytest.fixture
 def small_payload() -> dict:
     th01 = MarkerResult(
-        marker_name="TH01", system=_system("TH01"),
+        marker_name="TH01",
+        system=_system("TH01"),
         alleles=[
             _allele(0, 9.0, 60, AlleleStatus.ALLELE),
             _allele(1, 8.0, 55, AlleleStatus.ALLELE),
@@ -71,11 +89,13 @@ def small_payload() -> dict:
             _allele(0, 9.0, 60, AlleleStatus.ALLELE),
             _allele(1, 8.0, 55, AlleleStatus.ALLELE),
         ],
-        call_rule=CallRule.HETEROZYGOUS, tri_type=TriType.NONE,
+        call_rule=CallRule.HETEROZYGOUS,
+        tri_type=TriType.NONE,
         total_reads=119,
     )
     tpox = MarkerResult(
-        marker_name="TPOX", system=_system("TPOX", tri=True),
+        marker_name="TPOX",
+        system=_system("TPOX", tri=True),
         alleles=[
             _allele(0, 8.0, 30, AlleleStatus.ALLELE),
             _allele(1, 9.0, 28, AlleleStatus.ALLELE),
@@ -86,14 +106,17 @@ def small_payload() -> dict:
             _allele(1, 9.0, 28, AlleleStatus.ALLELE),
             _allele(2, 11.0, 26, AlleleStatus.ALLELE),
         ],
-        call_rule=CallRule.TRIALLELIC_TYPE_II, tri_type=TriType.TYPE_II_BALANCED,
+        call_rule=CallRule.TRIALLELIC_TYPE_II,
+        tri_type=TriType.TYPE_II_BALANCED,
         total_reads=84,
     )
     del_marker = MarkerResult(
-        marker_name="DEL_LOCUS", system=_system("DEL_LOCUS"),
+        marker_name="DEL_LOCUS",
+        system=_system("DEL_LOCUS"),
         alleles=[_allele(0, None, 40, AlleleStatus.DELETION, is_del=True)],
         alleles_called=[_allele(0, None, 40, AlleleStatus.DELETION, is_del=True)],
-        call_rule=CallRule.HOMOZYGOUS, tri_type=TriType.NONE,
+        call_rule=CallRule.HOMOZYGOUS,
+        tri_type=TriType.NONE,
         total_reads=40,
     )
     return serialize_run(

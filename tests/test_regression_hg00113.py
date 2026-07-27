@@ -176,9 +176,7 @@ def test_single_source_samples_raise_no_mixture(sample: str) -> None:
     bam = _require(sample)
     results = interpret_run(bam=bam, panel=load_panel(PANEL_PATH))
     flagged = [
-        r.marker_name
-        for r in results
-        if any(f.code == FlagCode.MIXTURE_SUSPECTED for f in r.flags)
+        r.marker_name for r in results if any(f.code == FlagCode.MIXTURE_SUSPECTED for f in r.flags)
     ]
     assert flagged == [], f"{sample}: false mixture at {flagged}"
 

@@ -62,8 +62,7 @@ def call_profile(
         (
             a
             for a in alleles
-            if a.status in (AlleleStatus.ALLELE, AlleleStatus.INEXACT_ALLELE)
-            and not a.is_deletion
+            if a.status in (AlleleStatus.ALLELE, AlleleStatus.INEXACT_ALLELE) and not a.is_deletion
         ),
         key=lambda a: a.n_reads_total,
         reverse=True,
