@@ -458,7 +458,8 @@ def export_cmd(
             "--formats",
             help=(
                 "Comma-separated list. One or more of: "
-                "profile,evidence,seqs,json,json-compact,html."
+                "profile,evidence,seqs,json,json-compact,html,vcf,xlsx. "
+                "vcf requires --reference."
             ),
         ),
     ] = "profile,evidence,seqs,json",
@@ -507,6 +508,8 @@ def export_cmd(
         write_evidence_csv,
         write_profile_csv,
         write_run_json,
+        write_run_vcf,
+        write_run_xlsx,
         write_seqs_csv,
     )
     from frontstr.interp import index_longtr_results, interpret_run
@@ -515,9 +518,25 @@ def export_cmd(
     from frontstr.report import RunContext, build_report, serialize_run
 
     wanted = {f.strip().lower() for f in formats.split(",") if f.strip()}
-    unknown = wanted - {"profile", "evidence", "seqs", "json", "json-compact", "html"}
+    unknown = wanted - {
+        "profile",
+        "evidence",
+        "seqs",
+        "json",
+        "json-compact",
+        "html",
+        "vcf",
+        "xlsx",
+    }
     if unknown:
         console.print(f"[red]Unknown formats:[/red] {sorted(unknown)}")
+        raise typer.Exit(code=2)
+    if "vcf" in wanted and reference is None:
+        # Fail before the pipeline runs rather than after several minutes of work.
+        console.print(
+            "[red]error:[/red] --formats vcf needs --reference <fasta>. REF must be "
+            "the real reference sequence; there is no meaningful placeholder."
+        )
         raise typer.Exit(code=2)
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -568,6 +587,10 @@ def export_cmd(
         written.append(write_run_json(payload, out_dir / f"{stem}.json", mode="pretty"))
     if "json-compact" in wanted:
         written.append(write_run_json(payload, out_dir / f"{stem}.min.json", mode="compact"))
+    if "vcf" in wanted:
+        written.append(write_run_vcf(payload, out_dir / f"{stem}.vcf", reference_fasta=reference))
+    if "xlsx" in wanted:
+        written.append(write_run_xlsx(payload, out_dir / f"{stem}.xlsx"))
     if "html" in wanted:
         written.append(build_report(results, context, out_dir / f"{stem}.html"))
 

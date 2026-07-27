@@ -110,6 +110,21 @@ That writes `<sample>.profile.csv`, `<sample>.evidence.csv`,
 record: tool version, POA backend, stutter model, every threshold that moved a
 call, input hashes and the flag census.
 
+### Exports
+
+`--formats` accepts `profile`, `evidence`, `seqs` (CSV), `json`,
+`json-compact`, `html`, `xlsx` and `vcf`.
+
+- **`vcf`** — a native, sequence-resolved VCF. `ALT` is the allele's sequence,
+  not a length, so iso-alleles remain distinct records; the repeat count rides
+  along in `FORMAT/MC` and FRONTStr's integer per-allele coverage in
+  `FORMAT/AD`. QC warnings become `FILTER` entries. It is bgzip/tabix
+  indexable and queryable with bcftools, which is the point — it exists so
+  FRONTStr can be benchmarked against other callers. **Needs `--reference`.**
+- **`xlsx`** — a five-sheet review workbook (Profile, Sequences, Evidence, QC,
+  Audit). Markers carrying a warning are tinted, QC is ordered worst-first, and
+  the Evidence sheet keeps the clusters that were *not* called.
+
 Other commands: `evidence` (per-locus cluster dump for debugging), `call`
 (LongTR), `batch` (multi-sample from a manifest), `calibrate-stutter`
 (fit a stutter model to your own data), `doctor`, `inspect`.
@@ -138,8 +153,8 @@ Read this section as part of the documentation, not as a disclaimer.
 - **The analytical and calling thresholds (0.02 / 0.10) are not data-derived.**
   They are chosen defaults. The low-coverage floor and the stutter model *are*
   derived; these two are not, and that is a gap.
-- **Only CSV, JSON and HTML exports exist.** No VCF, XLSX, CODIS `.cmf`, MIDST
-  or PDF yet, despite what earlier plans promised.
+- **No CODIS `.cmf`, MIDST or PDF export**, and no tidy/Parquet dataset for
+  cohort-scale analysis, despite what earlier plans promised.
 - **Illumina data will not work** against the shipped panel. Its windows are
   ±100 bp and the pileup requires reads that fully span them; 150 bp reads
   cannot. This is a deliberate ONT-first design choice, not an oversight.

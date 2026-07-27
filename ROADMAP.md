@@ -260,13 +260,27 @@ panel of known samples and signs off on a validation report.
 - [ ] CLI flag `--phase`
 - [ ] HTML report: HP partition columns/charts active
 
-### 3.3 Rich exports (3 days)
+### 3.3 Rich exports
 
-- [ ] `exports/xlsx.py` — multi‑sheet workbook
-- [ ] `exports/vcf_extend.py` — extend LongTR VCF with `EVCOV`/`EVHP1`/…
+- [x] `exports/xlsx.py` — multi-sheet review workbook (Profile / Sequences /
+      Evidence / QC / Audit). Flagged markers tinted on Profile; QC ordered
+      worst-first; Evidence keeps the uncalled clusters, which is where you
+      look to see *why* a call came out as it did.
+- [x] `exports/vcf.py` — **native**, sequence-resolved VCF. Not
+      `vcf_extend.py`: extending LongTR's VCF would mean the interchange format
+      only exists when a different caller was run, which defeats the purpose.
+      ALT is the allele sequence, so iso-alleles survive the round trip; the
+      repeat count rides along in `FORMAT/MC`. Requires `--reference` — REF must
+      be the real reference sequence and there is no honest placeholder.
+      Verified bgzip/tabix-indexable and queryable with bcftools.
+      **Every per-allele FORMAT field is `Number=R` in REF-then-ALT order.**
+      Emitting them in call order silently misaligns them against `AD` whenever
+      a call equals the reference, and nothing about the file looks wrong.
 - [ ] `exports/codis.py` — CODIS Common Message Format
 - [ ] `exports/midst.py` — NIST MIDST 1.0 (mixture)
-- [ ] `exports/bundle.py` — single‑click case ZIP
+- [ ] `exports/bundle.py` — single-click case ZIP
+- [ ] Tidy / Parquet dataset for cohort-scale analysis. The per-sample XLSX is
+      a review instrument, not a 150-sample analysis substrate.
 
 ### 3.4 PDF (1 day)
 
