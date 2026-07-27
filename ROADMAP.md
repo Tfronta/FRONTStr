@@ -60,13 +60,37 @@ science with real labs in week 4.
 - [x] CLI `frontstr call` with `--parse-only` for offline VCF inspection
 - [x] Unit tests for argv (ONT vs HiFi), BED writer, VCF parser (het, hom, `<DEL>`, INEXACT_ALLELE, phased, missing GT), subprocess failure paths
 
-### 1.4 Evidence layer (the unique value) (4–5 days)
+### 1.4 Evidence layer (the unique value) — DONE
 
-- [ ] `evidence/pileup.py` — `pileup_locus` with pysam
-- [ ] `evidence/cluster.py` — cluster by length + edit distance + POA consensus
-  (use `pyabpoa`; fallback to `spoa` if not installable)
-- [ ] Tests with synthetic ONT reads: known clusters in/out
-- [ ] CLI subcommand `frontstr evidence <bam> <bed>` (debug)
+- [x] `evidence/pileup.py` — `pileup_locus` with pysam
+- [x] `evidence/cluster.py` — cluster by length + edit distance
+- [x] `evidence/consensus.py` — POA backend chain with an auditable
+      `ConsensusMethod` on every cluster. `pyabpoa` does **not** build on macOS
+      arm64 (hardcoded AVX2 x86 intrinsics), so `pyspoa` (SPOA, global
+      alignment) is the default backend; the old most-common-sequence path
+      survives only as a flagged fallback (`CONSENSUS_FALLBACK`, WARN).
+      Measured on the 5 ONT R10 slices: the fallback produced **4 false
+      microvariants out of 202 called alleles** (TH01 6.3→7, TH01 6.1→6,
+      D13S317 14.1→14, D18S51 11.3→12). POA fixed all four.
+- [x] Tests with synthetic ONT reads: known clusters in/out
+- [x] CLI subcommand `frontstr evidence <bam> <bed>` (debug)
+- [x] **Repeat-core binning.** Reads are binned by the length of their repeat
+      core (`frontstr/motifs.py::repeat_core_length`) instead of raw window
+      length, so ONT indel errors in the ±100 bp flanks — the large majority —
+      no longer split one allele into two clusters. Binning on *unit count*
+      was rejected: `[AATG]9` and `[AATG]6 ATG [AATG]3` are both 9 units, so it
+      would destroy TH01 9 vs 9.3. Core length keeps them at 36 vs 39 bp.
+      `System.ont_len_tolerance` (previously dead config) is now honoured as a
+      per-marker override.
+      Measured on the 5 ONT slices: cluster fragmentation **1469 → 1038
+      (−29%)**, false `mixture_suspected` **5 → 0 on binning alone**, HG00113
+      reference profile unchanged with TH01 9.3 intact and per-allele coverage
+      up across the board (TH01 9.3 7→10 reads, D12S391 14→20).
+- [ ] Recalibrate `identity_threshold`. The 0.97 default was set as if
+      comparing a read to a consensus; it actually compares raw read to raw
+      read, where two ONT reads of one allele diverge by ~2–4%. Derive it from
+      the measured read-vs-read distribution, or switch to consensus-refined
+      reassignment (seed → POA consensus → reassign).
 
 ### 1.5 Interpretation — DONE
 
@@ -167,7 +191,19 @@ panel of known samples and signs off on a validation report.
 
 ### 3.2 Phasing (2 days)
 
-- [ ] `ingest/phase.py` — whatshap haplotag (scoped to panel ± 10 kb)
+- [x] `interp/haplotype.py` — haplotype-aware suppression of split-allele
+      phantoms. Consumes HP tags already present in phased BAMs; a no-op on
+      unphased input and on `allow_triallelic` markers. Demotes a candidate to
+      `HP_PHANTOM` only when it shares a confident haplotype with a stronger
+      cluster **and** sits within 2 bp of it, records the absorbed reads on the
+      owner, and raises `HP_PHANTOM_COLLAPSED` for audit.
+      **Closes known-bug #6**: false `mixture_suspected` on the 5 single-source
+      1000G slices went 5 → 0, with the HG00113 reference profile unchanged and
+      no real allele lost (incl. GM19038 D12S391, where the genuine HP2 allele
+      is the 5-read cluster that a read-count floor would have deleted).
+- [ ] `ingest/phase.py` — whatshap haplotag (scoped to panel ± 10 kb), so
+      unphased input can be phased in-pipeline rather than relying on
+      pre-phased BAMs
 - [ ] CLI flag `--phase`
 - [ ] HTML report: HP partition columns/charts active
 

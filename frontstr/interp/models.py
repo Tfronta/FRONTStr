@@ -19,6 +19,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from frontstr.caller.vcf import LongTRResult
+from frontstr.evidence.consensus import ConsensusMethod
 from frontstr.panel.models import System
 
 
@@ -31,6 +32,9 @@ class AlleleStatus(StrEnum):
     NOISE = "noise"
     STUTTER = "stutter"
     ARTEFACT = "artefact"
+    #: Same allele as a stronger cluster on the same haplotype, split apart by
+    #: sequencing error. See :mod:`frontstr.interp.haplotype`.
+    HP_PHANTOM = "hp_phantom"
     INEXACT_ALLELE = "inexact_allele"
     ALLELE = "allele"
 
@@ -87,6 +91,8 @@ class FlagCode(StrEnum):
     INEXACT_ALLELE = "inexact_allele"
     ISOALLELE = "isoallele"
     CE_NOMENCLATURE_OFFSET = "ce_nomenclature_offset"
+    CONSENSUS_FALLBACK = "consensus_fallback"
+    HP_PHANTOM_COLLAPSED = "hp_phantom_collapsed"
 
 
 _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
@@ -99,6 +105,12 @@ _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
     FlagCode.INEXACT_ALLELE: FlagSeverity.INFO,
     FlagCode.ISOALLELE: FlagSeverity.INFO,
     FlagCode.CE_NOMENCLATURE_OFFSET: FlagSeverity.INFO,
+    # WARN, not INFO: an unpolished consensus carries single-read errors into
+    # the ISFG string and the iso-allele catalog match.
+    FlagCode.CONSENSUS_FALLBACK: FlagSeverity.WARN,
+    # INFO: the collapse is the *correct* call, but it must stay visible so a
+    # reviewer can see that a candidate was suppressed and why.
+    FlagCode.HP_PHANTOM_COLLAPSED: FlagSeverity.INFO,
 }
 
 
@@ -155,12 +167,20 @@ class Allele(BaseModel):
     isfg: str
     bp_diff: int
     is_deletion: bool
+    #: How ``consensus`` was derived (``poa_spoa`` | ``poa_abpoa`` | ``single``
+    #: | ``mode`` | ``empty``). ``mode`` means no POA backend was available and
+    #: the sequence is a single unpolished read — see ``CONSENSUS_FALLBACK``.
+    consensus_method: str = ConsensusMethod.SINGLE.value
     #: Primary numeric allele for reports: CE when period is defined, else
     #: LongTR-style offset from REF anchor (see :mod:`frontstr.interp.allele_numeric`).
     allele_numeric: float | None = None
     #: ``period_ce`` | ``reference_offset`` | ``delta_only`` | ``deletion`` | ``unavailable``
     allele_numeric_source: str = ""
     expected_stutter: float = 0.0
+    #: Reads recovered from same-haplotype phantom clusters of this allele
+    #: (see :mod:`frontstr.interp.haplotype`). Reported so coverage is not
+    #: understated; ``n_reads_total`` deliberately stays as observed.
+    n_reads_absorbed: int = 0
     status: AlleleStatus = AlleleStatus.PENDING
     longtr_match: bool = False
     longtr_inexact: bool = False

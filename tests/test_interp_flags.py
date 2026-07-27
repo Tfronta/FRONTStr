@@ -143,3 +143,56 @@ def test_amel_like_none_numbers_not_isoallele() -> None:
     )
     derive_marker_flags(r)
     assert not any(f.code == FlagCode.ISOALLELE for f in r.flags)
+
+
+# ---------------------------------------------------------------------------
+# CONSENSUS_FALLBACK — an unpolished consensus must never pass silently
+# ---------------------------------------------------------------------------
+
+
+def _result_with(alleles: list) -> MarkerResult:
+    return MarkerResult(
+        marker_name="TH01", system=_system("TH01"), alleles=alleles,
+        alleles_called=alleles, call_rule=CallRule.HETEROZYGOUS,
+        tri_type=TriType.NONE, total_reads=40,
+    )
+
+
+def test_unpolished_consensus_raises_a_warn_flag() -> None:
+    r = _result_with([_bare_allele(consensus_method="mode", isfg="[AATG]7")])
+    derive_marker_flags(r)
+    flag = next(f for f in r.flags if f.code == FlagCode.CONSENSUS_FALLBACK)
+    assert flag.severity == FlagSeverity.WARN
+    assert "pyspoa" in flag.message
+
+
+def test_poa_consensus_raises_no_fallback_flag() -> None:
+    r = _result_with([_bare_allele(consensus_method="poa_spoa", isfg="[AATG]7")])
+    derive_marker_flags(r)
+    assert FlagCode.CONSENSUS_FALLBACK not in {f.code for f in r.flags}
+
+
+def test_single_read_consensus_raises_no_fallback_flag() -> None:
+    """A 1-read cluster is unpolishable, not mis-configured — different signal."""
+    r = _result_with([_bare_allele(consensus_method="single", isfg="[AATG]7")])
+    derive_marker_flags(r)
+    assert FlagCode.CONSENSUS_FALLBACK not in {f.code for f in r.flags}
+
+
+def test_hp_phantom_collapse_is_flagged_for_audit() -> None:
+    from frontstr.interp.models import AlleleStatus
+
+    owner = _bare_allele(consensus_method="poa_spoa")
+    phantom = _bare_allele(
+        cluster_index=1, length_bp=252, n_reads_total=5,
+        status=AlleleStatus.HP_PHANTOM, consensus_method="poa_spoa",
+    )
+    r = MarkerResult(
+        marker_name="D8S1179", system=_system("D8S1179"),
+        alleles=[owner, phantom], alleles_called=[owner],
+        call_rule=CallRule.HETEROZYGOUS, tri_type=TriType.NONE, total_reads=30,
+    )
+    derive_marker_flags(r)
+    flag = next(f for f in r.flags if f.code == FlagCode.HP_PHANTOM_COLLAPSED)
+    assert flag.severity == FlagSeverity.INFO
+    assert "252 bp / 5 reads" in flag.message

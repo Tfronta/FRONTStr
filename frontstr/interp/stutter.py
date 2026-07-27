@@ -21,69 +21,18 @@ Reference: research-toastr.md §8 step 4 and plan-longtr-improved.md §6.2.
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
 
 from frontstr.evidence.cluster import Cluster
+from frontstr.motifs import MotifRun, find_motif_runs, top_two_runs
 from frontstr.panel.models import System
 
-
-@dataclass(frozen=True, slots=True)
-class MotifRun:
-    """One uninterrupted run of a motif inside a sequence."""
-
-    motif: str
-    start: int
-    n_copies: int
-
-    @property
-    def length_bp(self) -> int:
-        return self.n_copies * len(self.motif)
-
-    @property
-    def end(self) -> int:
-        return self.start + self.length_bp
-
-
-def find_motif_runs(sequence: str, motifs: Iterable[str]) -> list[MotifRun]:
-    """Greedy scan for all maximal runs of each motif in ``sequence``.
-
-    Runs of different motifs may not overlap if they share a leading prefix;
-    we resolve ties by preferring the longest run starting at each position.
-    """
-    motif_list = [m for m in motifs if m]
-    if not motif_list or not sequence:
-        return []
-    n = len(sequence)
-    runs: list[MotifRun] = []
-    i = 0
-    while i < n:
-        best: MotifRun | None = None
-        for m in motif_list:
-            k = len(m)
-            if i + k > n or sequence[i : i + k] != m:
-                continue
-            cnt = 1
-            j = i + k
-            while j + k <= n and sequence[j : j + k] == m:
-                cnt += 1
-                j += k
-            cand = MotifRun(motif=m, start=i, n_copies=cnt)
-            if best is None or cand.length_bp > best.length_bp:
-                best = cand
-        if best is not None:
-            runs.append(best)
-            i = best.end
-        else:
-            i += 1
-    return runs
-
-
-def top_two_runs(runs: list[MotifRun]) -> tuple[MotifRun | None, MotifRun | None]:
-    """Return (LUS, SLUS) — the two longest runs ordered by copy count then position."""
-    if not runs:
-        return None, None
-    sorted_runs = sorted(runs, key=lambda r: (-r.n_copies, r.start))
-    return sorted_runs[0], (sorted_runs[1] if len(sorted_runs) > 1 else None)
+__all__ = [
+    "MotifRun",
+    "build_expected_stutter",
+    "find_motif_runs",
+    "top_two_runs",
+    "virtual_stutters",
+]
 
 
 def _modify_run(sequence: str, run: MotifRun, delta_copies: int) -> str | None:

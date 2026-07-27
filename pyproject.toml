@@ -39,7 +39,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-poa = ["pyabpoa>=1.5.0"]
+# A POA backend is REQUIRED for forensic-grade consensus; without one the
+# cluster consensus degrades to a single unpolished read (see
+# frontstr/evidence/consensus.py). pyabpoa is preferred but does not build on
+# macOS arm64 (hardcoded AVX2 intrinsics); pyspoa builds on both arches.
+poa = ["pyspoa>=0.3.2"]
+poa-abpoa = ["pyabpoa>=1.5.0"]
 pdf = ["weasyprint>=62.0"]
 dev = [
     "pytest>=8.0",
@@ -103,7 +108,7 @@ no_implicit_optional = true
 files = ["frontstr"]
 
 [[tool.mypy.overrides]]
-module = ["pysam.*", "cyvcf2.*", "edlib.*", "pyabpoa.*"]
+module = ["pysam.*", "cyvcf2.*", "edlib.*", "pyabpoa.*", "spoa.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
