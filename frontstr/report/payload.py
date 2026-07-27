@@ -195,6 +195,7 @@ def _serialize_allele(a: Allele, total_reads: int, motif: str, strand: str = "+"
         "number": a.number,
         "number_method": a.number_method,
         "number_label": a.number_label,
+        "number_is_absolute": a.number_is_absolute,
         "allele_numeric": a.allele_numeric,
         "allele_numeric_source": a.allele_numeric_source,
         "isfg": a.isfg,

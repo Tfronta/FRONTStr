@@ -113,11 +113,29 @@ census.
 | `xlsx` | Five-sheet review workbook (Profile, Sequences, Evidence, QC, Audit) |
 | `vcf` | Native sequence-resolved VCF — **needs `--reference`** |
 
+For a cohort, `frontstr tidy` builds one long table across many runs — see below.
+
 The VCF is native, not an annotation of LongTR's output. `ALT` carries the
 allele's sequence so iso-alleles stay distinct; the repeat count rides in
 `FORMAT/MC` and per-allele coverage in `FORMAT/AD`. It is bgzip/tabix
 indexable and bcftools-queryable, which is the point — it exists so FRONTStr
 can be benchmarked against other callers.
+
+### Cohort analysis
+
+For many samples, `frontstr tidy` flattens run JSONs into a single long table —
+one row per **sample × marker × allele** — as CSV and Parquet:
+
+```bash
+frontstr tidy --from-dir out/batch-2026-07/ -o analysis/
+```
+
+`frontstr batch` produces it automatically when `json` is among its formats.
+Because it is built from the canonical JSONs, a dataset can be rebuilt at any
+time without re-running, and runs from different batches combined. Markers that
+dropped out appear as `called = false` rows rather than vanishing, and each row
+carries the panel version, POA backend and stutter model that produced it — so
+a cohort collected across two calibrations can still be analysed honestly.
 
 Other commands: `evidence` (per-locus cluster dump), `batch` (multi-sample from
 a manifest), `calibrate-stutter` (fit a stutter model to your own data), `call`
@@ -144,8 +162,7 @@ Part of the documentation, not a disclaimer.
 - **The analytical and calling thresholds (0.02 / 0.10) are not data-derived.**
   The coverage floor and the stutter model are; these two are chosen defaults,
   and that is a gap.
-- **No CODIS `.cmf`, MIDST or PDF export**, and no tidy/Parquet dataset for
-  cohort-scale analysis.
+- **No CODIS `.cmf`, MIDST or PDF export.**
 - **Illumina data will not work** against the shipped panel: its windows are
   ±100 bp and the pileup needs reads that span them fully. A deliberate
   ONT-first choice, not an oversight.

@@ -279,8 +279,15 @@ panel of known samples and signs off on a validation report.
 - [ ] `exports/codis.py` — CODIS Common Message Format
 - [ ] `exports/midst.py` — NIST MIDST 1.0 (mixture)
 - [ ] `exports/bundle.py` — single-click case ZIP
-- [ ] Tidy / Parquet dataset for cohort-scale analysis. The per-sample XLSX is
-      a review instrument, not a 150-sample analysis substrate.
+- [x] `exports/tidy.py` — cohort-scale long table, one row per sample x marker
+      x allele, as CSV **and** Parquet (~7x smaller). Built from the canonical
+      run JSONs, so it can be rebuilt without re-running and can combine
+      batches. CLI `frontstr tidy`; `frontstr batch` emits it automatically.
+      Dropouts are rows (`called = false`), not absences — otherwise a dropout
+      is indistinguishable from a marker that was never in the panel. Parquet
+      types are declared explicitly rather than inferred: inference reads the
+      first rows, and a leading dropout would type `allele_number` as string,
+      making "10" sort below "9" in a concordance study.
 
 ### 3.4 PDF (1 day)
 

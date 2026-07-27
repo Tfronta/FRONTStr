@@ -232,6 +232,7 @@ def run_batch(
     # Return in original manifest order
     results = [results_map[e.sample_id] for e in entries]
     _write_batch_summary(results, panel, out_dir)
+    _write_batch_tidy(out_dir, formats)
     return results
 
 
@@ -333,6 +334,31 @@ def _extract_marker_ces(marker_results: list[MarkerResult]) -> dict[str, str]:
             parts.append("?" if a.ce is None else str(a.ce))
         out[r.marker_name] = ",".join(parts) if parts else ""
     return out
+
+
+def _write_batch_tidy(out_dir: Path, formats: frozenset[str]) -> list[Path]:
+    """Build the cohort tidy dataset from the run JSONs this batch just wrote.
+
+    Reads them back from disk rather than collecting payloads in memory: the
+    samples ran in worker processes, and shipping a full payload back through
+    pickle for every one of them is a cost paid for no reason when the files
+    are already there.
+
+    A no-op when ``json`` was not among the requested formats — without the
+    canonical record there is nothing to flatten.
+    """
+    if "json" not in formats:
+        return []
+    from frontstr.exports.tidy import load_payloads, write_tidy
+
+    paths = sorted(p for p in out_dir.rglob("*.json") if not p.name.endswith(".min.json"))
+    if not paths:
+        return []
+    try:
+        return write_tidy(load_payloads(paths), out_dir)
+    except FrontstrError:
+        # A malformed run JSON must not sink a batch that otherwise succeeded.
+        return []
 
 
 def _write_batch_summary(results: list[BatchResult], panel: Panel, out_dir: Path) -> Path:

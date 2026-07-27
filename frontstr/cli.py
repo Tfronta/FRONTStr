@@ -679,6 +679,69 @@ def report(
     console.print(f"[green]✓ Report written:[/green] {out_path} ({size_kb:.1f} KB)")
 
 
+@app.command("tidy")
+def tidy(
+    out_dir: Annotated[Path, typer.Option("--out-dir", "-o", help="Where to write the dataset.")],
+    json_paths: Annotated[
+        list[Path] | None,
+        typer.Option("--json", help="Run JSON. Repeat, or use --from-dir."),
+    ] = None,
+    from_dir: Annotated[
+        Path | None,
+        typer.Option("--from-dir", help="Directory to search recursively for run JSONs."),
+    ] = None,
+    stem: Annotated[str, typer.Option("--stem", help="Output filename stem.")] = "cohort_tidy",
+) -> None:
+    """Build a cohort-scale tidy dataset from run JSONs.
+
+    One row per sample x marker x allele — the shape a concordance study wants.
+    Written as CSV and, when pyarrow is available, Parquet.
+
+    Built from the canonical JSONs rather than by re-running, so a dataset can
+    be rebuilt at any time, and runs from different batches combined::
+
+        frontstr tidy --from-dir out/batch-2026-07/ -o analysis/
+    """
+    from frontstr.exports.tidy import (
+        build_tidy_rows,
+        load_payloads,
+        parquet_available,
+        write_tidy_csv,
+        write_tidy_parquet,
+    )
+
+    paths = list(json_paths or [])
+    if from_dir is not None:
+        # Exclude the compact variant so a sample is not counted twice.
+        paths += sorted(p for p in from_dir.rglob("*.json") if not p.name.endswith(".min.json"))
+    if not paths:
+        console.print("[red]error:[/red] no run JSONs given. Use --json or --from-dir.")
+        raise typer.Exit(code=2)
+
+    try:
+        rows = build_tidy_rows(load_payloads(paths))
+    except FrontstrError as exc:
+        console.print(f"[red]tidy error:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+
+    samples = {r["sample"] for r in rows}
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = [write_tidy_csv(rows, out_dir / f"{stem}.csv")]
+    if parquet_available():
+        written.append(write_tidy_parquet(rows, out_dir / f"{stem}.parquet"))
+    else:
+        console.print(
+            "[yellow]note:[/yellow] pyarrow not installed — CSV only. "
+            "For the columnar dataset: pip install 'frontstr[parquet]'"
+        )
+
+    console.print(
+        f"[green]{len(rows)} rows[/green] from {len(samples)} sample(s) across {len(paths)} run(s)"
+    )
+    for path in written:
+        console.print(f"[green]wrote[/green] {path}  ({path.stat().st_size / 1024:.1f} KB)")
+
+
 @app.command("calibrate-stutter")
 def calibrate_stutter(
     bams: Annotated[

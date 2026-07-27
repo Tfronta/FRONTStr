@@ -462,6 +462,10 @@ not something the code can detect.
 | `xlsx` | Five-sheet review workbook |
 | `vcf` | Native sequence-resolved VCF (**needs `--reference`**) |
 
+Across many samples, `frontstr tidy` flattens run JSONs into one long table
+(one row per sample x marker x allele) as CSV and Parquet. `frontstr batch`
+emits it automatically.
+
 Plus `frontstr.log.jsonl`, a per-run process log.
 
 ### The VCF is native and sequence-resolved
@@ -570,8 +574,7 @@ format, mypy and 402 tests.
   series, no dropout study, no NIST control. The reference profile it is tested
   against comes from HipSTR on matched Illumina data — caller-vs-caller
   concordance, not validation against a reference method.
-- **No CODIS `.cmf`, MIDST, PDF**, and no tidy/Parquet dataset for cohort-scale
-  analysis.
+- **No CODIS `.cmf`, MIDST or PDF export.**
 - **No process log in `batch` mode** — worker processes need per-process
   logging setup. The audit record *is* produced per sample.
 - **Illumina data does not work** against this panel, by design.
@@ -590,12 +593,10 @@ format, mypy and 402 tests.
 
 ### Priorities
 
-1. **Tidy/Parquet dataset** — the actual blocker for the 150-sample benchmark.
-   The XLSX is a per-sample review instrument, not a cohort analysis substrate.
-2. **Widen the stutter calibration** with more R10 + Dorado samples, to extend
+1. **Widen the stutter calibration** with more R10 + Dorado samples, to extend
    the usable LUS range past 10–14.
-3. **Recalibrate the identity threshold**, or switch to consensus-refined
+2. **Recalibrate the identity threshold**, or switch to consensus-refined
    reassignment (seed → POA consensus → reassign reads).
-4. **Derive the analytical/calling thresholds from data**, closing the last
+3. **Derive the analytical/calling thresholds from data**, closing the last
    un-measured parameters.
-5. **Either implement `frontstr run` or remove it.**
+4. **Either implement `frontstr run` or remove it.**

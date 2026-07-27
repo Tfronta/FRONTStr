@@ -43,6 +43,7 @@ dependencies = [
 # cluster consensus degrades to a single unpolished read (see
 # frontstr/evidence/consensus.py). pyabpoa is preferred but does not build on
 # macOS arm64 (hardcoded AVX2 intrinsics); pyspoa builds on both arches.
+parquet = ["pyarrow>=16.0"]
 poa = ["pyspoa>=0.3.2"]
 poa-abpoa = ["pyabpoa>=1.5.0"]
 pdf = ["weasyprint>=62.0"]
@@ -55,6 +56,7 @@ dev = [
     "types-lxml",
     "types-openpyxl",
     "hypothesis>=6.100",
+    "pyarrow>=16.0",
 ]
 
 [project.scripts]
@@ -113,7 +115,7 @@ no_implicit_optional = true
 files = ["frontstr"]
 
 [[tool.mypy.overrides]]
-module = ["pysam.*", "cyvcf2.*", "edlib.*", "pyabpoa.*", "spoa.*"]
+module = ["pysam.*", "cyvcf2.*", "edlib.*", "pyabpoa.*", "spoa.*", "pyarrow.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
