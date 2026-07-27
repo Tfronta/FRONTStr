@@ -8,7 +8,7 @@ files) and a stub ``run`` that orchestrates the full pipeline.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -16,6 +16,7 @@ from rich.table import Table
 
 from frontstr.errors import FrontstrError
 from frontstr.ingest import detect_input, validate_bam
+from frontstr.interp.models import Allele
 from frontstr.version import __version__
 
 app = typer.Typer(
@@ -27,24 +28,14 @@ app = typer.Typer(
 console = Console()
 
 
-def _interpret_allele_cell(a) -> str:
-    """Format one genotype line: numeric allele … (reads).
+def _interpret_allele_cell(a: Allele) -> str:
+    """Format one genotype cell: canonical allele label … (reads).
 
-    Mirrors :mod:`frontstr.interp.allele_numeric` — CE / Δ / len fallback."""
-    cov = a.n_reads_total
-    ns = getattr(a, "allele_numeric_source", "") or ""
-    num = getattr(a, "allele_numeric", None)
-    if num is not None and ns not in ("", "deletion", "unavailable"):
-        v = float(num)
-        body = f"{v:.10f}".rstrip("0").rstrip(".")
-        if ns == "delta_only" and abs(v) > 1e-9:
-            body = f"Δ{body}"
-        return f"{body}({cov})"
-    ce = getattr(a, "ce", None)
-    if ce is not None:
-        body = f"{float(ce):.10f}".rstrip("0").rstrip(".")
-        return f"{body}({cov})"
-    return f"len{getattr(a, 'length_bp', 0)}({cov})"
+    Reads :attr:`Allele.number_label` rather than re-deriving a number, so the
+    CLI can never disagree with the report or the exports about what an allele
+    is called.
+    """
+    return f"{a.number_label or '?'}({a.n_reads_total})"
 
 
 def _version_callback(value: bool) -> None:
@@ -369,7 +360,9 @@ def doctor(
     if is_cram and reference is None:
         console.print("[red]error:[/red] CRAM input requires --reference <fasta>")
         raise typer.Exit(code=2)
-    open_kwargs: dict = {"reference_filename": str(reference)} if is_cram else {}
+    open_kwargs: dict[str, Any] = (
+        {"reference_filename": str(reference)} if is_cram else {}
+    )
     try:
         af = pysam.AlignmentFile(str(bam), "rc" if is_cram else "rb", **open_kwargs)
     except (OSError, ValueError) as exc:

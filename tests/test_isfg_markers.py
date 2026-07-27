@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from frontstr.interp.isfg import ce_from_brackets, compress_isfg
 
-
 # ---------------------------------------------------------------------------
 # D2S441 — strand "+" (TCTA motif on plus strand)
 # ---------------------------------------------------------------------------

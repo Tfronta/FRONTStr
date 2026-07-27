@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from frontstr.interp.isfg import ce_from_brackets, ce_from_length, compress_isfg, motif_repeat_summary
+from frontstr.interp.isfg import (
+    ce_from_brackets,
+    ce_from_length,
+    compress_isfg,
+    motif_repeat_summary,
+)
 
 
 def test_single_motif_pure_run() -> None:

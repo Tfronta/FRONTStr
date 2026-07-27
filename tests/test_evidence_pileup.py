@@ -9,8 +9,7 @@ import pytest
 
 from frontstr.errors import EvidenceError
 from frontstr.evidence.pileup import pileup_locus
-from tests.conftest import SYNTH_CHROM, SYNTH_CHR_LEN, SYNTH_FLANK_LEN, SYNTH_TR_END, SYNTH_TR_START
-
+from tests.conftest import SYNTH_CHR_LEN, SYNTH_CHROM, SYNTH_FLANK_LEN, SYNTH_TR_END, SYNTH_TR_START
 
 # ---------------------------------------------------------------------------
 # Helpers for CRAM tests

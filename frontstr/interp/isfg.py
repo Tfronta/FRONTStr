@@ -144,7 +144,7 @@ def ce_from_brackets(isfg: str) -> float | None:
         total += int(m.group(2))
     # Bare uppercase runs left after removing bracket tokens = single motif copies
     remaining = _BRACKET_RE.sub(" ", isfg)
-    for m in re.finditer(r"[A-Z]{2,}", remaining):
+    for _ in re.finditer(r"[A-Z]{2,}", remaining):
         total += 1
     return float(total) if total > 0 else None
 

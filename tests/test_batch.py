@@ -6,12 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from frontstr.batch import BatchResult, ManifestEntry, parse_manifest, run_batch
+from frontstr.batch import ManifestEntry, parse_manifest, run_batch
 from frontstr.errors import FrontstrError
 from frontstr.panel.models import Panel, System
 
 from .conftest import SYNTH_CHROM, SYNTH_TR_END, SYNTH_TR_START, SynthRead, write_synth_bam
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -252,7 +251,6 @@ def test_batch_cli_two_samples(
     from typer.testing import CliRunner
 
     from frontstr.cli import app
-    from frontstr.panel.loader import load_panel
 
     # Write a minimal panel YAML for the synth marker
     synth_panel_yaml = tmp_path / "synth.yaml"

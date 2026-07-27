@@ -62,10 +62,10 @@ def repeat_group_int(allele: dict[str, Any], period: int) -> int:
     """Repeat-count bin for chart X-axis and isoallele grouping."""
     an = allele.get("allele_numeric")
     if an is not None:
-        return int(round(float(an)))
+        return round(float(an))
     ce = allele.get("ce")
     if ce is not None:
-        return int(round(float(ce)))
+        return round(float(ce))
     isfg = str(allele.get("isfg") or "")
     match = _BRACKET_REPEAT.search(isfg)
     if match:

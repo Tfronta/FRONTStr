@@ -65,12 +65,13 @@ def test_no_flags_for_clean_het() -> None:
 def _bare_allele(**kw: object):
     from frontstr.interp.models import Allele, AlleleStatus
 
-    base = dict(
-        cluster_index=0, consensus="", length_bp=0, n_reads_total=10,
-        n_reads_hp1=5, n_reads_hp2=5, n_reads_hp_none=0, n_forward=5, n_reverse=5,
-        mean_qual=30.0, ce=None, isfg="", bp_diff=0, is_deletion=False,
-        status=AlleleStatus.ALLELE,
-    )
+    base: dict[str, object] = {
+        "cluster_index": 0, "consensus": "", "length_bp": 0, "n_reads_total": 10,
+        "n_reads_hp1": 5, "n_reads_hp2": 5, "n_reads_hp_none": 0,
+        "n_forward": 5, "n_reverse": 5, "mean_qual": 30.0, "ce": None,
+        "isfg": "", "bp_diff": 0, "is_deletion": False,
+        "status": AlleleStatus.ALLELE,
+    }
     base.update(kw)
     return Allele(**base)  # type: ignore[arg-type]
 

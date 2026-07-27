@@ -221,28 +221,18 @@ def _trim_ce_display(ce: float) -> str:
     """Pretty CE string from a forensic CE value."""
     x = round(float(ce), 4)
     if abs(x - int(x)) < 1e-9:
-        return str(int(round(x)))
+        return str(round(x))
     return f"{x:.10f}".rstrip("0").rstrip(".")
 
 
-def _format_allele_number(
-    number: float | None, method: str
-) -> tuple[float | None, str | None, bool]:
-    """Format the model's canonical allele number for the table.
+def _format_allele_number(a: Allele) -> tuple[float | None, str | None, bool]:
+    """Table cell for an allele: ``(sort key, label, is_absolute_number)``.
 
-    Pure presentation: the *decision* of which number to report (and how it
-    was derived) lives on :meth:`Allele.number` / :attr:`Allele.number_method`.
-    Here we only turn that into ``(sort key, cell label, confident_absolute)``.
+    A thin adapter over the model. The number, its label and whether it is a
+    real absolute allele number are all decided on :class:`Allele` so that no
+    view can render an allele differently from another.
     """
-    if number is None:
-        return (None, None, False)
-    trimmed = _trim_ce_display(number)
-    if method == "delta":
-        return (number, f"Δ{trimmed}" if abs(number) > 1e-9 else trimmed, False)
-    if method == "bp_sizing":
-        return (number, f"{int(number)} bp TR", False)
-    # period_ce | reference_offset | bracket_count → a real absolute allele number
-    return (number, trimmed, True)
+    return (a.number, a.number_label or None, a.number_is_absolute)
 
 
 def _profile_row(r: MarkerResult) -> dict[str, Any]:
@@ -264,9 +254,7 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
                 slot.consensus, r.system.motif, strand=r.system.strand
             )
             row[f"allele{i + 1}_ce"] = slot.ce
-            ce_sort, ce_label, ce_is_kit = _format_allele_number(
-                slot.number, slot.number_method
-            )
+            ce_sort, ce_label, ce_is_kit = _format_allele_number(slot)
             row[f"allele{i + 1}_ce_sort"] = ce_sort
             row[f"allele{i + 1}_ce_label"] = ce_label
             row[f"allele{i + 1}_ce_is_kit_ce"] = ce_is_kit
@@ -297,9 +285,8 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
 
 
 def _allele_number_label(a: Allele) -> str | None:
-    """The absolute allele-number cell for one allele (same logic as the CE table)."""
-    _, label, _ = _format_allele_number(a.number, a.number_method)
-    return label
+    """The allele-number cell for one allele (identical to the CE table's)."""
+    return a.number_label or None
 
 
 def _seq_rows(results: list[MarkerResult]) -> list[dict[str, Any]]:
