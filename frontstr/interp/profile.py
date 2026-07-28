@@ -27,9 +27,10 @@ from frontstr.interp.qc import QcThresholds, derive_run_qc_flags
 from frontstr.interp.stutter import build_expected_stutter
 from frontstr.interp.triallelic import call_profile
 from frontstr.log import get_logger
+from frontstr.motifs import repeat_core_span, reverse_complement
 from frontstr.panel.catalog import AlleleCatalog
 from frontstr.panel.models import Panel, System
-from frontstr.trace import BinTrace, ClusterTrace, LocusTrace
+from frontstr.trace import FLANK_SHOWN, BinTrace, ClusterTrace, LocusTrace
 
 log = get_logger(__name__)
 
@@ -110,7 +111,7 @@ def interpret_marker(
     _report_naming_fallbacks(system, alleles, alleles_called)
     if trace is not None:
         _fill_interp_trace(
-            trace, alleles, alleles_called, total_reads, n_phantoms, call_rule, tri_type
+            trace, system, alleles, alleles_called, total_reads, n_phantoms, call_rule, tri_type
         )
 
     result = MarkerResult(
@@ -265,8 +266,38 @@ def interpret_run(
     return out
 
 
+def _split_for_display(consensus: str, system: System) -> tuple[str, str, str, bool]:
+    """Split a consensus into ``(left flank, repeat core, right flank, found)``.
+
+    Returned in canonical (motif) orientation so it reads the same way as the
+    ISFG string — for a minus-strand marker the raw consensus is reference
+    orientation and the motif does not appear in it at all.
+
+    The core is whole and the flanks are trimmed to
+    :data:`frontstr.trace.FLANK_SHOWN`: a panel window is roughly 80% flank, so
+    printing all of it would bury the part that distinguishes two alleles.
+    """
+    if not consensus:
+        return "", "", "", False
+    seq = reverse_complement(consensus) if system.strand == "-" else consensus
+    motifs = [m for m in system.motif.split(",") if m]
+    span = repeat_core_span(seq, motifs) if motifs else None
+    if span is None:
+        return "", seq, "", False
+    start, end = span
+    left = seq[max(0, start - FLANK_SHOWN) : start]
+    right = seq[end : end + FLANK_SHOWN]
+    return (
+        ("…" + left) if start > FLANK_SHOWN else left,
+        seq[start:end],
+        (right + "…") if end + FLANK_SHOWN < len(seq) else right,
+        True,
+    )
+
+
 def _fill_interp_trace(
     trace: LocusTrace,
+    system: System,
     alleles: list[Allele],
     called: list[Allele],
     total_reads: int,
@@ -276,6 +307,7 @@ def _fill_interp_trace(
 ) -> None:
     """Copy the interpretation layer's decisions onto the locus trace."""
     called_ids = {id(a) for a in called}
+    splits = {a.cluster_index: _split_for_display(a.consensus, system) for a in alleles}
     trace.clusters = [
         ClusterTrace(
             index=a.cluster_index,
@@ -296,6 +328,10 @@ def _fill_interp_trace(
             n_reads_absorbed=a.n_reads_absorbed,
             hp_rescued=a.hp_rescued,
             called=id(a) in called_ids,
+            flank_left=splits[a.cluster_index][0],
+            core=splits[a.cluster_index][1],
+            flank_right=splits[a.cluster_index][2],
+            core_found=splits[a.cluster_index][3],
         )
         for a in alleles
     ]

@@ -7,7 +7,7 @@ read start to finish once, then used as a lookup.
 Companion documents: [`architecture.md`](architecture.md) for module layout,
 [`stutter_calibration.md`](stutter_calibration.md) for the stutter measurement.
 
-Status as of July 2026 — 505 tests passing, ~10,200 lines across 55 modules.
+Status as of July 2026 — 512 tests passing, ~10,300 lines across 55 modules.
 
 ---
 
@@ -581,6 +581,11 @@ reads — which is what makes a call reviewable rather than merely reported.
         consensus single  ← not polished by POA
         verdict   artefact  (above analytical, below the 10% calling threshold)
   …
+  Sequences (flank … repeat core … flank):
+    * #0  …GACTCCATGGTG  AATGAATGAATGAATGAATGAATGATGAATGAATGAATG   AGGGAAATAAGG…
+    * #1  …GACTCCATGGTG  AATGAATGAATGAATGAATGAATGAATG              AGGGAAATAAGG…
+      #2  …ACACGCACTGTG  AATGAATGAATGAATGAATGAATGATGAATGAATGAATG   GAGGGAGAGGGA…
+  …
   Genotype                                9.3, 7   [heterozygous]
 ```
 
@@ -595,6 +600,20 @@ analytical threshold, `artefact` the calling threshold, `stutter` the expected
 count from its parent, `hp_phantom` the one-allele-per-haplotype invariant. So
 does a rescue: an allele called on phasing against the peak-height ratio says
 so on its verdict line.
+
+**The bases are shown, aligned.** The repeat core prints in full with its
+flanks cut to 12 bp on each side — a panel window is ~80% flank, and printing
+all of it would bury the part that distinguishes two alleles. Cores are padded
+into one column so reading downward makes a 4 bp step, an interrupted motif or
+a single substitution visible without counting characters. Above, `#0`'s `ATG`
+interruption against `#1`'s clean `AATG` run *is* 9.3 versus 7, and `#2`'s
+different left flank marks it as a misaligned read rather than a third allele.
+
+**A called allele's core is never truncated** — D21S11's runs past 180 bp and
+still prints whole, because the point of showing bases is to validate the
+genotype. Uncalled candidates are cut at 96 bp, and the cut is disclosed rather
+than silent. Sequences are in canonical (motif) orientation, so a minus-strand
+marker reads the same way as its ISFG string.
 
 **The read funnel closes.** `kept + rejected == fetched` at every locus, with
 each rejection under a named reason (`not a primary alignment`, `MAPQ below
@@ -746,7 +765,7 @@ Pileup, clustering, POA consensus, ISFG, allele numbering, stutter,
 classification, haplotype suppression, catalog annotation, genotype calling, QC
 flags, all seven export formats, the audit trail, and batch mode over a
 manifest. Regression-tested against a real ONT sample; CI green on ruff, ruff
-format, mypy and 505 tests.
+format, mypy and 512 tests.
 
 ### Does not work / does not exist
 

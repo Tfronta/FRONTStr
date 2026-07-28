@@ -40,6 +40,18 @@ from frontstr.evidence.pileup import PileupCounts
 #: Width of the label column in the rendered output.
 _LABEL = 42
 
+#: bp of flank shown on each side of the repeat core. Enough to recognise the
+#: anchor sequence and to see a flank variant, short enough that the cores stay
+#: aligned in one column.
+FLANK_SHOWN = 12
+
+#: Cap on the width the core column is padded to. Right flanks are aligned so
+#: a length difference is visible at a glance, but padding every row to the
+#: longest core lets one corrupt cluster set the width for the whole locus —
+#: a single 200 bp noise core pushed every DYS391 row out to 271 characters.
+#: Beyond the cap, long cores simply overflow and only they lose the alignment.
+_CORE_ALIGN_CAP = 96
+
 
 @dataclass(slots=True)
 class BinTrace:
@@ -75,6 +87,16 @@ class ClusterTrace:
     n_reads_absorbed: int
     hp_rescued: bool
     called: bool
+    #: The consensus split for display, in **canonical (motif) orientation** so
+    #: it reads the same way as the ISFG string. The core is kept whole — it is
+    #: what distinguishes one allele from another — while the flanks are cut to
+    #: :data:`FLANK_SHOWN` bp, because ~80% of a panel window is flank and
+    #: printing all of it would bury the part that matters.
+    flank_left: str = ""
+    core: str = ""
+    flank_right: str = ""
+    #: False when no motif run was found and the whole consensus is shown raw.
+    core_found: bool = True
 
 
 @dataclass(slots=True)
@@ -219,6 +241,7 @@ def render_locus(t: LocusTrace) -> str:
             if c.n_reads_absorbed:
                 add(f"        absorbed  {c.n_reads_absorbed} read(s) from same-haplotype splits")
         add("")
+        lines.extend(_render_sequences(t))
 
     if t.n_suppressed_phantoms:
         add(
@@ -236,6 +259,64 @@ def render_locus(t: LocusTrace) -> str:
     for severity, code in t.flags:
         add(_row(f"Flag ({severity})", code, indent=6))
     return "\n".join(lines)
+
+
+def _display_core(c: ClusterTrace) -> str:
+    """The core as printed. **A called allele is never truncated.**
+
+    That is the rule that matters: the point of showing bases is to validate the
+    genotype, so the sequences behind it print in full however long they are —
+    D21S11's core runs past 180 bp and still does.
+
+    Uncalled candidates are cut at the alignment cap. A corrupt ONT read either
+    has no locatable core (the whole 250 bp window lands in ``core``) or has one
+    that starts at position 0 because a chance motif hit in the flank merged
+    into the array. Either way it is noise, printing it whole crowds out the
+    candidates that matter, and nobody validates a call by reading a rejected
+    read end to end.
+    """
+    if c.called or len(c.core) <= _CORE_ALIGN_CAP:
+        return c.core
+    return c.core[: _CORE_ALIGN_CAP - 1] + "…"
+
+
+def _render_sequences(t: LocusTrace) -> list[str]:
+    """The bases themselves: flank … repeat core … flank, cores in one column.
+
+    Aligned deliberately. Read down the core column and a 4 bp length step, an
+    interrupted motif or a single substitution is visible without counting
+    characters — which is the whole reason a sequence-resolved caller is worth
+    having over a length-based one.
+    """
+    shown = [c for c in t.clusters if c.core or c.flank_left or c.flank_right]
+    if not shown:
+        return []
+    cores = {c.index: _display_core(c) for c in shown}
+    left_w = max(len(c.flank_left) for c in shown)
+    core_w = min(max(len(x) for x in cores.values()), _CORE_ALIGN_CAP)
+
+    out = [_row("Sequences (flank … repeat core … flank):", "").rstrip()]
+    if any(not c.core_found for c in shown):
+        out.append(
+            _row("rows with no flank: no motif run found, raw consensus", "", indent=6).rstrip()
+        )
+    if any(len(_display_core(c)) < len(c.core) for c in shown):
+        out.append(
+            _row(
+                f"uncalled candidates cut at {_CORE_ALIGN_CAP} bp (…); called ones never are",
+                "",
+                indent=6,
+            ).rstrip()
+        )
+    for c in shown:
+        mark = "*" if c.called else " "
+        row = (
+            f"    {mark} #{c.index}  {c.flank_left:>{left_w}}  "
+            f"{cores[c.index]:<{core_w}}  {c.flank_right}"
+        )
+        out.append(row.rstrip())
+    out.append("")
+    return out
 
 
 def _explain_status(c: ClusterTrace, t: LocusTrace) -> str:

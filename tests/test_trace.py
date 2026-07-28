@@ -161,7 +161,8 @@ class TestNarrativeContent:
 
     def test_a_very_long_name_is_truncated_not_wrapped(self) -> None:
         t = _trace(counts=_counts(), clusters=[_cluster(strnaming_name="CE9_" + "A" * 300)])
-        assert max(len(x) for x in render_locus(t).splitlines()) < 100
+        name_line = next(x for x in render_locus(t).splitlines() if x.strip().startswith("name"))
+        assert len(name_line) < 100
 
     def test_markers_that_bypass_the_str_path_say_so(self) -> None:
         t = _trace(
@@ -174,6 +175,67 @@ class TestNarrativeContent:
         assert "not a tandem repeat" in out
         assert "Binned by" not in out
         assert "X, Y" in out
+
+
+class TestSequences:
+    """The bases themselves — the point of a sequence-resolved caller."""
+
+    def test_flank_core_flank_is_rendered(self) -> None:
+        t = _trace(
+            counts=_counts(),
+            clusters=[_cluster(flank_left="…GACTCCATGGTG", core="AATG" * 7, flank_right="AGGG…")],
+        )
+        out = render_locus(t)
+        assert "Sequences" in out
+        assert "AATGAATGAATGAATGAATGAATGAATG" in out
+        assert "…GACTCCATGGTG" in out
+
+    def test_cores_are_column_aligned_across_candidates(self) -> None:
+        """Reading down the column is how a 4 bp step becomes visible."""
+        t = _trace(
+            counts=_counts(),
+            clusters=[
+                _cluster(index=0, flank_left="…AAAA", core="AATG" * 9, flank_right="GGGG…"),
+                _cluster(index=1, flank_left="…AAAA", core="AATG" * 7, flank_right="GGGG…"),
+            ],
+        )
+        rows = [x for x in render_locus(t).splitlines() if "AATG" in x]
+        assert len(rows) == 2
+        assert rows[0].index("AATG") == rows[1].index("AATG"), "cores must start in one column"
+
+    def test_a_called_allele_is_never_truncated(self) -> None:
+        """D21S11's core runs past 180 bp; cutting it would defeat the purpose."""
+        long_core = "TCTA" * 50  # 200 bp
+        t = _trace(counts=_counts(), clusters=[_cluster(core=long_core, called=True)])
+        assert long_core in render_locus(t)
+
+    def test_an_uncalled_noise_candidate_is_truncated(self) -> None:
+        t = _trace(counts=_counts(), clusters=[_cluster(core="A" * 300, called=False)])
+        out = render_locus(t)
+        assert "A" * 300 not in out
+        assert "…" in out
+        assert "never are" in out, "the cut must be disclosed, not silent"
+
+    def test_a_missing_core_is_disclosed(self) -> None:
+        t = _trace(
+            counts=_counts(),
+            clusters=[_cluster(core="ACGT" * 5, core_found=False, flank_left="", flank_right="")],
+        )
+        assert "no motif run found" in render_locus(t)
+
+    def test_no_sequence_section_when_there_is_nothing_to_show(self) -> None:
+        t = _trace(counts=_counts(), clusters=[_cluster(core="", flank_left="", flank_right="")])
+        assert "Sequences" not in render_locus(t)
+
+    def test_rows_have_no_trailing_whitespace(self) -> None:
+        t = _trace(
+            counts=_counts(),
+            clusters=[
+                _cluster(index=0, core="AATG" * 9, flank_right=""),
+                _cluster(index=1, core="AATG" * 2, flank_right=""),
+            ],
+        )
+        assert all(x == x.rstrip() for x in render_locus(t).splitlines())
 
 
 class TestRunSummary:
