@@ -82,9 +82,22 @@ class NameStatus(StrEnum):
     OK = "ok"
     #: STRNaming defines no reported range for this marker (e.g. DYS393, AMEL).
     NO_RANGE = "no_range"
-    #: One of the flanking anchors could not be placed in the consensus — the
-    #: panel window is too narrow, or the consensus is too corrupt.
+    #: Degenerate geometry: an anchor could not be located at all (empty input),
+    #: or the two hits are ordered so that no range lies between them. Rare —
+    #: edlib's infix mode returns *some* location for almost any real sequence.
     ANCHOR_NOT_FOUND = "anchor_not_found"
+    #: An anchor was located but diverges too far from the reference to trust
+    #: (see :data:`MAX_ANCHOR_EDIT_FRACTION`). **This is the guard that actually
+    #: fires**, precisely because edlib always returns a best location: without
+    #: it, pure noise would yield a confident-looking name.
+    #:
+    #: Both a too-narrow panel window and a corrupt sequence land here, so the
+    #: status alone does not say which. What separates them is context the namer
+    #: does not have — read count and whether the allele was called — so
+    #: :func:`frontstr.interp.profile._report_naming_fallbacks` does the
+    #: reporting. On the ONT slices this fires only on unpolished one-read
+    #: clusters; every called allele is named.
+    ANCHOR_LOW_IDENTITY = "anchor_low_identity"
     #: The consensus was empty (deletion / no data).
     EMPTY = "empty"
     #: STRNaming ran but emitted no ``CE<n>_`` prefix (no STR in range).
@@ -219,10 +232,13 @@ class StrNamer:
         if not consensus:
             return NameResult(None, "", NameStatus.EMPTY)
 
-        extracted = _extract_range(consensus, rng.left_anchor, rng.right_anchor)
+        extracted, status = _extract_range(consensus, rng.left_anchor, rng.right_anchor)
         if extracted is None:
-            log.debug("strnaming_anchor_failed", marker=marker, consensus_bp=len(consensus))
-            return NameResult(None, "", NameStatus.ANCHOR_NOT_FOUND)
+            # Not logged here: this method has no idea whether it is looking at a
+            # real allele or a one-read noise cluster, and that is the whole
+            # difference between "a bug" and "the guard working". The caller has
+            # the read counts, so it does the reporting.
+            return NameResult(None, "", status)
 
         query = reverse_complement(extracted) if rng.reverse else extracted
         try:
@@ -268,25 +284,29 @@ def _locate(anchor: str, target: str) -> tuple[int, int] | None:
     return start, end + 1
 
 
-def _extract_range(consensus: str, left_anchor: str, right_anchor: str) -> str | None:
+def _extract_range(
+    consensus: str, left_anchor: str, right_anchor: str
+) -> tuple[str | None, NameStatus]:
     """Slice the reporting range out of ``consensus`` using its flanking anchors.
 
-    Returns ``None`` when either anchor cannot be placed confidently, or when
-    the hits are ordered such that no range lies between them.
+    Returns ``(sequence, status)``; ``sequence`` is ``None`` unless the status
+    is :attr:`NameStatus.OK`. Nearly every real failure is
+    ``ANCHOR_LOW_IDENTITY`` — see that member's note for why, and for why the
+    status alone is not enough to judge whether a failure matters.
     """
     import edlib
 
     left = _locate(left_anchor, consensus)
     right = _locate(right_anchor, consensus)
     if left is None or right is None:
-        return None
+        return None, NameStatus.ANCHOR_NOT_FOUND
 
     for anchor, hit in ((left_anchor, left), (right_anchor, right)):
         distance = edlib.align(anchor, consensus[hit[0] : hit[1]], mode="NW", task="distance")
         if distance["editDistance"] > MAX_ANCHOR_EDIT_FRACTION * len(anchor):
-            return None
+            return None, NameStatus.ANCHOR_LOW_IDENTITY
 
     start, end = left[1], right[0]
     if end <= start:
-        return None
-    return consensus[start:end]
+        return None, NameStatus.ANCHOR_NOT_FOUND
+    return consensus[start:end], NameStatus.OK

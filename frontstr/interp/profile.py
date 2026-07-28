@@ -28,6 +28,8 @@ from frontstr.log import get_logger
 from frontstr.panel.catalog import AlleleCatalog
 from frontstr.panel.models import Panel, System
 
+log = get_logger(__name__)
+
 DEFAULT_ANALYTICAL_THRESH = 0.02
 DEFAULT_CALLING_THRESH = 0.10
 DEFAULT_PARENT_FRACTION = 0.20
@@ -98,6 +100,7 @@ def interpret_marker(
     alleles_called, call_rule, tri_type = call_profile(
         alleles, system, calling_thresh=calling_thresh
     )
+    _report_naming_fallbacks(system, alleles, alleles_called)
 
     result = MarkerResult(
         marker_name=system.name,
@@ -142,7 +145,6 @@ def interpret_run(
         marker-level *and* run-level QC flags. Empty pileups produce a
         ``NO_DATA`` result rather than failing.
     """
-    log = get_logger(__name__)
     out: list[MarkerResult] = []
     # Built once per run: seeding the reference structures is the expensive part
     # and the result is immutable across markers.
@@ -235,6 +237,35 @@ def _safe_pileup_and_cluster(
         motifs=[m for m in system.motif.split(",") if m],
         strand=system.strand,
     )
+
+
+def _report_naming_fallbacks(system: System, alleles: list[Allele], called: list[Allele]) -> None:
+    """Log every allele that fell back to the legacy CE, and how much it matters.
+
+    Reported here rather than inside :mod:`frontstr.interp.naming` because the
+    severity depends entirely on context the namer does not have. A one-read
+    noise cluster failing the anchor identity guard is the guard doing its job —
+    unpolished ONT reads carry indels that mangle a 30 bp flank — and belongs at
+    debug. The same failure on a **called** allele means a reported number came
+    from arithmetic known to be wrong at six markers, and has to be a warning.
+    """
+    called_ids = {id(a) for a in called}
+    for a in alleles:
+        if not a.strnaming_status or a.strnaming_status == NameStatus.OK.value:
+            continue
+        if a.strnaming_status == NameStatus.NO_RANGE.value:
+            continue  # expected and permanent for DYS393/AMEL; not news
+        event = "naming.fallback_on_called_allele" if id(a) in called_ids else "naming.fallback"
+        emit = log.warning if id(a) in called_ids else log.debug
+        emit(
+            event,
+            marker=system.name,
+            reason=a.strnaming_status,
+            n_reads=a.n_reads_total,
+            consensus_bp=a.length_bp,
+            consensus_method=a.consensus_method,
+            number_method=a.number_method,
+        )
 
 
 def _allele_from_cluster(

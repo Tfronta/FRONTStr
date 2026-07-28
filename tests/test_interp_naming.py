@@ -87,10 +87,33 @@ def test_empty_consensus_reports_empty(namer: StrNamer) -> None:
 
 
 def test_consensus_without_the_range_is_rejected(namer: StrNamer) -> None:
-    """A sloppy anchor hit must not become a confident-looking wrong name."""
+    """A sloppy anchor hit must not become a confident-looking wrong name.
+
+    edlib's infix mode always returns *some* location, so without the identity
+    guard this would yield a plausible-looking name for pure noise.
+    """
     result = namer.name("vWA", "N" * 300)
-    assert result.status is NameStatus.ANCHOR_NOT_FOUND
+    assert result.status is NameStatus.ANCHOR_LOW_IDENTITY
     assert result.ce is None
+
+
+def test_identity_guard_is_the_one_that_actually_fires(namer: StrNamer) -> None:
+    """Both real failure modes land on ``anchor_low_identity``.
+
+    edlib's infix mode returns a best location for almost any input, so
+    "anchor absent" is not observable as a distinct outcome — a too-narrow
+    window and a corrupt read both surface as a located-but-divergent anchor.
+    Worth pinning: it is why judging a failure needs the read count and the
+    called/uncalled distinction, not the status on its own.
+    """
+    assert namer.name("vWA", "N" * 300).status is NameStatus.ANCHOR_LOW_IDENTITY
+
+    row = next(r for r in _cache_rows() if r[0] == "vWA")
+    # A window trimmed to the bare range leaves no room for the flanking anchors.
+    _, _, start, end, _, _, slice_start, slice_seq = row
+    lo, hi = min(int(start), int(end)), max(int(start), int(end))
+    bare = slice_seq[lo - int(slice_start) : hi - int(slice_start) + 1]
+    assert namer.name("vWA", bare).status is NameStatus.ANCHOR_LOW_IDENTITY
 
 
 def test_naming_never_raises_on_garbage(namer: StrNamer) -> None:
@@ -107,25 +130,30 @@ class TestExtractRange:
 
     def test_extracts_between_anchors(self) -> None:
         left, right = "ACGTACGTAC", "TTGGTTGGTT"
-        assert _extract_range(f"CCC{left}PAYLOAD{right}GGG", left, right) == "PAYLOAD"
+        seq, status = _extract_range(f"CCC{left}PAYLOAD{right}GGG", left, right)
+        assert (seq, status) == ("PAYLOAD", NameStatus.OK)
 
     def test_tolerates_sequencing_error_in_the_anchor(self) -> None:
         left, right = "ACGTACGTACGTACGTACGTACGTACGTAC", "TTGGTTGGTTGGTTGGTTGGTTGGTTGGTT"
         noisy_left = left[:10] + "A" + left[11:]  # one substitution
-        assert _extract_range(f"{noisy_left}PAYLOAD{right}", left, right) == "PAYLOAD"
+        assert _extract_range(f"{noisy_left}PAYLOAD{right}", left, right)[0] == "PAYLOAD"
 
     def test_rejects_when_an_anchor_is_absent(self) -> None:
-        assert _extract_range("N" * 200, "ACGTACGTACGTACGTACGTACGTACGTAC", "TTGG") is None
+        seq, status = _extract_range("N" * 200, "ACGTACGTACGTACGTACGTACGTACGTAC", "TTGG")
+        assert seq is None
+        assert status is NameStatus.ANCHOR_LOW_IDENTITY
 
     def test_rejects_crossed_anchors(self) -> None:
         left, right = "ACGTACGTAC", "TTGGTTGGTT"
-        assert _extract_range(f"{right}{left}", left, right) is None
+        seq, status = _extract_range(f"{right}{left}", left, right)
+        assert seq is None
+        assert status is NameStatus.ANCHOR_NOT_FOUND
 
     def test_captures_an_insertion_the_reference_does_not_have(self) -> None:
         """The TPOX failure mode: extra repeat units must land inside the range."""
         left, right = "ACGTACGTACGTACGTACGTACGTACGTAC", "TTGGTTGGTTGGTTGGTTGGTTGGTTGGTT"
         expanded = "AATG" * 11
-        assert _extract_range(f"{left}{expanded}{right}", left, right) == expanded
+        assert _extract_range(f"{left}{expanded}{right}", left, right)[0] == expanded
 
 
 def test_strip_dropped_options_removes_only_the_uas_limit() -> None:

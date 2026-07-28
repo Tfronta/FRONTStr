@@ -529,6 +529,24 @@ the result table from the commentary. The same events land in
 sinks share one event stream and render it differently, because a file wants to
 be diffed and a terminal wants to be read.
 
+`naming.fallback` lines appear for clusters STRNaming declined to name:
+
+```
+[debug] naming.fallback  marker=FGA reason=anchor_low_identity n_reads=1
+                         consensus_method=single number_method=bracket_count
+```
+
+These are **not errors**. Every one on the reference slices is a one-read
+cluster whose unpolished ONT indels mangled a 30 bp flank past the identity
+guard — the guard refusing to name a corrupt sequence, which is what it exists
+for. Called alleles use a POA consensus and are all named. The read count and
+`consensus_method=single` are in the line precisely so this is judgeable at a
+glance rather than alarming.
+
+The same condition on a **called** allele is logged as
+`naming.fallback_on_called_allele` at *warning* level, because then a reported
+number came from the legacy arithmetic that is wrong at six markers.
+
 This is not yet the full per-locus trace (reads fetched, reads rejected and
 why, bins, clusters, POA positions corrected). `pileup_locus` currently discards
 its rejection reasons, which has to change first.
