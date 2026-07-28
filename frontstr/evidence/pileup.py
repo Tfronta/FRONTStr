@@ -42,6 +42,11 @@ class Observation:
         read_id: BAM ``QNAME`` (used for auditing / drill-down).
         sequence: TR subsequence in reference orientation, uppercase.
         hp: Haplotype tag (``1``, ``2``) or ``None`` if absent.
+        ps: Phase-set tag — the identifier of the phase block the ``HP`` tag
+            belongs to, or ``None`` if absent. **``HP`` is only meaningful
+            inside its own ``PS``**: HP1 in one block and HP1 in the next are
+            unrelated labels, not the same chromosome. Carried so the
+            interpretation layer can refuse to compare across blocks.
         mean_qual: Mean Phred quality of the TR subsequence.
         strand: ``"+"`` if mapped to forward strand, ``"-"`` for reverse.
         flank_left_ok: True if the left flank anchor was clean (no clip/indel).
@@ -51,6 +56,7 @@ class Observation:
     read_id: str
     sequence: str
     hp: int | None
+    ps: int | None
     mean_qual: float
     strand: str
     flank_left_ok: bool
@@ -222,12 +228,15 @@ def _read_to_observation(
     sequence = qseq[qstart:qend].upper()
 
     hp: int | None = None
+    ps: int | None = None
     try:
         if read.has_tag("HP"):  # type: ignore[attr-defined]
             hp_val = read.get_tag("HP")  # type: ignore[attr-defined]
             hp = int(hp_val) if hp_val in (1, 2, "1", "2") else None
-    except (ValueError, KeyError):
-        hp = None
+        if hp is not None and read.has_tag("PS"):  # type: ignore[attr-defined]
+            ps = int(read.get_tag("PS"))  # type: ignore[attr-defined]
+    except (ValueError, KeyError, TypeError):
+        hp, ps = hp, None
 
     mean_qual = _mean_quality(read, qstart, qend)
     strand = "-" if read.is_reverse else "+"  # type: ignore[attr-defined]
@@ -237,6 +246,7 @@ def _read_to_observation(
             read_id=read.query_name or "?",  # type: ignore[attr-defined]
             sequence=sequence,
             hp=hp,
+            ps=ps,
             mean_qual=mean_qual,
             strand=strand,
             flank_left_ok=True,

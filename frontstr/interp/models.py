@@ -98,6 +98,7 @@ class FlagCode(StrEnum):
     CONSENSUS_FALLBACK = "consensus_fallback"
     HP_PHANTOM_COLLAPSED = "hp_phantom_collapsed"
     HP_RESCUED_HET = "hp_rescued_het"
+    PHASE_BLOCK_SPLIT = "phase_block_split"
 
 
 _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
@@ -122,6 +123,11 @@ _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
     # but a reviewer must be able to see that it rests on phasing rather than on
     # peak balance, because the read ratio alone would read as homozygous.
     FlagCode.HP_RESCUED_HET: FlagSeverity.INFO,
+    # WARN: haplotype evidence is weaker than it looks at this locus. Every
+    # haplotype rule declines rather than guessing, so the call is safe — but a
+    # reviewer comparing HP counts by eye would draw a conclusion the caller
+    # deliberately refused to draw.
+    FlagCode.PHASE_BLOCK_SPLIT: FlagSeverity.WARN,
 }
 
 
@@ -209,6 +215,14 @@ class Allele(BaseModel):
     #: (see :mod:`frontstr.interp.haplotype`). Reported so coverage is not
     #: understated; ``n_reads_total`` deliberately stays as observed.
     n_reads_absorbed: int = 0
+    #: Phase block (BAM ``PS`` tag) this allele's haplotype-tagged reads came
+    #: from, or ``None`` when they carry no ``PS`` or span more than one.
+    phase_set: int | None = None
+    #: How many distinct phase blocks those reads came from. Anything above 1
+    #: means the ``HP`` labels within this cluster are not comparable, so
+    #: :func:`frontstr.interp.haplotype.dominant_hp` refuses to assign it a
+    #: haplotype at all.
+    n_phase_sets: int = 0
     #: Set when this allele was called only because phasing put it on the
     #: opposite haplotype from the major allele — the peak-height ratio alone
     #: would have collapsed the locus to homozygous. Raises ``HP_RESCUED_HET``.

@@ -260,3 +260,11 @@ def test_low_mapq_reads_are_reported_with_that_reason(synth_bam_low_mapq: Path) 
 def test_counts_are_optional(synth_bam_heterozygous: Path) -> None:
     """The hot path must not pay for accounting nobody asked for."""
     assert pileup_locus(synth_bam_heterozygous, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END)
+
+
+def test_phase_set_tag_is_captured(synth_bam_heterozygous: Path) -> None:
+    """PS must ride along with HP; without it the tag cannot be scoped."""
+    obs = pileup_locus(synth_bam_heterozygous, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END)
+    assert all(hasattr(o, "ps") for o in obs)
+    # Synthetic fixtures carry no PS; the field must be None, never invented.
+    assert all(o.ps is None for o in obs)

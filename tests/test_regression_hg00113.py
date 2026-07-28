@@ -331,3 +331,33 @@ def test_trace_coverage_matches_the_reported_genotype() -> None:
             f"{t.marker}: trace says {t.counts.kept} reads, profile says "
             f"{by_marker[t.marker].total_reads}"
         )
+
+
+def test_phase_block_split_is_detected_and_declines_to_guess() -> None:
+    """HP labels are local to a phase block, and 3 of 125 loci really do split.
+
+    HG00097 D13S317 is the clear case: a 14-read cluster whose HP2 labels are
+    100% pure but drawn from two different blocks. Nothing about the call
+    changes — the haplotype rules simply decline — but the flag has to fire, or
+    a reviewer reads those HP counts as haplotype evidence they are not.
+    """
+    from frontstr.interp.haplotype import dominant_hp
+
+    bam = _require("HG00097")
+    results = interpret_run(bam=bam, panel=load_panel(PANEL_PATH))
+    d13 = next(r for r in results if r.marker_name == "D13S317")
+
+    split = [a for a in d13.alleles if a.n_phase_sets > 1]
+    assert split, "the two-block cluster must be recorded"
+    assert all(dominant_hp(a) is None for a in split), (
+        "a cluster spanning blocks must get no haplotype, however pure its HP labels"
+    )
+    assert any(f.code == FlagCode.PHASE_BLOCK_SPLIT for f in d13.flags)
+    # The genotype is unaffected: this is a latent-evidence fix, not a call fix.
+    assert _called_labels(d13) == {"11", "14"}
+
+
+def test_phase_blocks_are_read_from_the_bam(hg00113_results: list[MarkerResult]) -> None:
+    """If PS stopped being parsed, every guard above would silently pass."""
+    with_blocks = [a for r in hg00113_results for a in r.alleles if a.phase_set is not None]
+    assert with_blocks, "the 1000G ONT slices are phased and do carry PS"

@@ -31,7 +31,7 @@ thing a length-rounding scheme would destroy.
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -67,6 +67,17 @@ class Cluster:
     @property
     def n_hp_none(self) -> int:
         return sum(1 for o in self.members if o.hp is None)
+
+    @property
+    def phase_sets(self) -> Counter[int]:
+        """Phase blocks the haplotype-tagged members came from, with counts.
+
+        More than one entry means this cluster's ``HP`` labels are not
+        comparable with each other: HP2 in one block and HP2 in the next are
+        unrelated labels. The interpretation layer treats such a cluster as
+        unphased rather than trusting the majority.
+        """
+        return Counter(o.ps for o in self.members if o.hp is not None and o.ps is not None)
 
     @property
     def n_forward(self) -> int:

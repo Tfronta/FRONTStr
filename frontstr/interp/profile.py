@@ -332,6 +332,8 @@ def _fill_interp_trace(
             core=splits[a.cluster_index][1],
             flank_right=splits[a.cluster_index][2],
             core_found=splits[a.cluster_index][3],
+            phase_set=a.phase_set,
+            n_phase_sets=a.n_phase_sets,
         )
         for a in alleles
     ]
@@ -447,6 +449,7 @@ def _allele_from_cluster(
     allele_num, allele_src = compute_allele_numeric(len(consensus), system, ref_length_bp)
 
     named = namer.name(system.name, consensus) if namer is not None else None
+    blocks = c.phase_sets
     return Allele(
         cluster_index=idx,
         consensus=consensus,
@@ -458,6 +461,8 @@ def _allele_from_cluster(
         n_reads_hp1=c.n_hp1,
         n_reads_hp2=c.n_hp2,
         n_reads_hp_none=c.n_hp_none,
+        phase_set=blocks.most_common(1)[0][0] if len(blocks) == 1 else None,
+        n_phase_sets=len(blocks),
         n_forward=c.n_forward,
         n_reverse=c.n_reverse,
         mean_qual=c.mean_qual,

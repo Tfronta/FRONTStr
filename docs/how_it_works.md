@@ -7,7 +7,7 @@ read start to finish once, then used as a lookup.
 Companion documents: [`architecture.md`](architecture.md) for module layout,
 [`stutter_calibration.md`](stutter_calibration.md) for the stutter measurement.
 
-Status as of July 2026 — 520 tests passing, ~10,400 lines across 55 modules.
+Status as of July 2026 — 530 tests passing, ~10,500 lines across 55 modules.
 
 ---
 
@@ -61,7 +61,8 @@ at least 20 bp of cleanly aligned flank on each side, and MAPQ ≥ 20. From each
 qualifying read it extracts:
 
 - the subsequence covering the window, in **reference orientation**
-- the `HP` haplotype tag, when the BAM is phased
+- the `HP` haplotype tag **and its `PS` phase block**, when the BAM is phased —
+  `HP` is meaningless without the block it belongs to (§6)
 - the strand, and the mean Phred quality over the window
 
 Two consequences worth understanding:
@@ -381,6 +382,28 @@ evidence that resolves it correctly, to `289 / 301`.
 **With core binning in place this is now a backstop, not the workhorse:** it
 fires at 1 locus out of ~110, down from 13. Core binning alone takes false
 mixtures from 5 to 0.
+
+### Haplotype labels are local to a phase block
+
+`HP` only means something inside its own `PS`. HP1 in one block and HP1 in the
+next are unrelated labels — the phasing tool started numbering again, not
+switched chromosome. Every rule above therefore keys on `(phase_set, hp)`, and
+a cluster whose tagged reads span more than one block is treated as **unphased**
+rather than trusted, however pure its HP labels look.
+
+This is not hypothetical. Across the five ONT slices, **3 of 125 loci** have
+spanning, phased reads from more than one block. HG00097 D13S317 is the clear
+case: a 14-read cluster reporting 100% HP2, drawn 4 reads from one block and 3
+from another.
+
+No call changes — those loci are balanced enough that no haplotype rule fires —
+so this is a latent-evidence fix, not a genotype fix. The affected loci raise
+`PHASE_BLOCK_SPLIT` (WARN) and the trace marks the cluster
+`[2 phase blocks — HP not comparable]`, because a reviewer comparing HP counts
+by eye would otherwise draw the conclusion the caller deliberately refused to.
+
+A BAM with `HP` but no `PS` keeps the pre-`PS` behaviour: refusing there would
+silently disable haplotype reasoning for every phasing tool that omits the tag.
 
 ### The same invariant, read backwards
 
@@ -793,7 +816,7 @@ Pileup, clustering, POA consensus, ISFG, allele numbering, stutter,
 classification, haplotype suppression, catalog annotation, genotype calling, QC
 flags, all seven export formats, the audit trail, and batch mode over a
 manifest. Regression-tested against a real ONT sample; CI green on ruff, ruff
-format, mypy and 520 tests.
+format, mypy and 530 tests.
 
 ### Does not work / does not exist
 

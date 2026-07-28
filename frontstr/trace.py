@@ -97,6 +97,12 @@ class ClusterTrace:
     flank_right: str = ""
     #: False when no motif run was found and the whole consensus is shown raw.
     core_found: bool = True
+    #: Phase block (BAM ``PS``) the haplotype-tagged reads came from, and how
+    #: many distinct blocks they span. More than one means the ``HP`` counts on
+    #: this row are *not* haplotype evidence — see
+    #: :mod:`frontstr.interp.haplotype`.
+    phase_set: int | None = None
+    n_phase_sets: int = 0
 
 
 @dataclass(slots=True)
@@ -283,6 +289,10 @@ def render_locus(t: LocusTrace) -> str:
         for c in t.clusters:
             mark = "*" if c.called else " "
             hp = f"HP1 {c.n_hp1} / HP2 {c.n_hp2} / untagged {c.n_untagged}"
+            if c.n_phase_sets > 1:
+                hp += f"  [{c.n_phase_sets} phase blocks — HP not comparable]"
+            elif c.phase_set is not None:
+                hp += f"  [block {c.phase_set}]"
             add(
                 f"    {mark} #{c.index}  {_plural(c.n_reads, 'read'):>10}  "
                 f"{c.fraction:5.1%}  {c.length_bp:>4} bp  {hp}"
