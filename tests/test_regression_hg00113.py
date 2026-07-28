@@ -289,3 +289,45 @@ def test_female_samples_have_no_y_signal() -> None:
     for marker in ("DYS391", "DYS393"):
         result = next(r for r in results if r.marker_name == marker)
         assert result.call_rule == CallRule.NO_DATA, f"{marker} called in a female"
+
+
+def test_trace_accounts_for_every_read_at_every_locus() -> None:
+    """The trace's arithmetic must close on real data, at every marker.
+
+    A coverage number a reviewer cannot reconcile against the BAM is not
+    auditable. This is the property the whole trace exists to provide, so it is
+    checked end to end rather than only on synthetic fixtures.
+    """
+    from frontstr.trace import LocusTrace
+
+    bam = _require("HG00113")
+    traces: list[LocusTrace] = []
+    interpret_run(bam=bam, panel=load_panel(PANEL_PATH), on_trace=traces.append)
+
+    assert {t.marker for t in traces} == set(EXPECTED_PROFILE), "every marker must be traced"
+    for t in traces:
+        if t.counts is None:
+            assert t.note, f"{t.marker}: untraced without saying why"
+            continue
+        assert t.counts.kept + t.counts.n_rejected == t.counts.fetched, (
+            f"{t.marker}: {t.counts.fetched} fetched but "
+            f"{t.counts.kept} kept + {t.counts.n_rejected} rejected"
+        )
+
+
+def test_trace_coverage_matches_the_reported_genotype() -> None:
+    """The funnel's survivor count must be the coverage the profile reports."""
+    from frontstr.trace import LocusTrace
+
+    bam = _require("HG00113")
+    traces: list[LocusTrace] = []
+    results = interpret_run(bam=bam, panel=load_panel(PANEL_PATH), on_trace=traces.append)
+    by_marker = {r.marker_name: r for r in results}
+
+    for t in traces:
+        if t.counts is None:
+            continue
+        assert t.counts.kept == by_marker[t.marker].total_reads, (
+            f"{t.marker}: trace says {t.counts.kept} reads, profile says "
+            f"{by_marker[t.marker].total_reads}"
+        )

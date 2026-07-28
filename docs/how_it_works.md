@@ -7,7 +7,7 @@ read start to finish once, then used as a lookup.
 Companion documents: [`architecture.md`](architecture.md) for module layout,
 [`stutter_calibration.md`](stutter_calibration.md) for the stutter measurement.
 
-Status as of July 2026 — 479 tests passing, ~9,800 lines across 54 modules.
+Status as of July 2026 — 505 tests passing, ~10,200 lines across 55 modules.
 
 ---
 
@@ -547,9 +547,68 @@ The same condition on a **called** allele is logged as
 `naming.fallback_on_called_allele` at *warning* level, because then a reported
 number came from the legacy arithmetic that is wrong at six markers.
 
-This is not yet the full per-locus trace (reads fetched, reads rejected and
-why, bins, clusters, POA positions corrected). `pileup_locus` currently discards
-its rejection reasons, which has to change first.
+### `--trace`: the whole locus, step by step
+
+`--log` says what was concluded. `--trace` says how. It narrates every stage in
+pipeline order, for every locus, so a genotype can be followed back to the
+reads — which is what makes a call reviewable rather than merely reported.
+
+```
+── TH01  chr11:2170988-2171215  (228 bp window, motif AATG, period 4)
+  Reads fetched around the window         25
+  Spanning the whole window               25   ← locus coverage
+
+  Binned by                               repeat-core length (flank indel errors ignored)
+      39 bp core                          14 reads
+      28 bp core                          9 reads
+      37 bp core                          1 read
+      52 bp core                          1 read
+  Bins                                    4
+  Clustered within bins                   0.97 pairwise identity → 10 clusters
+  Consensus per cluster                   poa_spoa
+
+  Candidates, strongest first:
+    * #0    10 reads  40.0%   239 bp  HP1 0 / HP2 10 / untagged 0
+        name      CE9.3_TGAA[6]TGA[1]TGAA[3]
+        number    9.3   via STRNaming
+        verdict   allele
+    * #1     7 reads  28.0%   228 bp  HP1 7 / HP2 0 / untagged 0
+        name      CE7_TGAA[7]
+        number    7   via STRNaming
+        verdict   allele
+      #2      1 read   4.0%   235 bp  HP1 0 / HP2 1 / untagged 0
+        name      CE8.2_TGAA[6]TGA[1]TGAA[3]_-1G>-_-5CA>AC_…
+        consensus single  ← not polished by POA
+        verdict   artefact  (above analytical, below the 10% calling threshold)
+  …
+  Genotype                                9.3, 7   [heterozygous]
+```
+
+That single block answers the questions the profile table cannot: TH01's two
+core-length bins (39 bp and 28 bp) *are* the 9.3 and the 7, separated cleanly
+before any clustering; the two called alleles sit on opposite haplotypes; and
+the eight leftover candidates are single unpolished reads rejected by a named
+threshold rather than silently dropped.
+
+**Every discarded candidate says which rule discarded it** — `noise` cites the
+analytical threshold, `artefact` the calling threshold, `stutter` the expected
+count from its parent, `hp_phantom` the one-allele-per-haplotype invariant. So
+does a rescue: an allele called on phasing against the peak-height ratio says
+so on its verdict line.
+
+**The read funnel closes.** `kept + rejected == fetched` at every locus, with
+each rejection under a named reason (`not a primary alignment`, `MAPQ below
+threshold`, `does not reach the left flank anchor`, …). A coverage number a
+reviewer cannot reconcile against the BAM is not an auditable one, so this is
+asserted end to end in `test_trace_accounts_for_every_read_at_every_locus`.
+
+A run summary closes the trace with the totals, any locus without a genotype,
+and any allele that fell back to the legacy CE path.
+
+`--trace-out FILE` writes the narrative to a file instead of stderr.
+
+Still missing, and worth adding: the POA step reports only which backend ran,
+not how many positions it corrected.
 
 ### Export formats
 
@@ -687,7 +746,7 @@ Pileup, clustering, POA consensus, ISFG, allele numbering, stutter,
 classification, haplotype suppression, catalog annotation, genotype calling, QC
 flags, all seven export formats, the audit trail, and batch mode over a
 manifest. Regression-tested against a real ONT sample; CI green on ruff, ruff
-format, mypy and 479 tests.
+format, mypy and 505 tests.
 
 ### Does not work / does not exist
 

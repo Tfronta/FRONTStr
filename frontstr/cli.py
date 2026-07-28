@@ -789,6 +789,14 @@ def interpret(
         bool,
         typer.Option("--log", "-l", help="Print the per-marker process log to stderr."),
     ] = False,
+    trace: Annotated[
+        bool,
+        typer.Option("--trace", help="Narrate every pipeline step, per locus, to stderr."),
+    ] = False,
+    trace_out: Annotated[
+        Path | None,
+        typer.Option("--trace-out", help="Write the narrative trace to a file instead."),
+    ] = None,
 ) -> None:
     """End-to-end forensic call: pileup → cluster → ISFG → classify → call.
 
@@ -797,19 +805,41 @@ def interpret(
 
     Pass ``--log`` to watch what it does rather than only what it concluded:
     the run configuration, then one line per marker with the call rule, the
-    coverage, the cluster count and how each allele number was derived. It goes
-    to stderr, so ``frontstr interpret ... --log > table.txt`` still separates
-    cleanly.
+    coverage, the cluster count and how each allele number was derived.
+
+    Pass ``--trace`` for the full account of every locus: the read funnel with
+    each rejection reason, the repeat-core bins, the clusters and their
+    consensus, how each candidate was named and classified, and the call. This
+    is the transparent-validation view — a genotype can be followed all the way
+    back to the reads.
+
+    Both go to stderr, so ``frontstr interpret ... --trace > table.txt`` still
+    separates cleanly. ``--trace-out FILE`` writes the narrative to a file.
     """
     import logging
+    import sys
 
     from frontstr.interp import interpret_run
     from frontstr.log import configure_logging
     from frontstr.panel.catalog import load_catalog
     from frontstr.panel.loader import load_panel
+    from frontstr.trace import LocusTrace, render_locus, render_run_summary
 
     if log:
         configure_logging(level=logging.DEBUG, console=True)
+
+    traces: list[LocusTrace] = []
+    trace_fh = trace_out.open("w", encoding="utf-8") if trace_out else None
+    want_trace = trace or trace_out is not None
+
+    def emit(locus: LocusTrace) -> None:
+        traces.append(locus)
+        text = render_locus(locus)
+        if trace_fh is not None:
+            trace_fh.write(text + "\n\n")
+        else:
+            print(text, file=sys.stderr)
+            print(file=sys.stderr)
 
     try:
         panel = load_panel(panel_path)
@@ -824,10 +854,21 @@ def interpret(
             calling_thresh=calling_thresh,
             reference_fasta=reference,
             catalog=catalog,
+            on_trace=emit if want_trace else None,
         )
     except FrontstrError as exc:
         console.print(f"[red]interpret error:[/red] {exc}")
         raise typer.Exit(code=2) from exc
+    finally:
+        if want_trace and traces:
+            summary = render_run_summary(traces)
+            if trace_fh is not None:
+                trace_fh.write(summary + "\n")
+            else:
+                print(summary, file=sys.stderr)
+        if trace_fh is not None:
+            trace_fh.close()
+            console.print(f"[dim]trace written to {trace_out}[/dim]")
 
     t = Table(title=f"FRONTStr — {len(results)} markers", show_lines=False)
     t.add_column("Marker", style="bold")

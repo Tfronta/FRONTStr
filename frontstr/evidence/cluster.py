@@ -97,6 +97,8 @@ def cluster_observations(
     identity_threshold: float = _DEFAULT_IDENTITY_THRESHOLD,
     motifs: Sequence[str] | None = None,
     strand: str = "+",
+    bin_sizes: dict[int, int] | None = None,
+    core_binned: dict[int, int] | None = None,
 ) -> list[Cluster]:
     """Cluster :class:`Observation` instances by length and sequence identity.
 
@@ -115,6 +117,12 @@ def cluster_observations(
         strand: ``"-"`` for markers whose canonical motif reads on the minus
             strand; the sequence is reverse-complemented before the core is
             located.
+        bin_sizes: Optional dict filled with ``{binning key: n reads}``, so a
+            trace can show why reads grouped as they did.
+        core_binned: Optional dict filled with ``{binning key: n reads whose
+            repeat core was actually locatable}``. A key whose count is lower
+            than ``bin_sizes`` contains reads binned on raw window length, which
+            includes flank error — worth surfacing rather than hiding.
 
     Returns:
         Clusters sorted by ``n_reads`` descending. Each consensus string is in
@@ -131,7 +139,12 @@ def cluster_observations(
     motif_list = [m for m in (motifs or []) if m]
     bins: dict[int, list[Observation]] = defaultdict(list)
     for o in obs:
-        bins[_binning_key(o.sequence, motif_list, strand)].append(o)
+        key, from_core = _binning_key(o.sequence, motif_list, strand)
+        bins[key].append(o)
+        if core_binned is not None and from_core:
+            core_binned[key] = core_binned.get(key, 0) + 1
+    if bin_sizes is not None:
+        bin_sizes.update({k: len(v) for k, v in bins.items()})
 
     if len_tolerance_bp > 0:
         bins = _merge_close_length_bins(bins, len_tolerance_bp)
@@ -144,17 +157,19 @@ def cluster_observations(
     return clusters
 
 
-def _binning_key(sequence: str, motifs: list[str], strand: str) -> int:
-    """Length used to bin a read: the repeat core when locatable, else the window.
+def _binning_key(sequence: str, motifs: list[str], strand: str) -> tuple[int, bool]:
+    """Length used to bin a read, and whether it came from the repeat core.
 
     A read whose core cannot be located (heavily corrupted array, or no motifs
     configured) falls back to raw window length rather than being dropped or
-    lumped together with unrelated reads.
+    lumped together with unrelated reads. The flag is returned so a trace can
+    distinguish the two — a window-length key carries flank error, a core key
+    does not.
     """
     if not motifs:
-        return len(sequence)
+        return len(sequence), False
     core = repeat_core_length(sequence, motifs, strand=strand)
-    return core if core is not None else len(sequence)
+    return (core, True) if core is not None else (len(sequence), False)
 
 
 def _merge_close_length_bins(

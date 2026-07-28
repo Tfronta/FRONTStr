@@ -25,7 +25,9 @@ strand in the :class:`Observation` for QC but the sequence is canonical.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +61,46 @@ _DEFAULT_FLANK_ANCHOR = 20
 _DEFAULT_FETCH_MARGIN = 200
 
 
+class RejectReason(StrEnum):
+    """Why a fetched read did not become an :class:`Observation`.
+
+    These used to be invisible: :func:`_read_to_observation` returned ``None``
+    and the caller saw only the survivors, so "35 reads at this locus" could not
+    be distinguished from "35 of 41, and here is what happened to the other 6".
+    For a caller whose output is used forensically that distinction is the
+    difference between a coverage number and an auditable one.
+    """
+
+    NOT_PRIMARY = "not a primary alignment"
+    LOW_MAPQ = "MAPQ below threshold"
+    NO_ALIGNMENT_END = "no alignment end (unmapped or malformed)"
+    LEFT_FLANK_SHORT = "does not reach the left flank anchor"
+    RIGHT_FLANK_SHORT = "does not reach the right flank anchor"
+    NO_SEQUENCE = "read carries no sequence"
+    WINDOW_UNLOCATABLE = "window could not be located in the read"
+
+
+@dataclass(slots=True)
+class PileupCounts:
+    """Read accounting for one locus: how many came in, what left, and why.
+
+    Passed into :func:`pileup_locus` to be filled. Optional so the hot path
+    stays allocation-free when nobody is tracing.
+    """
+
+    fetched: int = 0
+    kept: int = 0
+    rejected: Counter[RejectReason] = field(default_factory=Counter)
+
+    @property
+    def n_rejected(self) -> int:
+        return sum(self.rejected.values())
+
+    def reasons(self) -> list[tuple[RejectReason, int]]:
+        """Rejection reasons, most common first, for display."""
+        return sorted(self.rejected.items(), key=lambda kv: (-kv[1], kv[0].value))
+
+
 def pileup_locus(
     bam_path: Path,
     chrom: str,
@@ -69,6 +111,7 @@ def pileup_locus(
     flank_anchor: int = _DEFAULT_FLANK_ANCHOR,
     fetch_margin: int = _DEFAULT_FETCH_MARGIN,
     reference_fasta: Path | None = None,
+    counts: PileupCounts | None = None,
 ) -> list[Observation]:
     """Extract one :class:`Observation` per read that fully spans ``[start, end)``.
 
@@ -87,6 +130,9 @@ def pileup_locus(
             boundary checks below.
         reference_fasta: Path to the reference FASTA (with ``.fai`` index).
             Required for CRAM input; ignored for BAM.
+        counts: Optional :class:`PileupCounts` to fill with the read funnel —
+            how many were fetched, how many survived and why the rest did not.
+            Left ``None`` the accounting is not computed at all.
 
     Returns:
         A list of :class:`Observation`, possibly empty. Order matches the BAM
@@ -123,9 +169,15 @@ def pileup_locus(
     fetch_end = end + fetch_margin
     try:
         for read in bam.fetch(chrom, fetch_start, fetch_end):
-            o = _read_to_observation(read, start, end, min_mapq, flank_anchor)
+            if counts is not None:
+                counts.fetched += 1
+            o, reason = _read_to_observation(read, start, end, min_mapq, flank_anchor)
             if o is not None:
                 obs.append(o)
+                if counts is not None:
+                    counts.kept += 1
+            elif counts is not None and reason is not None:
+                counts.rejected[reason] += 1
     except (ValueError, OSError) as exc:
         raise EvidenceError(f"Fetch failed on {chrom}:{start}-{end}: {exc}") from exc
     finally:
@@ -139,28 +191,33 @@ def _read_to_observation(
     end: int,
     min_mapq: int,
     flank_anchor: int,
-) -> Observation | None:
-    """Decide whether ``read`` contributes an :class:`Observation` and build it."""
+) -> tuple[Observation | None, RejectReason | None]:
+    """Decide whether ``read`` contributes an :class:`Observation` and build it.
+
+    Returns ``(observation, None)`` on success and ``(None, reason)`` otherwise.
+    The reason is returned rather than swallowed so a locus can account for
+    every read it fetched — see :class:`PileupCounts`.
+    """
     if read.is_unmapped or read.is_secondary or read.is_supplementary:  # type: ignore[attr-defined]
-        return None
+        return None, RejectReason.NOT_PRIMARY
     if read.mapping_quality < min_mapq:  # type: ignore[attr-defined]
-        return None
+        return None, RejectReason.LOW_MAPQ
     ref_start: int = read.reference_start  # type: ignore[attr-defined]
     ref_end: int | None = read.reference_end  # type: ignore[attr-defined]
     if ref_end is None:
-        return None
+        return None, RejectReason.NO_ALIGNMENT_END
     if ref_start > start - flank_anchor:
-        return None
+        return None, RejectReason.LEFT_FLANK_SHORT
     if ref_end < end + flank_anchor:
-        return None
+        return None, RejectReason.RIGHT_FLANK_SHORT
 
     qseq: str | None = read.query_sequence  # type: ignore[attr-defined]
     if not qseq:
-        return None
+        return None, RejectReason.NO_SEQUENCE
 
     qstart, qend = _locate_window(read, start, end)
     if qstart is None or qend is None or qend <= qstart:
-        return None
+        return None, RejectReason.WINDOW_UNLOCATABLE
 
     sequence = qseq[qstart:qend].upper()
 
@@ -175,14 +232,17 @@ def _read_to_observation(
     mean_qual = _mean_quality(read, qstart, qend)
     strand = "-" if read.is_reverse else "+"  # type: ignore[attr-defined]
 
-    return Observation(
-        read_id=read.query_name or "?",  # type: ignore[attr-defined]
-        sequence=sequence,
-        hp=hp,
-        mean_qual=mean_qual,
-        strand=strand,
-        flank_left_ok=True,
-        flank_right_ok=True,
+    return (
+        Observation(
+            read_id=read.query_name or "?",  # type: ignore[attr-defined]
+            sequence=sequence,
+            hp=hp,
+            mean_qual=mean_qual,
+            strand=strand,
+            flank_left_ok=True,
+            flank_right_ok=True,
+        ),
+        None,
     )
 
 

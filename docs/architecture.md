@@ -110,7 +110,8 @@ What this layer never produces: per-allele coverage. That comes from Evidence.
 | `report.html`, `svg_charts`, `ngs_display` | Self-contained HTML report |
 | `exports.csv`, `json`, `xlsx`, `vcf` | Output formats |
 | `audit` | `AuditRecord`: run configuration, flag census, integrity seal |
-| `log` | JSONL process log |
+| `log` | JSONL process log; renders JSONL to file and readable prose to a terminal |
+| `trace` | Per-locus narrative behind `interpret --trace`. `LocusTrace` is a plain record the evidence and interp layers fill; `render_locus` turns it into prose. Top level because it spans both layers, and split record-from-rendering so the same trace can later feed the audit record or the HTML report |
 | `batch` | Multi-sample orchestration from a manifest |
 | `cli` | Typer entry point; every subcommand |
 | `errors` | The `FrontstrError` hierarchy |

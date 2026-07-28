@@ -8,10 +8,12 @@ or :func:`interpret_run` (full panel).
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 
 from frontstr.evidence.cluster import Cluster, cluster_observations
-from frontstr.evidence.pileup import pileup_locus
+from frontstr.evidence.consensus import poa_backend_name
+from frontstr.evidence.pileup import PileupCounts, pileup_locus
 from frontstr.interp.allele_numeric import compute_allele_numeric, resolve_ref_anchor_bp
 from frontstr.interp.amel import interpret_amel
 from frontstr.interp.catalog import annotate_alleles
@@ -19,7 +21,7 @@ from frontstr.interp.classify import classify_allele
 from frontstr.interp.flags import derive_marker_flags
 from frontstr.interp.haplotype import suppress_hp_phantoms
 from frontstr.interp.isfg import ce_from_brackets, ce_from_length, compress_isfg
-from frontstr.interp.models import Allele, MarkerResult
+from frontstr.interp.models import Allele, CallRule, MarkerResult, TriType
 from frontstr.interp.naming import NameStatus, StrNamer, default_namer
 from frontstr.interp.qc import QcThresholds, derive_run_qc_flags
 from frontstr.interp.stutter import build_expected_stutter
@@ -27,6 +29,7 @@ from frontstr.interp.triallelic import call_profile
 from frontstr.log import get_logger
 from frontstr.panel.catalog import AlleleCatalog
 from frontstr.panel.models import Panel, System
+from frontstr.trace import BinTrace, ClusterTrace, LocusTrace
 
 log = get_logger(__name__)
 
@@ -45,6 +48,7 @@ def interpret_marker(
     ref_length_bp: int | None = None,
     catalog: AlleleCatalog | None = None,
     namer: StrNamer | None = None,
+    trace: LocusTrace | None = None,
 ) -> MarkerResult:
     """Interpret one marker's evidence into a :class:`MarkerResult`.
 
@@ -62,6 +66,9 @@ def interpret_marker(
             to the bundled one. Markers it has no reporting range for, and
             consensuses it cannot locate the range in, fall back to the legacy
             CE per allele — so this never needs disabling for coverage reasons.
+        trace: Optional :class:`frontstr.trace.LocusTrace` to fill with the
+            interpretation half of the per-locus narrative. The evidence half is
+            filled by :func:`_safe_pileup_and_cluster`.
     """
     if namer is None:
         namer = default_namer()
@@ -92,7 +99,7 @@ def interpret_marker(
     # Suppress same-haplotype split-allele phantoms before the profile is
     # called, so a phantom can neither be reported nor raise a false mixture.
     # No-op on unphased BAMs and on allow_triallelic markers.
-    suppress_hp_phantoms(alleles, system)
+    n_phantoms = suppress_hp_phantoms(alleles, system)
 
     # Enrich ISFG / CE / iso-allele suffix from the curated catalog (no-op if None).
     annotate_alleles(alleles, system, catalog)
@@ -101,6 +108,10 @@ def interpret_marker(
         alleles, system, calling_thresh=calling_thresh
     )
     _report_naming_fallbacks(system, alleles, alleles_called)
+    if trace is not None:
+        _fill_interp_trace(
+            trace, alleles, alleles_called, total_reads, n_phantoms, call_rule, tri_type
+        )
 
     result = MarkerResult(
         marker_name=system.name,
@@ -115,6 +126,8 @@ def interpret_marker(
         calling_thresh=calling_thresh,
     )
     derive_marker_flags(result)
+    if trace is not None:
+        trace.flags = [(f.severity.value, f.code.value) for f in result.flags]
     return result
 
 
@@ -130,6 +143,7 @@ def interpret_run(
     reference_fasta: Path | None = None,
     catalog: AlleleCatalog | None = None,
     qc_thresholds: QcThresholds | None = None,
+    on_trace: Callable[[LocusTrace], None] | None = None,
 ) -> list[MarkerResult]:
     """End-to-end: for each marker in ``panel``, pileup → cluster → interpret.
 
@@ -139,6 +153,9 @@ def interpret_run(
         reference_fasta: Reference FASTA path; required when ``bam`` is a CRAM.
         qc_thresholds: Laboratory QC policy for the run-level flags (coverage,
             strand bias). Defaults apply when omitted.
+        on_trace: Called with a filled :class:`frontstr.trace.LocusTrace` as each
+            locus finishes, so a CLI can narrate the run as it happens rather
+            than after it. ``None`` skips trace collection entirely.
 
     Returns:
         One :class:`MarkerResult` per marker in panel order, each carrying its
@@ -164,10 +181,48 @@ def interpret_run(
     )
     for system in panel.systems:
         if system.marker_type == "amel":
-            out.append(
-                interpret_amel(system, bam, min_mapq=min_mapq, reference_fasta=reference_fasta)
-            )
+            amel = interpret_amel(system, bam, min_mapq=min_mapq, reference_fasta=reference_fasta)
+            out.append(amel)
+            if on_trace is not None:
+                # Traced too, so the run summary's locus count matches the panel.
+                # Amelogenin is not a tandem repeat: no binning, no clustering,
+                # no naming. Saying so is more useful than omitting it.
+                amel_trace = LocusTrace(
+                    marker=system.name,
+                    chrom=system.chromosome,
+                    start=system.ref_start,
+                    end=system.ref_end,
+                    motif=system.motif,
+                    period=system.period,
+                    strand=system.strand,
+                    min_mapq=min_mapq,
+                )
+                amel_trace.note = (
+                    "Sex typing, not a tandem repeat: counts reads at AMELX and "
+                    "AMELY instead of binning and clustering (interp/amel.py)."
+                )
+                amel_trace.called_labels = [a.number_label for a in amel.alleles_called]
+                amel_trace.call_rule = amel.call_rule.value
+                amel_trace.flags = [(f.severity.value, f.code.value) for f in amel.flags]
+                on_trace(amel_trace)
             continue
+        trace = (
+            LocusTrace(
+                marker=system.name,
+                chrom=system.chromosome,
+                start=system.ref_start,
+                end=system.ref_end,
+                motif=system.motif,
+                period=system.period,
+                strand=system.strand,
+                min_mapq=min_mapq,
+                identity_threshold=identity_threshold,
+                analytical_thresh=analytical_thresh,
+                calling_thresh=calling_thresh,
+            )
+            if on_trace is not None
+            else None
+        )
         clusters = _safe_pileup_and_cluster(
             bam=bam,
             system=system,
@@ -175,6 +230,7 @@ def interpret_run(
             identity_threshold=identity_threshold,
             len_tolerance_bp=len_tolerance_bp,
             reference_fasta=reference_fasta,
+            trace=trace,
         )
         result = interpret_marker(
             system=system,
@@ -183,7 +239,10 @@ def interpret_run(
             calling_thresh=calling_thresh,
             catalog=catalog,
             namer=namer,
+            trace=trace,
         )
+        if on_trace is not None and trace is not None:
+            on_trace(trace)
         log.debug(
             "marker.called",
             marker=system.name,
@@ -206,6 +265,46 @@ def interpret_run(
     return out
 
 
+def _fill_interp_trace(
+    trace: LocusTrace,
+    alleles: list[Allele],
+    called: list[Allele],
+    total_reads: int,
+    n_phantoms: int,
+    call_rule: CallRule,
+    tri_type: TriType,
+) -> None:
+    """Copy the interpretation layer's decisions onto the locus trace."""
+    called_ids = {id(a) for a in called}
+    trace.clusters = [
+        ClusterTrace(
+            index=a.cluster_index,
+            n_reads=a.n_reads_total,
+            fraction=a.fraction(total_reads),
+            length_bp=a.length_bp,
+            consensus_method=a.consensus_method,
+            n_hp1=a.n_reads_hp1,
+            n_hp2=a.n_reads_hp2,
+            n_untagged=a.n_reads_hp_none,
+            number_label=a.number_label,
+            number_method=a.number_method,
+            naming_status=a.strnaming_status,
+            strnaming_name=a.strnaming_name,
+            isfg=a.isfg,
+            expected_stutter=a.expected_stutter,
+            status=a.status.value,
+            n_reads_absorbed=a.n_reads_absorbed,
+            hp_rescued=a.hp_rescued,
+            called=id(a) in called_ids,
+        )
+        for a in alleles
+    ]
+    trace.n_suppressed_phantoms = n_phantoms
+    trace.called_labels = [a.number_label for a in called]
+    trace.call_rule = call_rule.value
+    trace.tri_type = tri_type.value
+
+
 def _safe_pileup_and_cluster(
     *,
     bam: Path,
@@ -214,8 +313,10 @@ def _safe_pileup_and_cluster(
     identity_threshold: float,
     len_tolerance_bp: int,
     reference_fasta: Path | None = None,
+    trace: LocusTrace | None = None,
 ) -> list[Cluster]:
     """Pileup+cluster wrapper that returns ``[]`` instead of raising on empty loci."""
+    counts = PileupCounts() if trace is not None else None
     try:
         obs = pileup_locus(
             bam,
@@ -224,19 +325,36 @@ def _safe_pileup_and_cluster(
             system.ref_end,
             min_mapq=min_mapq,
             reference_fasta=reference_fasta,
+            counts=counts,
         )
     except Exception:
         return []
+    if trace is not None:
+        trace.counts = counts
     if not obs:
         return []
-    return cluster_observations(
+
+    motifs = [m for m in system.motif.split(",") if m]
+    bin_sizes: dict[int, int] | None = {} if trace is not None else None
+    core_binned: dict[int, int] | None = {} if trace is not None else None
+    clusters = cluster_observations(
         obs,
         identity_threshold=identity_threshold,
         # A per-marker override in the panel wins over the run-wide default.
         len_tolerance_bp=system.ont_len_tolerance or len_tolerance_bp,
-        motifs=[m for m in system.motif.split(",") if m],
+        motifs=motifs,
         strand=system.strand,
+        bin_sizes=bin_sizes,
+        core_binned=core_binned,
     )
+    if trace is not None and bin_sizes is not None and core_binned is not None:
+        trace.binned_on_core = bool(motifs)
+        trace.bins = [
+            BinTrace(key_bp=key, n_reads=n, from_core=core_binned.get(key, 0) == n)
+            for key, n in bin_sizes.items()
+        ]
+        trace.consensus_backend = poa_backend_name()
+    return clusters
 
 
 def _report_naming_fallbacks(system: System, alleles: list[Allele], called: list[Allele]) -> None:

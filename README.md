@@ -139,10 +139,12 @@ dropped out appear as `called = false` rows rather than vanishing, and each row
 carries the panel version, POA backend and stutter model that produced it — so
 a cohort collected across two calibrations can still be analysed honestly.
 
-Add `--log` to `interpret` to watch the run rather than only its conclusion:
-the configuration, then one line per marker with the call rule, coverage,
-cluster count and how each allele number was derived. It goes to stderr, so
-redirecting the table still separates cleanly.
+Two flags make a run inspectable. `--log` prints the configuration and one line
+per marker. `--trace` narrates every locus step by step — the read funnel with a
+named reason for each rejected read, the repeat-core bins, the clusters and
+their consensus, how each candidate was named, and which rule discarded the ones
+that were discarded. Both go to stderr, so redirecting the table still separates
+cleanly; `--trace-out FILE` writes the narrative to a file.
 
 Other commands: `evidence` (per-locus cluster dump), `batch` (multi-sample from
 a manifest), `calibrate-stutter` (fit a stutter model to your own data),
