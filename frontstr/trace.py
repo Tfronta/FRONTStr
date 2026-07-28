@@ -137,6 +137,66 @@ class LocusTrace:
         return self.end - self.start + 1
 
 
+@dataclass(slots=True)
+class RunHeader:
+    """What the run was given, before it does anything with it.
+
+    Printed first so a log — especially an unattended benchmark over hundreds of
+    samples — states its own inputs. A trace whose provenance has to be
+    reconstructed from the invocation is not much use months later.
+    """
+
+    inputs: list[str] = field(default_factory=list)
+    panel_name: str = ""
+    panel_version: str = ""
+    n_markers: int = 0
+    min_mapq: int = 20
+    flank_anchor: int = 20
+    identity_threshold: float = 0.97
+    analytical_thresh: float = 0.02
+    calling_thresh: float = 0.10
+    consensus_backend: str = ""
+    naming_markers: int = 0
+    tool_version: str = ""
+
+
+def render_header(h: RunHeader) -> str:
+    """Render the run header: inputs, panel, and every threshold in force."""
+    lines = [f"── FRONTStr {h.tool_version}".rstrip()]
+    kinds: dict[str, int] = {}
+    for path in h.inputs:
+        kind = "CRAM" if path.lower().endswith(".cram") else "BAM"
+        kinds[kind] = kinds.get(kind, 0) + 1
+    detected = ", ".join(f"{n} {kind}" for kind, n in sorted(kinds.items())) or "none"
+    lines.append(_row("Detected", f"{detected}"))
+    for path in h.inputs:
+        lines.append(_row(path, "", indent=6).rstrip())
+    lines.append(_row("Panel", f"{h.panel_name} {h.panel_version}".strip()))
+    lines.append(_row("Markers in panel", h.n_markers))
+    lines.append(
+        _row("Read filters", f"MAPQ >= {h.min_mapq}, {h.flank_anchor} bp clean flank each side")
+    )
+    lines.append(
+        _row(
+            "Thresholds",
+            f"analytical {h.analytical_thresh:.0%}, calling {h.calling_thresh:.0%}, "
+            f"cluster identity {h.identity_threshold:.2f}",
+        )
+    )
+    if h.consensus_backend:
+        lines.append(_row("Consensus backend", h.consensus_backend))
+    lines.append(
+        _row(
+            "Allele naming",
+            f"STRNaming, offline slice cache, {h.naming_markers} markers"
+            if h.naming_markers
+            else "legacy CE arithmetic (STRNaming unavailable)",
+        )
+    )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _row(label: str, value: object, indent: int = 2) -> str:
     """One ``label ....... value`` line, column-aligned where the label allows.
 
@@ -168,8 +228,7 @@ def render_locus(t: LocusTrace) -> str:
 
     if t.note:
         add(_row(t.note, ""))
-        called = ", ".join(t.called_labels) if t.called_labels else "none"
-        add(_row("Genotype", f"{called}   [{t.call_rule}]"))
+        add(_row("Genotype", f"{_genotype(t)}   [{t.call_rule}]"))
         return "\n".join(lines)
 
     # 1. Read funnel ---------------------------------------------------------
@@ -180,7 +239,7 @@ def render_locus(t: LocusTrace) -> str:
             add(_row(f"Rejected ({funnel.n_rejected})", "", indent=2).rstrip())
             for reason, n in funnel.reasons():
                 add(_row(reason.value, n, indent=6))
-        add(_row("Spanning the whole window", f"{funnel.kept}   ← locus coverage"))
+        add(_row("Spanning the whole window", f"{funnel.kept}   (total locus coverage)"))
         if funnel.kept == 0:
             add(_row("No usable reads", "locus reported as no_data"))
             return "\n".join(lines)
@@ -193,30 +252,34 @@ def render_locus(t: LocusTrace) -> str:
             if t.binned_on_core
             else "raw window length (no motif configured)"
         )
-        add(_row("Binned by", basis))
+        add(_row("Step 1 — grouped by length", f"{_plural(len(t.bins), 'bin')}, using {basis}"))
         fallbacks = sum(b.n_reads for b in t.bins if not b.from_core)
         for b in sorted(t.bins, key=lambda b: -b.n_reads):
             note = "" if b.from_core else "   (core not locatable, window length used)"
             add(_row(f"{b.key_bp} bp core", f"{_plural(b.n_reads, 'read')}{note}", indent=6))
         if fallbacks:
             add(_row("Reads binned on window length", fallbacks, indent=6))
-        add(_row("Bins", len(t.bins)))
 
     # 3. Clustering + consensus ---------------------------------------------
     if t.clusters:
+        split = len(t.clusters) - len(t.bins)
+        outcome = (
+            f"{_plural(len(t.clusters), 'cluster')}, none split"
+            if split <= 0
+            else f"{_plural(len(t.clusters), 'cluster')}, {split} more than bins"
+        )
         add(
             _row(
-                "Clustered within bins",
-                f"{t.identity_threshold:.2f} pairwise identity → "
-                f"{_plural(len(t.clusters), 'cluster')}",
+                "Step 2 — split by sequence",
+                f"{outcome} (identity below {t.identity_threshold:.2f} separates)",
             )
         )
         if t.consensus_backend:
-            add(_row("Consensus per cluster", t.consensus_backend))
+            add(_row("Step 3 — consensus per cluster", t.consensus_backend))
         add("")
 
         # 4. Per-cluster detail ---------------------------------------------
-        add(_row("Candidates, strongest first:", "").rstrip())
+        add(_row("Candidates, strongest first", "reads shown are per-allele coverage"))
         for c in t.clusters:
             mark = "*" if c.called else " "
             hp = f"HP1 {c.n_hp1} / HP2 {c.n_hp2} / untagged {c.n_untagged}"
@@ -235,7 +298,7 @@ def render_locus(t: LocusTrace) -> str:
             )
             add(f"        number    {c.number_label or '—'}   via {via}")
             if c.consensus_method not in ("poa_spoa", "poa_abpoa"):
-                add(f"        consensus {c.consensus_method}  ← not polished by POA")
+                add(f"        consensus {c.consensus_method}   NOT polished by POA")
             why = _explain_status(c, t)
             add(f"        verdict   {c.status}{why}")
             if c.n_reads_absorbed:
@@ -252,13 +315,43 @@ def render_locus(t: LocusTrace) -> str:
         )
 
     # 5. The call ------------------------------------------------------------
-    called = ", ".join(t.called_labels) if t.called_labels else "none"
-    add(_row("Genotype", f"{called}   [{t.call_rule}]"))
+    add(_row("Genotype", f"{_genotype(t)}   [{t.call_rule}]"))
+    if t.counts is not None:
+        add(_row("Coverage", _coverage_line(t)))
     if t.tri_type:
         add(_row("Triallelic pattern", t.tri_type))
     for severity, code in t.flags:
         add(_row(f"Flag ({severity})", code, indent=6))
     return "\n".join(lines)
+
+
+def _genotype(t: LocusTrace) -> str:
+    """The called genotype with **per-allele** coverage attached to each allele.
+
+    Per-allele read counts are the headline claim of an integer-coverage caller,
+    and they were only visible partway up the trace among the rejected
+    candidates. A reviewer reading the conclusion should not have to scroll back
+    to learn that a "9.3, 7" heterozygote rests on 10 reads and 7 reads.
+    """
+    called = [c for c in t.clusters if c.called]
+    if not called:
+        return ", ".join(t.called_labels) if t.called_labels else "none"
+    return ", ".join(f"{c.number_label} ({_plural(c.n_reads, 'read')})" for c in called)
+
+
+def _coverage_line(t: LocusTrace) -> str:
+    """Total, and how it splits across called alleles and everything discarded."""
+    assert t.counts is not None
+    total = t.counts.kept
+    called = [c for c in t.clusters if c.called]
+    on_alleles = sum(c.n_reads for c in called)
+    parts = [f"{total} at the locus", f"{on_alleles} on called allele(s)"]
+    if total > on_alleles:
+        parts.append(f"{total - on_alleles} on discarded candidates")
+    if any(c.n_hp1 or c.n_hp2 for c in called):
+        hp = " / ".join(f"{c.number_label}: HP1 {c.n_hp1} HP2 {c.n_hp2}" for c in called)
+        parts.append(f"phased {hp}")
+    return "; ".join(parts)
 
 
 def _display_core(c: ClusterTrace) -> str:
@@ -356,7 +449,10 @@ def render_run_summary(traces: list[LocusTrace]) -> str:
     lines.append(_row("Loci with a genotype", f"{called}/{len(traces)}"))
     if fetched:
         lines.append(
-            _row("Reads fetched → used", f"{fetched} → {kept}  ({kept / fetched:.1%} spanned)")
+            _row(
+                "Reads fetched, then used",
+                f"{fetched} fetched, {kept} spanned ({kept / fetched:.1%})",
+            )
         )
     if no_data:
         lines.append(_row("No genotype", ", ".join(no_data)))

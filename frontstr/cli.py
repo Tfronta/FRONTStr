@@ -823,7 +823,13 @@ def interpret(
     from frontstr.log import configure_logging
     from frontstr.panel.catalog import load_catalog
     from frontstr.panel.loader import load_panel
-    from frontstr.trace import LocusTrace, render_locus, render_run_summary
+    from frontstr.trace import (
+        LocusTrace,
+        RunHeader,
+        render_header,
+        render_locus,
+        render_run_summary,
+    )
 
     if log:
         configure_logging(level=logging.DEBUG, console=True)
@@ -844,6 +850,33 @@ def interpret(
     try:
         panel = load_panel(panel_path)
         catalog = load_catalog(catalog_path) if catalog_path else None
+        if want_trace:
+            from frontstr.evidence.consensus import poa_backend_name
+            from frontstr.interp.naming import default_namer
+            from frontstr.version import __version__ as _v
+
+            namer = default_namer()
+            head = render_header(
+                RunHeader(
+                    inputs=[str(bam)],
+                    panel_name=panel.name,
+                    panel_version=panel.version or "",
+                    n_markers=len(panel.systems),
+                    min_mapq=min_mapq,
+                    identity_threshold=identity,
+                    analytical_thresh=analytical_thresh,
+                    calling_thresh=calling_thresh,
+                    consensus_backend=poa_backend_name(),
+                    naming_markers=sum(
+                        1 for s in panel.systems if namer and namer.has_range(s.name)
+                    ),
+                    tool_version=_v,
+                )
+            )
+            if trace_fh is not None:
+                trace_fh.write(head + "\n")
+            else:
+                print(head, file=sys.stderr)
         results = interpret_run(
             bam=bam,
             panel=panel,

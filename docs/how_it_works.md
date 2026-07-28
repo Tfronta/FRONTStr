@@ -7,7 +7,7 @@ read start to finish once, then used as a lookup.
 Companion documents: [`architecture.md`](architecture.md) for module layout,
 [`stutter_calibration.md`](stutter_calibration.md) for the stutter measurement.
 
-Status as of July 2026 — 512 tests passing, ~10,300 lines across 55 modules.
+Status as of July 2026 — 520 tests passing, ~10,400 lines across 55 modules.
 
 ---
 
@@ -554,20 +554,29 @@ pipeline order, for every locus, so a genotype can be followed back to the
 reads — which is what makes a call reviewable rather than merely reported.
 
 ```
+── FRONTStr 0.1.0.dev0
+  Detected                                1 BAM
+      tests/data/ont_slices/HG00113.codis.bam
+  Panel                                   CODIS 20 + sex 2026.06-ont-wide-sex
+  Markers in panel                        25
+  Read filters                            MAPQ >= 20, 20 bp clean flank each side
+  Thresholds                              analytical 2%, calling 10%, cluster identity 0.97
+  Consensus backend                       poa_spoa
+  Allele naming                           STRNaming, offline slice cache, 23 markers
+
 ── TH01  chr11:2170988-2171215  (228 bp window, motif AATG, period 4)
   Reads fetched around the window         25
-  Spanning the whole window               25   ← locus coverage
+  Spanning the whole window               25   (total locus coverage)
 
-  Binned by                               repeat-core length (flank indel errors ignored)
+  Step 1 — grouped by length              4 bins, using repeat-core length (flank indel errors ignored)
       39 bp core                          14 reads
       28 bp core                          9 reads
       37 bp core                          1 read
       52 bp core                          1 read
-  Bins                                    4
-  Clustered within bins                   0.97 pairwise identity → 10 clusters
-  Consensus per cluster                   poa_spoa
+  Step 2 — split by sequence              10 clusters, 6 more than bins (identity below 0.97 separates)
+  Step 3 — consensus per cluster          poa_spoa
 
-  Candidates, strongest first:
+  Candidates, strongest first             reads shown are per-allele coverage
     * #0    10 reads  40.0%   239 bp  HP1 0 / HP2 10 / untagged 0
         name      CE9.3_TGAA[6]TGA[1]TGAA[3]
         number    9.3   via STRNaming
@@ -586,7 +595,10 @@ reads — which is what makes a call reviewable rather than merely reported.
     * #1  …GACTCCATGGTG  AATGAATGAATGAATGAATGAATGAATG              AGGGAAATAAGG…
       #2  …ACACGCACTGTG  AATGAATGAATGAATGAATGAATGATGAATGAATGAATG   GAGGGAGAGGGA…
   …
-  Genotype                                9.3, 7   [heterozygous]
+  Genotype                                9.3 (10 reads), 7 (7 reads)   [heterozygous]
+  Coverage                                25 at the locus; 17 on called allele(s);
+                                          8 on discarded candidates; phased
+                                          9.3: HP1 0 HP2 10 / 7: HP1 7 HP2 0
 ```
 
 That single block answers the questions the profile table cannot: TH01's two
@@ -600,6 +612,22 @@ analytical threshold, `artefact` the calling threshold, `stutter` the expected
 count from its parent, `hp_phantom` the one-allele-per-haplotype invariant. So
 does a rescue: an allele called on phasing against the peak-height ratio says
 so on its verdict line.
+
+**The three clustering steps are named, not implied.** Step 1 groups reads by
+repeat-core length; step 2 splits each of those groups by sequence identity, so
+two alleles of the same length but different internal structure — iso-alleles —
+come apart; step 3 collapses each surviving group into one consensus. When step
+2 reports the same number of clusters as step 1 had bins, no bin contained two
+distinct sequences. When it reports more, the extra ones are almost always
+single noisy reads that failed to join their own allele's seed.
+
+**Per-allele coverage is on the conclusion, not just in the table.** Integer
+per-allele read counts are the headline claim of this caller over a
+length-based one, so the genotype line carries them, and a `Coverage` line
+splits the locus total into what supports the called alleles, what went to
+discarded candidates, and how each called allele divides across haplotypes.
+They are also in `profile.csv` (`alleleN_cov`, `alleleN_hp1`, `alleleN_hp2`),
+in `evidence.csv` one row per cluster, in the XLSX, and in the VCF `FORMAT/AD`.
 
 **The bases are shown, aligned.** The repeat core prints in full with its
 flanks cut to 12 bp on each side — a panel window is ~80% flank, and printing
@@ -765,7 +793,7 @@ Pileup, clustering, POA consensus, ISFG, allele numbering, stutter,
 classification, haplotype suppression, catalog annotation, genotype calling, QC
 flags, all seven export formats, the audit trail, and batch mode over a
 manifest. Regression-tested against a real ONT sample; CI green on ruff, ruff
-format, mypy and 512 tests.
+format, mypy and 520 tests.
 
 ### Does not work / does not exist
 

@@ -14,6 +14,8 @@ from frontstr.trace import (
     BinTrace,
     ClusterTrace,
     LocusTrace,
+    RunHeader,
+    render_header,
     render_locus,
     render_run_summary,
 )
@@ -94,7 +96,7 @@ class TestReadFunnel:
     def test_zero_coverage_stops_the_narrative_early(self) -> None:
         out = render_locus(_trace(counts=_counts(fetched=4, kept=0, low_mapq=4)))
         assert "no_data" in out
-        assert "Binned by" not in out
+        assert "grouped by length" not in out
 
 
 class TestNarrativeContent:
@@ -110,9 +112,9 @@ class TestNarrativeContent:
         out = render_locus(t)
         order = [
             out.index("Reads fetched"),
-            out.index("Binned by"),
-            out.index("Clustered within bins"),
-            out.index("Consensus per cluster"),
+            out.index("Step 1 — grouped by length"),
+            out.index("Step 2 — split by sequence"),
+            out.index("Step 3 — consensus per cluster"),
             out.index("Candidates"),
             out.index("Genotype"),
         ]
@@ -147,7 +149,7 @@ class TestNarrativeContent:
 
     def test_unpolished_consensus_is_called_out(self) -> None:
         t = _trace(counts=_counts(), clusters=[_cluster(consensus_method="single")])
-        assert "not polished by POA" in render_locus(t)
+        assert "NOT polished by POA" in render_locus(t)
 
     def test_legacy_naming_path_names_the_reason(self) -> None:
         t = _trace(
@@ -173,7 +175,7 @@ class TestNarrativeContent:
         )
         out = render_locus(t)
         assert "not a tandem repeat" in out
-        assert "Binned by" not in out
+        assert "grouped by length" not in out
         assert "X, Y" in out
 
 
@@ -238,6 +240,81 @@ class TestSequences:
         assert all(x == x.rstrip() for x in render_locus(t).splitlines())
 
 
+class TestRunHeader:
+    """A benchmark log has to state its own inputs, or it is useless later."""
+
+    def test_counts_bams_and_crams_separately(self) -> None:
+        out = render_header(RunHeader(inputs=["a.bam", "b.bam", "c.cram"]))
+        assert "2 BAM" in out and "1 CRAM" in out
+
+    def test_lists_each_input_path(self) -> None:
+        out = render_header(RunHeader(inputs=["one.bam", "two.bam"]))
+        assert "one.bam" in out and "two.bam" in out
+
+    def test_states_every_threshold_in_force(self) -> None:
+        out = render_header(
+            RunHeader(
+                inputs=["x.bam"],
+                min_mapq=25,
+                analytical_thresh=0.03,
+                calling_thresh=0.12,
+                identity_threshold=0.95,
+            )
+        )
+        assert "MAPQ >= 25" in out
+        assert "analytical 3%" in out and "calling 12%" in out
+        assert "0.95" in out
+
+    def test_says_so_when_strnaming_is_unavailable(self) -> None:
+        out = render_header(RunHeader(inputs=["x.bam"], naming_markers=0))
+        assert "legacy CE arithmetic" in out
+
+    def test_no_inputs_does_not_crash(self) -> None:
+        assert "none" in render_header(RunHeader())
+
+
+class TestPerAlleleCoverage:
+    """Integer per-allele coverage is the headline claim; it must be legible."""
+
+    def test_genotype_carries_reads_per_allele(self) -> None:
+        t = _trace(
+            counts=_counts(kept=25),
+            clusters=[
+                _cluster(index=0, number_label="9.3", n_reads=10, called=True),
+                _cluster(index=1, number_label="7", n_reads=7, called=True),
+            ],
+            call_rule="heterozygous",
+        )
+        out = render_locus(t)
+        assert "9.3 (10 reads), 7 (7 reads)" in out
+
+    def test_coverage_line_splits_called_from_discarded(self) -> None:
+        t = _trace(
+            counts=_counts(kept=25),
+            clusters=[
+                _cluster(index=0, n_reads=10, called=True),
+                _cluster(index=1, n_reads=7, called=True),
+                _cluster(index=2, n_reads=8, called=False),
+            ],
+        )
+        out = render_locus(t)
+        assert "25 at the locus" in out
+        assert "17 on called allele(s)" in out
+        assert "8 on discarded candidates" in out
+
+    def test_haplotype_split_is_shown_per_called_allele(self) -> None:
+        t = _trace(
+            counts=_counts(kept=17),
+            clusters=[
+                _cluster(index=0, number_label="9.3", n_reads=10, n_hp1=0, n_hp2=10, called=True),
+                _cluster(index=1, number_label="7", n_reads=7, n_hp1=7, n_hp2=0, called=True),
+            ],
+        )
+        out = render_locus(t)
+        assert "9.3: HP1 0 HP2 10" in out
+        assert "7: HP1 7 HP2 0" in out
+
+
 class TestRunSummary:
     def test_totals_close_over_the_run(self) -> None:
         traces = [
@@ -245,7 +322,7 @@ class TestRunSummary:
             _trace(marker="vWA", counts=_counts(fetched=45, kept=38), called_labels=["14", "16"]),
         ]
         out = render_run_summary(traces)
-        assert "85 → 73" in out
+        assert "85 fetched, 73 spanned" in out
         assert "2/2" in out
 
     def test_loci_without_a_genotype_are_named(self) -> None:
