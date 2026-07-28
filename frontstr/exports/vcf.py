@@ -151,9 +151,11 @@ def _header(
         '##FORMAT=<ID=AL,Number=R,Type=Integer,Description="Allele length in bp, one per '
         'allele in REF-then-ALT order (the window, matching REF/ALT)">',
         '##FORMAT=<ID=MC,Number=R,Type=String,Description="Canonical allele number per '
-        'allele in REF-then-ALT order (CE or ISFG bracket count); . if not called">',
+        "allele in REF-then-ALT order (ISFG designation, CE, or bracket count); "
+        '. if not called">',
         '##FORMAT=<ID=MM,Number=R,Type=String,Description="How each MC value was '
-        'derived: period_ce | reference_offset | bracket_count | delta | bp_sizing">',
+        "derived: strnaming | period_ce | reference_offset | bracket_count | delta | "
+        'bp_sizing">',
         '##FORMAT=<ID=ISFG,Number=R,Type=String,Description="ISFG bracketed '
         'nomenclature per allele in REF-then-ALT order, percent-encoded">',
         '##FORMAT=<ID=ISO,Number=R,Type=String,Description="Iso-allele suffix per '

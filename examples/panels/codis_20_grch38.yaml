@@ -242,11 +242,16 @@ systems:
 
   - name: D22S1045
     chromosome: chr22
-    ref_start: 37140187
+    ref_start: 37140141
     ref_end: 37140438
     motif: ATT
     period: 3
-    corr_value: 201
+    # 298 bp window − 17 × ATT = 247 bp flanking. Was 201 for the old 252 bp
+    # window; ref_start moved 46 bp left so the STRNaming reporting range
+    # (37140181-37140357) and its 30 bp left anchor both fall inside the window.
+    # Without that the range cannot be located and the marker loses its ISFG
+    # designation. See frontstr/interp/naming.py.
+    corr_value: 247
     category: autosomal
 
   - name: AMEL

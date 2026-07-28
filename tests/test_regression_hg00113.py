@@ -36,21 +36,20 @@ pytestmark = [pytest.mark.integration, pytest.mark.slow]
 #: Expected allele-number labels per marker, as ``Allele.number_label`` renders
 #: them. Sets, because allele order within a genotype is not meaningful.
 #:
-#: Two markers deliberately encode a **known, documented deviation** from the
-#: legacy CE-kit designation rather than the kit value. FRONTStr reports the
-#: ISFG bracket repeat count (Phillips 2018), which for these two compound loci
-#: does not map 1:1 onto the kit convention established for CE ladders. The
-#: ISFG strings are structurally correct in both cases; no single ``corr_value``
-#: can reconcile them, because the offsets run in opposite directions between
-#: the two alleles of vWA. If a future change makes these match the kit values,
-#: this test will fail — and that failure is good news worth investigating, not
-#: something to paper over.
+#: This table used to carry a documented deviation at vWA (13/17) and D21S11
+#: (35/33), where FRONTStr's bracket repeat count did not map onto the kit
+#: designation and no single ``corr_value`` could reconcile it. Adopting
+#: STRNaming as the source of the allele number (:mod:`frontstr.interp.naming`)
+#: resolved both, so **every marker here is now the kit/Book1 value**. DXS7132
+#: moved 15 → 14 in the same change: its old ``corr_value`` had been calibrated
+#: against FRONTStr's own output rather than an external truth, and STRNaming
+#: agrees with the GRCh38 reference designation.
 EXPECTED_PROFILE: dict[str, set[str]] = {
     "D3S1358": {"14"},
-    "vWA": {"13", "17"},  # kit convention: 14/16 — see note above
+    "vWA": {"14", "16"},
     "FGA": {"24", "21"},
     "D8S1179": {"13", "10"},
-    "D21S11": {"35", "33"},  # kit convention: 29/31 — see note above
+    "D21S11": {"29", "31"},
     "D18S51": {"14", "15"},
     "D5S818": {"11", "13"},
     "D13S317": {"11", "9"},
@@ -72,9 +71,14 @@ EXPECTED_PROFILE: dict[str, set[str]] = {
     # Hemizygous in a male; reported as homozygous today (see ROADMAP).
     "DYS391": {"10"},
     "DYS393": {"14"},
-    "DXS7132": {"15"},
+    "DXS7132": {"14"},
     "DXS8378": {"10"},
 }
+
+#: Markers STRNaming defines no reported range for, which therefore keep the
+#: legacy CE path. AMEL is not an STR; DYS393 is simply absent from STRNaming's
+#: ``ranges_uas-frr.txt``.
+NO_STRNAMING_RANGE = {"AMEL", "DYS393"}
 
 #: Single-source 1000 Genomes individuals. None of these can be a true mixture,
 #: so any ``mixture_suspected`` here is a false positive by construction.
@@ -163,6 +167,49 @@ def test_th01_microvariant_survives_clustering(hg00113_results: list[MarkerResul
     nine_three = next(a for a in th01.alleles_called if a.number_label == "9.3")
     assert nine_three.isfg.count("AATG") >= 2, "9.3 must keep its interrupted structure"
     assert "ATG " in nine_three.isfg or nine_three.isfg.endswith("ATG")
+
+
+def test_allele_numbers_come_from_strnaming(hg00113_results: list[MarkerResult]) -> None:
+    """Every marker with a defined reporting range must be named by STRNaming.
+
+    Guards the wiring end to end: a missing slice cache, a panel window too
+    narrow to contain a range, or an anchor failure would silently drop that
+    marker back to the legacy bracket count — which is exactly the arithmetic
+    that was wrong at six loci.
+    """
+    fell_back = {
+        r.marker_name: sorted({a.strnaming_status for a in r.alleles_called})
+        for r in hg00113_results
+        if r.marker_name not in NO_STRNAMING_RANGE
+        and any(a.number_method != "strnaming" for a in r.alleles_called)
+    }
+    assert fell_back == {}, f"markers silently on the legacy CE path: {fell_back}"
+
+
+def test_markers_without_a_range_keep_the_legacy_path(
+    hg00113_results: list[MarkerResult],
+) -> None:
+    """The fallback must stay working — it is the only path for these markers."""
+    dys393 = next(r for r in hg00113_results if r.marker_name == "DYS393")
+    assert [a.strnaming_status for a in dys393.alleles_called] == ["no_range"]
+    assert {a.number_method for a in dys393.alleles_called} == {"period_ce"}
+    assert {a.number_label for a in dys393.alleles_called} == EXPECTED_PROFILE["DYS393"]
+
+
+def test_resolved_markers_no_longer_warn_about_kit_nomenclature(
+    hg00113_results: list[MarkerResult],
+) -> None:
+    """vWA and D21S11 now report the kit designation, so the warning must be gone.
+
+    The panel still carries ``kit_nomenclature_note`` for them as documentation
+    of the legacy fallback; the flag is what must not fire, because telling a
+    reviewer not to compare a number that *is* the kit value would cause the
+    false exclusion the flag exists to prevent.
+    """
+    for marker in ("vWA", "D21S11"):
+        result = next(r for r in hg00113_results if r.marker_name == marker)
+        offenders = [f for f in result.flags if f.code == FlagCode.CE_NOMENCLATURE_OFFSET]
+        assert offenders == [], f"{marker} still warns: {[f.message for f in offenders]}"
 
 
 @pytest.mark.parametrize("sample", SINGLE_SOURCE_SAMPLES)

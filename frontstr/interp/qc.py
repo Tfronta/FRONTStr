@@ -202,6 +202,12 @@ def _flag_kit_nomenclature(result: MarkerResult) -> None:
     note = result.system.kit_nomenclature_note
     if not note or not result.alleles_called:
         return
+    # The note describes how the *bracket count* deviates from the kit. When the
+    # number came from STRNaming it is the ISFG designation already, so the
+    # warning would be actively misleading — it would tell a reviewer not to
+    # compare a number that is precisely the one they should compare.
+    if all(a.number_method == "strnaming" for a in result.alleles_called):
+        return
     _add(
         result,
         FlagCode.CE_NOMENCLATURE_OFFSET,

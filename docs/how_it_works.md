@@ -7,7 +7,7 @@ read start to finish once, then used as a lookup.
 Companion documents: [`architecture.md`](architecture.md) for module layout,
 [`stutter_calibration.md`](stutter_calibration.md) for the stutter measurement.
 
-Status as of July 2026 — 402 tests passing, ~8,800 lines across 52 modules.
+Status as of July 2026 — 462 tests passing, ~9,700 lines across 54 modules.
 
 ---
 
@@ -221,7 +221,7 @@ affected marker rather than passing silently.
 
 ## 4. ISFG nomenclature and allele number
 
-**Module:** `frontstr/interp/isfg.py`, `allele_numeric.py`
+**Module:** `frontstr/interp/naming.py`, `isfg.py`, `allele_numeric.py`
 
 From each consensus:
 
@@ -230,14 +230,35 @@ motif run at each position, e.g. `[AATG]6 ATG [AATG]3`. Non-motif bases appear
 in lowercase. Minus-strand markers are reverse-complemented first so the output
 is in canonical orientation.
 
-**The allele number**, by one of two routes depending on the marker:
+**The allele number**, from STRNaming whenever it is available. The ISFG DNA
+Commission (Gettings et al. 2024) names STRNaming as *the program* that produces
+the designation, rather than a rule set to reimplement, and FRONTStr follows
+that: the number is whatever STRNaming reports for the marker's standard
+reporting range (`CE29_TCTA[4]TCTG[6]…` → 29).
+
+Two details make this work on long reads:
+
+- The reporting range is located in the consensus by **aligning the reference
+  flanks that sit just outside it**, not by reference coordinates. STRNaming's
+  ranges hug the repeat array — TPOX's starts on its first base — so an aligner
+  that places a long allele's extra units outside the boundary would otherwise
+  make them vanish. Coordinate slicing named both HG00113 TPOX alleles CE8 when
+  the truth is 9/11.
+- Reference sequence comes from a **committed GRCh38 slice cache**
+  (`frontstr/interp/data/strnaming_ranges.tsv`, ~13 kB, built by
+  `frontstr/panel/seed_strnaming.py`). No network call and no `--reference`
+  requirement, so naming is reproducible byte-for-byte.
+
+The legacy arithmetic remains as the fallback for markers STRNaming defines no
+range for (DYS393, AMEL), and for any consensus the range cannot be located in:
 
 - `period > 0` (simple markers): from length. `divmod(length − corr_value,
   period)` — integer part is full repeats, remainder is the microvariant
   decimal. TH01 39 bp → `divmod(39, 4)` = (9, 3) → **9.3**. The `corr_value` is
   the non-repeat content of the window, calibrated per marker against GRCh38.
 - `period = −1` (compound markers: vWA, FGA, D21S11, …): by counting repeat
-  units in the bracket string, minus a calibrated correction.
+  units in the bracket string, minus a calibrated correction. This is the
+  arithmetic that was measurably wrong — see §12.
 
 The chosen number and how it was derived both live on the model
 (`Allele.number`, `Allele.number_method`), together with a single
@@ -444,7 +465,11 @@ balance is genuinely good.
 **`CE_NOMENCLATURE_OFFSET` is curated in the panel**, via
 `System.kit_nomenclature_note`, set for vWA and D21S11. Which markers diverge
 from a kit convention is a property of the kit a laboratory compares against,
-not something the code can detect.
+not something the code can detect. The flag is now suppressed when every called
+allele was named by STRNaming, because in that case the number *is* the kit
+designation — warning a reviewer off comparing it would cause exactly the false
+exclusion the flag exists to prevent. The notes stay in the panel because they
+still describe the fallback path.
 
 ---
 
@@ -513,10 +538,10 @@ benchmark, asserted by `tests/test_regression_hg00113.py`.
 | Marker | Genotype (reads) | Coverage | Flags |
 |---|---|---|---|
 | D3S1358 | 14(31) | 35 | |
-| vWA | 13(17) / 17(16) | 38 | `ce_nomenclature_offset` |
+| vWA | 14(17) / 16(16) | 38 | |
 | FGA | 24(15) / 21(11) | 41 | |
 | D8S1179 | 10(13) / 13(12) | 28 | |
-| D21S11 | 35(16) / 33(10) | 29 | `ce_nomenclature_offset` |
+| D21S11 | 31(16) / 29(10) | 29 | |
 | D18S51 | 14(11) / 15(10) | 37 | |
 | D5S818 | 11(17) / 13(14) | 35 | |
 | D13S317 | 11(12) / 9(11) | 28 | |
@@ -535,19 +560,22 @@ benchmark, asserted by `tests/test_regression_hg00113.py`.
 | AMEL | X(12) / Y(14) | 26 | |
 | DYS391 | 10(14) | 16 | `low_coverage` |
 | DYS393 | 14(17) | 21 | |
-| DXS7132 | 15(9) | 11 | `low_coverage` |
+| DXS7132 | 14(9) | 11 | `low_coverage` |
 | DXS8378 | 10(10) | 10 | `low_coverage` |
 
-Two deviations are expected and encoded as such in the regression test:
+**Every marker with a Book1 reference now matches it**, vWA and D21S11
+included. Both used to deviate — 13/17 and 35/33 against kit values of 14/16
+and 29/31 — because the bracket count is not the kit designation and no single
+`corr_value` reconciles it; vWA's offsets run in *opposite directions* for its
+two alleles. Adopting STRNaming (§4) resolved both.
 
-- **vWA** reports 13/17; the kit designation is 14/16.
-- **D21S11** reports 35/33; the kit designation is 29/31.
-
-Both report the sequence-derived repeat count. For these two compound loci that
-count does not equal the legacy CE-kit designation, and no single correction
-reconciles them — vWA's offsets run in *opposite directions* for its two
-alleles. The ISFG strings are structurally correct in both cases; only the
-number differs, and both raise `CE_NOMENCLATURE_OFFSET`.
+That deviation turned out not to be limited to those two. Naming the GRCh38
+reference window itself and comparing against the published `ref_ce` shows the
+old arithmetic was also off at **D2S1338, D1S1656, D2S441 and DXS7132** — for
+the compound markers by an allele-structure dependent amount, which is why it
+looked correct on some samples and not others. `DXS7132` moved 15 → 14 here;
+its `corr_value` had been calibrated against FRONTStr's own output rather than
+an external truth.
 
 `D2S1338` reports one allele; the reference is 20/17. The second allele does
 not clear the calling threshold in this slice. That is coverage, not
@@ -563,7 +591,7 @@ Pileup, clustering, POA consensus, ISFG, allele numbering, stutter,
 classification, haplotype suppression, catalog annotation, genotype calling, QC
 flags, all seven export formats, the audit trail, and batch mode over a
 manifest. Regression-tested against a real ONT sample; CI green on ruff, ruff
-format, mypy and 402 tests.
+format, mypy and 462 tests.
 
 ### Does not work / does not exist
 
@@ -587,7 +615,8 @@ format, mypy and 402 tests.
 | Analytical / calling thresholds (0.02 / 0.10) not data-derived | Chosen defaults. The coverage floor and stutter model *are* derived; these are not. |
 | Stutter model fitted on PCR-free WGS | Under-predicts stutter on amplicon casework |
 | Stutter calibrated only over LUS 10–14 | Outside that range the model clamps rather than extrapolating |
-| vWA / D21S11 numbers ≠ kit designation | Cannot be compared directly against a CE profile |
+| DYS393 and AMEL have no STRNaming range | Both keep the legacy arithmetic; DYS393's number is unverified against an external truth |
+| The bracket string is still FRONTStr's own, not STRNaming's | ISFG Recommendation 2 asks for STRNaming's formatting; only the *number* has been adopted so far |
 | Catalog is a 4-entry demo seed | Iso-allele calling works, but has almost nothing to match against |
 | X markers in males reported `homozygous` | They are hemizygous; the label is misleading |
 

@@ -23,6 +23,7 @@ from frontstr.interp.flags import derive_marker_flags
 from frontstr.interp.haplotype import suppress_hp_phantoms
 from frontstr.interp.isfg import ce_from_brackets, ce_from_length, compress_isfg
 from frontstr.interp.models import Allele, MarkerResult
+from frontstr.interp.naming import NameStatus, StrNamer, default_namer
 from frontstr.interp.qc import QcThresholds, derive_run_qc_flags
 from frontstr.interp.stutter import build_expected_stutter
 from frontstr.interp.triallelic import call_profile
@@ -45,6 +46,7 @@ def interpret_marker(
     parent_fraction: float = DEFAULT_PARENT_FRACTION,
     ref_length_bp: int | None = None,
     catalog: AlleleCatalog | None = None,
+    namer: StrNamer | None = None,
 ) -> MarkerResult:
     """Interpret one marker's evidence + LongTR call into a :class:`MarkerResult`.
 
@@ -60,7 +62,13 @@ def interpret_marker(
             ``bp_diff`` and compound numeric alleles. If ``None``, uses LongTR REF
             length when ``longtr`` is present, otherwise the panel span
             (``ref_end - ref_start + 1``).
+        namer: STRNaming namer supplying the canonical allele number. Defaults
+            to the bundled one. Markers it has no reporting range for, and
+            consensuses it cannot locate the range in, fall back to the legacy
+            CE per allele — so this never needs disabling for coverage reasons.
     """
+    if namer is None:
+        namer = default_namer()
     total_reads = sum(c.n_reads for c in clusters)
     longtr_ref_len = len(longtr.alleles[0].sequence) if longtr and longtr.alleles else None
     ref_length_bp = resolve_ref_anchor_bp(
@@ -68,7 +76,7 @@ def interpret_marker(
     )
 
     alleles = [
-        _allele_from_cluster(idx, c, system, ref_length_bp) for idx, c in enumerate(clusters)
+        _allele_from_cluster(idx, c, system, ref_length_bp, namer) for idx, c in enumerate(clusters)
     ]
 
     parents = [
@@ -154,6 +162,9 @@ def interpret_run(
     log = get_logger(__name__)
     longtr_results = longtr_results or {}
     out: list[MarkerResult] = []
+    # Built once per run: seeding the reference structures is the expensive part
+    # and the result is immutable across markers.
+    namer = default_namer()
     log.info(
         "run.start",
         bam=str(bam),
@@ -165,6 +176,7 @@ def interpret_run(
         analytical_thresh=analytical_thresh,
         calling_thresh=calling_thresh,
         catalog=bool(catalog),
+        strnaming=bool(namer),
     )
     for system in panel.systems:
         if system.marker_type == "amel":
@@ -187,6 +199,7 @@ def interpret_run(
             analytical_thresh=analytical_thresh,
             calling_thresh=calling_thresh,
             catalog=catalog,
+            namer=namer,
         )
         log.debug(
             "marker.called",
@@ -195,6 +208,7 @@ def interpret_run(
             total_reads=result.total_reads,
             n_clusters=len(clusters),
             alleles=[a.number_label for a in result.alleles_called],
+            number_method=sorted({a.number_method for a in result.alleles_called}),
         )
         out.append(result)
 
@@ -247,8 +261,14 @@ def _allele_from_cluster(
     c: Cluster,
     system: System,
     ref_length_bp: int,
+    namer: StrNamer | None = None,
 ) -> Allele:
-    """Build an unclassified :class:`Allele` from one :class:`Cluster`."""
+    """Build an unclassified :class:`Allele` from one :class:`Cluster`.
+
+    The legacy CE is computed unconditionally: it is what the allele falls back
+    to for markers STRNaming defines no range for (DYS393, AMEL) and whenever
+    the reporting range cannot be located in the consensus.
+    """
     consensus = c.consensus
     is_deletion = len(consensus) == 0
     isfg = compress_isfg(consensus, motif=system.motif, strand=system.strand) if consensus else ""
@@ -259,9 +279,14 @@ def _allele_from_cluster(
         ce = ce_from_length(len(consensus), system.period, system.corr_value)
     bp_diff = len(consensus) - ref_length_bp if ref_length_bp is not None else 0
     allele_num, allele_src = compute_allele_numeric(len(consensus), system, ref_length_bp)
+
+    named = namer.name(system.name, consensus) if namer is not None else None
     return Allele(
         cluster_index=idx,
         consensus=consensus,
+        strnaming_name=named.name if named else "",
+        strnaming_ce=named.ce if named and named.ok else None,
+        strnaming_status=named.status.value if named else NameStatus.NO_RANGE.value,
         length_bp=len(consensus),
         n_reads_total=c.n_reads,
         n_reads_hp1=c.n_hp1,

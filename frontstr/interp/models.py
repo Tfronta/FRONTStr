@@ -173,6 +173,17 @@ class Allele(BaseModel):
     mean_qual: float
     ce: float | None
     isfg: str
+    #: STRNaming's full allele name over the marker's standard reporting range,
+    #: e.g. ``CE29_TCTA[4]TCTG[6]...``. Empty when STRNaming defines no range for
+    #: the marker or the range could not be located in the consensus.
+    strnaming_name: str = ""
+    #: CE parsed from :attr:`strnaming_name`. This is the canonical allele number
+    #: whenever it is present — see :meth:`_number_and_method`.
+    strnaming_ce: float | None = None
+    #: Why STRNaming did or did not name this allele
+    #: (:class:`frontstr.interp.naming.NameStatus`). Kept for audit: a reviewer
+    #: must be able to see that a number came from the legacy path and why.
+    strnaming_status: str = ""
     bp_diff: int
     is_deletion: bool
     #: How ``consensus`` was derived (``poa_spoa`` | ``poa_abpoa`` | ``single``
@@ -204,6 +215,13 @@ class Allele(BaseModel):
 
         Precedence (decided once here, not in the report layer):
 
+        - ``strnaming`` — the ISFG-recommended designation, computed by
+          STRNaming over the marker's standard reporting range. Outranks
+          everything else because it is the only method that is right on the
+          compound markers: the bracket count is off by an allele-structure
+          dependent amount at vWA, D21S11, D2S1338, D1S1656 and D2S441, and the
+          panel ``corr_value`` is off at DXS7132. See
+          :mod:`frontstr.interp.naming`.
         - ``period_ce`` / ``reference_offset`` — calibrated absolute CE number.
         - ``bracket_count`` — sequence-derived repeat count (``ce_from_brackets``)
           for compound markers; the cross-comparable default when there is no
@@ -213,6 +231,8 @@ class Allele(BaseModel):
         - ``bp_sizing`` — raw tandem-repeat span when no allele number exists.
         - ``none`` — deletion / no data.
         """
+        if self.strnaming_ce is not None:
+            return float(self.strnaming_ce), "strnaming"
         src = self.allele_numeric_source
         if self.allele_numeric is not None and src in {"period_ce", "reference_offset"}:
             return float(self.allele_numeric), src
@@ -246,7 +266,12 @@ class Allele(BaseModel):
         False for the relative and fallback methods (``delta``, ``bp_sizing``,
         ``none``), which must not be read as a kit CE designation.
         """
-        return self.number_method in ("period_ce", "reference_offset", "bracket_count")
+        return self.number_method in (
+            "strnaming",
+            "period_ce",
+            "reference_offset",
+            "bracket_count",
+        )
 
     @computed_field  # type: ignore[prop-decorator]
     @property

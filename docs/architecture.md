@@ -58,7 +58,8 @@ Allele candidates to a forensic genotype. Every decision rule lives here.
 | Module | Responsibility |
 |---|---|
 | `models` | `Allele`, `MarkerResult`, `Flag`, `IsoAllele` and the enums. The canonical allele number, its derivation method and its display label are computed here so no view can disagree about them. |
-| `isfg` | Bracketed nomenclature compression; CE from length or from bracket count. |
+| `isfg` | Bracketed nomenclature compression; the legacy CE from length or bracket count, now a fallback. |
+| `naming` | STRNaming-backed allele naming — the canonical CE. Offline, from a committed GRCh38 slice cache. |
 | `allele_numeric` | Reference-anchored allele numbering for compound markers. |
 | `stutter` | Builds expected stutter coverage per virtual stutter sequence, from a calibrated `StutterModel`. |
 | `classify` | `allele \| stutter \| artefact \| noise \| inexact_allele \| deletion \| hp_phantom`. |

@@ -154,11 +154,12 @@ Part of the documentation, not a disclaimer.
 - **The stutter model is PCR-free.** Fitted on WGS, so it has no PCR slippage
   component and will under-predict stutter on an amplicon panel. The model
   records its own protocol so this cannot be lost.
-- **vWA and D21S11 do not report the legacy kit allele number.** FRONTStr
-  reports the sequence-derived repeat count; for these two compound loci that
-  is not the CE-kit designation, and no single correction reconciles them. Both
-  raise `CE_NOMENCLATURE_OFFSET`. Do not compare those numbers against a CE
-  profile directly.
+- **Two markers still have no ISFG designation.** DYS393 is absent from
+  STRNaming's reported-range table and AMEL is not a tandem repeat, so both keep
+  the legacy length/bracket arithmetic. Every other marker in the shipped panel
+  is named by STRNaming; `Allele.number_method` records which path produced each
+  number, and `CE_NOMENCLATURE_OFFSET` still fires wherever the legacy one was
+  used on a marker known to deviate from its kit convention.
 - **The analytical and calling thresholds (0.02 / 0.10) are not data-derived.**
   The coverage floor and the stutter model are; these two are chosen defaults,
   and that is a gap.
