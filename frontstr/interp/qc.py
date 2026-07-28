@@ -25,9 +25,11 @@ Failure modes, in the forensic sense
 - ``STRAND_BIAS`` — an allele's reads come overwhelmingly from one strand.
   In a tandem repeat on ONT this can mean a strand-specific basecalling
   artefact rather than a real allele.
-- ``INEXACT_ALLELE`` — the caller could not reconstruct the allele exactly, so
-  the sequence is a reconstruction. Anything sequence-level (ISFG string,
-  iso-allele, microvariant) is provisional.
+- ``INEXACT_ALLELE`` — an allele whose sequence is a reconstruction rather than
+  an observation, so anything sequence-level (ISFG string, iso-allele,
+  microvariant) is provisional. Only LongTR ever produced these; with LongTR
+  unwired the condition cannot currently arise, and the check remains so the
+  flag works if a reconstructing caller is wired in again.
 - ``CE_NOMENCLATURE_OFFSET`` — the reported allele number for this marker is
   known not to equal the legacy CE-kit designation. Curated per marker in the
   panel, because which markers diverge is a property of the kit convention a
@@ -177,11 +179,7 @@ def _flag_strand_bias(result: MarkerResult, thr: QcThresholds) -> None:
 
 
 def _flag_inexact(result: MarkerResult) -> None:
-    inexact = [
-        a
-        for a in result.alleles_called
-        if a.status == AlleleStatus.INEXACT_ALLELE or a.longtr_inexact
-    ]
+    inexact = [a for a in result.alleles_called if a.status == AlleleStatus.INEXACT_ALLELE]
     if not inexact:
         return
     _add(

@@ -79,6 +79,52 @@ def test_debug_events_are_dropped_at_info_level(tmp_path: Path) -> None:
     assert log_path.read_text().strip() == ""
 
 
+def test_console_sink_is_human_readable_not_json(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The terminal sink must render for reading, not for parsing.
+
+    `frontstr interpret --log` exists so a person can watch what the caller
+    did; a wall of JSON on stderr would technically satisfy "shows the log" and
+    fail the actual purpose.
+    """
+    configure_logging(None, level=logging.INFO, console=True)
+    get_logger("test").info("marker.called", marker="TH01", total_reads=40)
+    for h in logging.getLogger().handlers:
+        h.flush()
+
+    err = capsys.readouterr().err
+    assert "marker.called" in err
+    assert "marker=TH01" in err and "total_reads=40" in err
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(err.strip().splitlines()[-1])
+
+
+def test_console_sink_goes_to_stderr_leaving_stdout_clean(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``interpret --log > table.txt`` must still separate table from log."""
+    configure_logging(None, level=logging.INFO, console=True)
+    get_logger("test").info("run.start")
+    for h in logging.getLogger().handlers:
+        h.flush()
+    captured = capsys.readouterr()
+    assert "run.start" in captured.err
+    assert captured.out == ""
+
+
+def test_file_sink_stays_json_when_console_is_also_on(tmp_path: Path) -> None:
+    """Both sinks at once: the audit file must not inherit the pretty renderer."""
+    log_path = tmp_path / "run.jsonl"
+    configure_logging(log_path, level=logging.INFO, console=True)
+    get_logger("test").info("run.start", n_markers=25)
+    logging.shutdown()
+
+    lines = [json.loads(x) for x in log_path.read_text().splitlines() if x.strip()]
+    assert lines[0]["event"] == "run.start"
+    assert lines[0]["n_markers"] == 25
+
+
 def test_library_import_does_not_configure_logging(tmp_path: Path) -> None:
     """A library that writes to someone else's stdout is a broken library."""
     configure_logging(None, level=logging.WARNING)

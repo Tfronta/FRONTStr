@@ -20,14 +20,17 @@ its own pileup of the BAM.
 It is worth stating plainly because the module layout invites the opposite
 conclusion. There is a `frontstr.caller` package that wraps LongTR, and it used
 to be described as "Layer 1", which reads like the first step of the pipeline.
-It is not. **LongTR is optional, off by default, and never contributes a
-call.**
+It never was, and as of July 2026 it is not connected at all: **no external
+caller runs, and no command exposes one.**
 
-Concretely: LongTR runs only if you pass `--longtr-vcf`. When it does, the only
-thing it feeds is `cross_check()`, which compares its genotype against
-FRONTStr's and raises a `LONGTR_DISCORDANT` flag when they disagree. That flag
-is an invitation for an analyst to look; it never changes a call. With no
-`--longtr-vcf`, that step is a no-op and the result is byte-identical.
+It used to be an optional cross-check behind `--longtr-vcf` that raised a flag
+on disagreement without ever changing a call. That was unwired, along with the
+`interp.concordance` glue it fed and the `call` command that ran it. The
+reasoning is that benchmarking FRONTStr against another caller is a different
+activity from running FRONTStr, and doing both in one command made it hard to
+say which tool produced a number. The `frontstr.caller` package stays in the
+repo — argv construction, BED emission, VCF parsing, all tested — because those
+are the tedious parts of a future benchmark harness.
 
 The profiles in this document were all produced on a machine with **no LongTR
 installed at all**.
@@ -41,7 +44,6 @@ What FRONTStr genuinely depends on:
 | Multiple-sequence consensus | `pyspoa` (SPOA) | Step 3 |
 | Edit distance | `edlib` | Step 2 |
 | Everything forensic | **FRONTStr** | Steps 1–9 |
-| Cross-check only | LongTR | Optional |
 
 ---
 
@@ -509,6 +511,30 @@ still describe the fallback path.
 
 ## 10. Outputs and audit trail
 
+### Watching a run, not just reading its conclusion
+
+`frontstr interpret --log` prints the process log to **stderr** as it goes: the
+run configuration, then one line per marker with the call rule, the coverage,
+the cluster count and how each allele number was derived.
+
+```
+[info ] run.start      bam=HG00113.codis.bam n_markers=25 min_mapq=20 strnaming=True
+[debug] marker.called  marker=vWA call_rule=heterozygous alleles=['14', '16']
+                       n_clusters=7 total_reads=38 number_method=['strnaming']
+```
+
+It goes to stderr so `frontstr interpret … --log > table.txt` still separates
+the result table from the commentary. The same events land in
+`frontstr.log.jsonl` as JSON when `export` writes an output directory — the two
+sinks share one event stream and render it differently, because a file wants to
+be diffed and a terminal wants to be read.
+
+This is not yet the full per-locus trace (reads fetched, reads rejected and
+why, bins, clusters, POA positions corrected). `pileup_locus` currently discards
+its rejection reasons, which has to change first.
+
+### Export formats
+
 `frontstr export --formats …` writes any of:
 
 | Format | Contents |
@@ -529,7 +555,7 @@ Plus `frontstr.log.jsonl`, a per-run process log.
 
 ### The VCF is native and sequence-resolved
 
-Not an annotation of LongTR's output — a format that only exists when another
+Not an annotation of another caller's output — a format that only exists when another
 caller ran cannot serve as the benchmark interchange format.
 
 `ALT` carries the allele's **sequence**, so iso-alleles remain distinct

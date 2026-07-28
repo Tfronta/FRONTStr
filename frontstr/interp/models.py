@@ -3,7 +3,6 @@
 The Interpretation layer is forensically opinionated. It takes:
 
 - :class:`frontstr.evidence.cluster.Cluster` — what the reads actually say
-- Optionally :class:`frontstr.caller.vcf.LongTRResult` — what LongTR called
 
 …and emits :class:`Allele` (per cluster, with classification) + a
 :class:`MarkerResult` summarising the called genotype.
@@ -16,9 +15,8 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, Field, computed_field
 
-from frontstr.caller.vcf import LongTRResult
 from frontstr.evidence.consensus import ConsensusMethod
 from frontstr.panel.models import System
 
@@ -35,6 +33,8 @@ class AlleleStatus(StrEnum):
     #: Same allele as a stronger cluster on the same haplotype, split apart by
     #: sequencing error. See :mod:`frontstr.interp.haplotype`.
     HP_PHANTOM = "hp_phantom"
+    #: Retired with LongTR: it marked clusters the caller could only
+    #: reconstruct. Nothing sets it now; kept so historical records parse.
     INEXACT_ALLELE = "inexact_allele"
     ALLELE = "allele"
 
@@ -87,7 +87,11 @@ class FlagCode(StrEnum):
     STRAND_BIAS = "strand_bias"
     TRIALLELIC = "triallelic"
     MIXTURE_SUSPECTED = "mixture_suspected"
+    #: Retired: LongTR is no longer wired into the pipeline (see
+    #: :mod:`frontstr.caller`). Kept so historical records still parse; nothing
+    #: produces it.
     LONGTR_DISCORDANT = "longtr_discordant"
+    #: Retired with LongTR — see :class:`AlleleStatus.INEXACT_ALLELE`.
     INEXACT_ALLELE = "inexact_allele"
     ISOALLELE = "isoallele"
     CE_NOMENCLATURE_OFFSET = "ce_nomenclature_offset"
@@ -195,8 +199,8 @@ class Allele(BaseModel):
     #: | ``mode`` | ``empty``). ``mode`` means no POA backend was available and
     #: the sequence is a single unpolished read — see ``CONSENSUS_FALLBACK``.
     consensus_method: str = ConsensusMethod.SINGLE.value
-    #: Primary numeric allele for reports: CE when period is defined, else
-    #: LongTR-style offset from REF anchor (see :mod:`frontstr.interp.allele_numeric`).
+    #: Primary numeric allele for reports: CE when period is defined, else an
+    #: offset from the REF anchor (see :mod:`frontstr.interp.allele_numeric`).
     allele_numeric: float | None = None
     #: ``period_ce`` | ``reference_offset`` | ``delta_only`` | ``deletion`` | ``unavailable``
     allele_numeric_source: str = ""
@@ -210,9 +214,6 @@ class Allele(BaseModel):
     #: would have collapsed the locus to homozygous. Raises ``HP_RESCUED_HET``.
     hp_rescued: bool = False
     status: AlleleStatus = AlleleStatus.PENDING
-    longtr_match: bool = False
-    longtr_inexact: bool = False
-    longtr_bp_diff: int | None = None
     #: ISFG iso-allele annotation (catalog match + same-number sibling). Folds
     #: the former flat ``catalog_suffix``/``catalog_distance``/``catalog_source``.
     iso: IsoAllele = Field(default_factory=IsoAllele)
@@ -314,13 +315,12 @@ class Allele(BaseModel):
 class MarkerResult(BaseModel):
     """All the forensic decisions for one marker, ready for export/report."""
 
-    # LongTRResult is a stdlib dataclass; treat it as an opaque nested object
-    # rather than letting Pydantic re-validate/copy the caller's internals.
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     #: Version of this serialized record's shape. Bump on breaking changes to
     #: the canonical schema so downstream consumers can branch defensively.
-    schema_version: str = "1.0"
+    #: 2.0 removed the ``longtr_*`` allele fields, ``longtr_result`` and
+    #: ``discordant`` when LongTR was unwired, and added the ``strnaming_*``
+    #: fields.
+    schema_version: str = "2.0"
 
     marker_name: str
     system: System
@@ -332,8 +332,6 @@ class MarkerResult(BaseModel):
     expected_stutter: dict[str, float] = Field(default_factory=dict)
     analytical_thresh: float = 0.02
     calling_thresh: float = 0.10
-    longtr_result: LongTRResult | None = None
-    discordant: bool = False
     #: Structured, auditable marker-level conditions. Replaces free-text
     #: warnings so the run is filterable/aggregatable for batch + audit.
     flags: list[Flag] = Field(default_factory=list)

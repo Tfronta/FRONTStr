@@ -25,7 +25,6 @@
   <div class="meta">
     <span>Platform: {{ payload.meta.platform|upper }}</span>
     <span>Reference: {{ payload.meta.reference_build }}</span>
-    {% if payload.meta.longtr_version %}<span>LongTR: {{ payload.meta.longtr_version }}</span>{% endif %}
     <span>Generated: {{ payload.meta.started_at }}</span>
     <span>FRONTStr {{ payload.meta.app_version }}</span>
   </div>
@@ -35,7 +34,6 @@
     <div class="kpi {% if payload.summary.tri_count %}warn{% endif %}"><b>{{ payload.summary.tri_count }}</b>tri-allelic</div>
     <div class="kpi {% if payload.summary.dropouts %}warn{% endif %}"><b>{{ payload.summary.dropouts }}</b>drop-outs</div>
     <div class="kpi {% if payload.summary.mixture_count %}danger{% endif %}"><b>{{ payload.summary.mixture_count }}</b>mixture alert</div>
-    <div class="kpi {% if payload.summary.discordant_count %}warn{% endif %}"><b>{{ payload.summary.discordant_count }}</b>LongTR discord</div>
   </div>
 </header>
 
@@ -61,7 +59,6 @@
         <option value="ok">OK</option>
         <option value="tri">tri-allelic</option>
         <option value="mixture">mixture</option>
-        <option value="discordant">discordant</option>
         <option value="no_data">no data</option>
       </select>
       <span class="pill" id="profile-count"></span>
@@ -88,7 +85,7 @@
       {% for row in payload.profile_rows %}
         <tr data-search="{{ row.marker|lower }} {{ row.call_rule }} {{ row.status_chip }} {{ row.tri_type }}"
             data-chip="{{ row.status_chip }}"
-            class="{% if row.status_chip == 'mixture' %}row-mixture{% elif row.status_chip == 'discordant' %}row-discordant{% elif row.status_chip == 'no_data' %}row-no-data{% endif %}">
+            class="{% if row.status_chip == 'mixture' %}row-mixture{% elif row.status_chip == 'no_data' %}row-no-data{% endif %}">
           <td class="marker"><a href="#seq-{{ row.marker|e }}" class="marker-link" data-marker="{{ row.marker|e }}" title="Show this marker's alleles in the Sequences table">{{ row.marker }}</a></td>
           <td class="mono">{{ row.call_rule }}</td>
           <td class="mono genotype">{{ row.genotype }}</td>
@@ -219,12 +216,11 @@
   </h2>
   {% for r in payload.results %}
     <details class="locus" id="locus-{{ r.marker_name|e }}"
-             {% if r.tri_type or r.discordant or r.call_rule == 'no_data' %}open{% endif %}>
+             {% if r.tri_type or r.call_rule == 'no_data' %}open{% endif %}>
       <summary>
         <b>{{ r.marker_name }}</b>
-        <span class="chip {% if r.tri_type == 'mixture_suspected' %}mixture{% elif r.tri_type %}tri{% elif r.discordant %}discordant{% elif r.call_rule == 'no_data' %}no_data{% else %}ok{% endif %}">{{ r.call_rule }}</span>
+        <span class="chip {% if r.tri_type == 'mixture_suspected' %}mixture{% elif r.tri_type %}tri{% elif r.call_rule == 'no_data' %}no_data{% else %}ok{% endif %}">{{ r.call_rule }}</span>
         {% if r.tri_type %}<span class="chip tri">{{ r.tri_type }}</span>{% endif %}
-        {% if r.discordant %}<span class="chip discordant">LongTR≠evidence</span>{% endif %}
         <span class="meta">{{ r.system.chromosome }}:{{ r.system.ref_start }}-{{ r.system.ref_end }} · motif {{ r.system.motif }} · {{ r.total_reads }} reads</span>
       </summary>
       <div class="body locus-body">
@@ -301,7 +297,6 @@
                 <td class="num">{{ a.mean_qual }}</td>
                 <td class="num">{{ a.expected_stutter }}</td>
                 <td><span class="chip {{ 'ok' if a.status == 'allele' else 'no_data' }}">{{ a.status }}</span>
-                  {% if a.longtr_inexact %} <span class="chip discordant">inexact</span>{% endif %}
                 </td>
                 <td class="mono seq-cell" style="font-size:11px;color:var(--text-soft);word-break:break-all;">{{ a.consensus or '–' }}</td>
               </tr>
@@ -313,14 +308,6 @@
           <aside class="locus-split-aside">
           <div style="font-size:11px;color:var(--text-soft);margin-bottom:6px;">Haplotype split</div>
           {{ r.svg_haplotype | safe }}
-          {% if r.longtr %}
-          <div style="margin-top:12px;font-size:12px;">
-            <div style="color:var(--text-soft);margin-bottom:4px;">LongTR concordance</div>
-            <div>GT: {{ r.longtr.gt_indices }} (Q={{ r.longtr.posterior }})</div>
-            <div>DP: {{ r.longtr.depth }} · PDP: {{ r.longtr.pdp_hp1 }} / {{ r.longtr.pdp_hp2 }}</div>
-            <div>ALT bp_diffs: {{ r.longtr.alleles|map(attribute='bp_diff')|list }}</div>
-          </div>
-          {% endif %}
           </aside>
         </div>
       </div>
@@ -340,9 +327,6 @@
       {% if payload.meta.bam_path %}
       <dt>BAM</dt><dd><span class="hash">{{ payload.meta.bam_sha256 or '–' }}</span> <button class="mono" type="button" data-copy="{{ payload.meta.bam_sha256 or '' }}" style="font-size:10px;cursor:pointer;">copy</button></dd>
       <dt>BAM path</dt><dd>{{ payload.meta.bam_path }}</dd>
-      {% endif %}
-      {% if payload.meta.longtr_vcf_path %}
-      <dt>LongTR VCF</dt><dd><span class="hash">{{ payload.meta.longtr_vcf_sha256 or '–' }}</span></dd>
       {% endif %}
       {% if payload.meta.panel_sha256 %}
       <dt>Panel</dt><dd><span class="hash">{{ payload.meta.panel_sha256 }}</span></dd>

@@ -1,4 +1,4 @@
-"""Orchestrator: clusters + LongTR → :class:`MarkerResult`.
+"""Orchestrator: evidence clusters → :class:`MarkerResult`.
 
 This is the public entry point of the Interpretation layer. Higher-level
 code (CLI, report, exports) calls :func:`interpret_marker` (single locus)
@@ -8,17 +8,14 @@ or :func:`interpret_run` (full panel).
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable
 from pathlib import Path
 
-from frontstr.caller.vcf import LongTRResult
 from frontstr.evidence.cluster import Cluster, cluster_observations
 from frontstr.evidence.pileup import pileup_locus
 from frontstr.interp.allele_numeric import compute_allele_numeric, resolve_ref_anchor_bp
 from frontstr.interp.amel import interpret_amel
 from frontstr.interp.catalog import annotate_alleles
 from frontstr.interp.classify import classify_allele
-from frontstr.interp.concordance import cross_check
 from frontstr.interp.flags import derive_marker_flags
 from frontstr.interp.haplotype import suppress_hp_phantoms
 from frontstr.interp.isfg import ce_from_brackets, ce_from_length, compress_isfg
@@ -40,7 +37,6 @@ def interpret_marker(
     *,
     system: System,
     clusters: list[Cluster],
-    longtr: LongTRResult | None = None,
     analytical_thresh: float = DEFAULT_ANALYTICAL_THRESH,
     calling_thresh: float = DEFAULT_CALLING_THRESH,
     parent_fraction: float = DEFAULT_PARENT_FRACTION,
@@ -48,20 +44,18 @@ def interpret_marker(
     catalog: AlleleCatalog | None = None,
     namer: StrNamer | None = None,
 ) -> MarkerResult:
-    """Interpret one marker's evidence + LongTR call into a :class:`MarkerResult`.
+    """Interpret one marker's evidence into a :class:`MarkerResult`.
 
     Args:
         system: Marker definition.
         clusters: Output of :func:`frontstr.evidence.cluster.cluster_observations`.
-        longtr: Optional LongTR record for cross-checking.
         analytical_thresh: Below this fraction → noise.
         calling_thresh: Below this fraction (but >= analytical) → artefact.
         parent_fraction: Clusters with fraction ≥ this become parents for
             stutter-expectation calculation (default 0.20).
         ref_length_bp: Optional override for reference TR length (bp) used for
-            ``bp_diff`` and compound numeric alleles. If ``None``, uses LongTR REF
-            length when ``longtr`` is present, otherwise the panel span
-            (``ref_end - ref_start + 1``).
+            ``bp_diff`` and compound numeric alleles. If ``None``, uses the
+            panel span (``ref_end - ref_start + 1``).
         namer: STRNaming namer supplying the canonical allele number. Defaults
             to the bundled one. Markers it has no reporting range for, and
             consensuses it cannot locate the range in, fall back to the legacy
@@ -70,10 +64,7 @@ def interpret_marker(
     if namer is None:
         namer = default_namer()
     total_reads = sum(c.n_reads for c in clusters)
-    longtr_ref_len = len(longtr.alleles[0].sequence) if longtr and longtr.alleles else None
-    ref_length_bp = resolve_ref_anchor_bp(
-        system, explicit=ref_length_bp, longtr_ref_len=longtr_ref_len
-    )
+    ref_length_bp = resolve_ref_anchor_bp(system, explicit=ref_length_bp)
 
     alleles = [
         _allele_from_cluster(idx, c, system, ref_length_bp, namer) for idx, c in enumerate(clusters)
@@ -86,8 +77,6 @@ def interpret_marker(
     ]
     expected = build_expected_stutter(parents, system)
 
-    inexact_seqs = frozenset(a.sequence for a in (longtr.alleles if longtr else []) if a.inexact)
-
     for a in alleles:
         a.expected_stutter = expected.get(a.consensus, 0.0)
         a.status = classify_allele(
@@ -96,7 +85,6 @@ def interpret_marker(
             expected_stutter=expected,
             analytical_thresh=analytical_thresh,
             calling_thresh=calling_thresh,
-            longtr_inexact_seqs=inexact_seqs,
         )
 
     # Suppress same-haplotype split-allele phantoms before the profile is
@@ -123,7 +111,6 @@ def interpret_marker(
         analytical_thresh=analytical_thresh,
         calling_thresh=calling_thresh,
     )
-    cross_check(result, longtr)
     derive_marker_flags(result)
     return result
 
@@ -132,7 +119,6 @@ def interpret_run(
     *,
     bam: Path,
     panel: Panel,
-    longtr_results: dict[str, LongTRResult] | None = None,
     min_mapq: int = 20,
     identity_threshold: float = 0.97,
     len_tolerance_bp: int = 0,
@@ -147,9 +133,6 @@ def interpret_run(
     Args:
         bam: Indexed sample BAM or CRAM.
         panel: Panel definition.
-        longtr_results: Optional dict ``{marker_name: LongTRResult}`` for
-            concordance checks. Markers without an entry are interpreted
-            from evidence alone.
         reference_fasta: Reference FASTA path; required when ``bam`` is a CRAM.
         qc_thresholds: Laboratory QC policy for the run-level flags (coverage,
             strand bias). Defaults apply when omitted.
@@ -160,7 +143,6 @@ def interpret_run(
         ``NO_DATA`` result rather than failing.
     """
     log = get_logger(__name__)
-    longtr_results = longtr_results or {}
     out: list[MarkerResult] = []
     # Built once per run: seeding the reference structures is the expensive part
     # and the result is immutable across markers.
@@ -195,7 +177,6 @@ def interpret_run(
         result = interpret_marker(
             system=system,
             clusters=clusters,
-            longtr=longtr_results.get(system.name),
             analytical_thresh=analytical_thresh,
             calling_thresh=calling_thresh,
             catalog=catalog,
@@ -303,8 +284,3 @@ def _allele_from_cluster(
         allele_numeric=allele_num,
         allele_numeric_source=allele_src,
     )
-
-
-def index_longtr_results(results: Iterable[LongTRResult]) -> dict[str, LongTRResult]:
-    """Convenience: turn a list of LongTRResult into a marker-name keyed map."""
-    return {r.marker_name: r for r in results}

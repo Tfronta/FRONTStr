@@ -129,43 +129,16 @@ def test_interpret_marker_isfg_compression(synth_bam_homozygous: Path) -> None:
     assert result.alleles_called[0].isfg == "[AGAT]12"
 
 
-def test_interpret_marker_uses_longtr_inexact_flag(synth_bam_heterozygous: Path) -> None:
-    """When LongTR flags the called allele as INEXACT_ALLELE, status is upgraded."""
-    from frontstr.caller.vcf import LongTRAlleleSpec, LongTRResult, LongTRSampleCall
+def test_interpret_marker_takes_no_external_caller(synth_bam_heterozygous: Path) -> None:
+    """The interpretation layer is self-contained.
 
-    obs = pileup_locus(
-        synth_bam_heterozygous,
-        SYNTH_CHROM,
-        SYNTH_TR_START,
-        SYNTH_TR_END,
-        min_mapq=20,
-    )
-    clusters = cluster_observations(obs)
-    ref = "AGAT" * 12
-    longtr = LongTRResult(
-        marker_name="SYNTH",
-        chrom=SYNTH_CHROM,
-        pos=SYNTH_TR_START + 1,
-        motif="AGAT",
-        period="4",
-        alleles=[
-            LongTRAlleleSpec(sequence=ref, bp_diff=0, inexact=False, is_deletion=False),
-            LongTRAlleleSpec(sequence="AGAT" * 11, bp_diff=-4, inexact=True, is_deletion=False),
-        ],
-        samples={
-            "S1": LongTRSampleCall(
-                sample="S1",
-                gt_indices=(0, 1),
-                phased=False,
-                posterior=0.99,
-                depth=9,
-            )
-        },
-    )
-    result = interpret_marker(
-        system=_synth_system(),
-        clusters=clusters,
-        longtr=longtr,
-    )
-    inexact_alleles = [a for a in result.alleles if a.longtr_inexact]
-    assert any(a.consensus == "AGAT" * 11 for a in inexact_alleles)
+    This replaces a test that fed a LongTRResult in to drive INEXACT_ALLELE.
+    LongTR is no longer wired into the pipeline (frontstr/caller/ stays in the
+    repo, uncabled), so interpret_marker must not accept a caller result at all
+    — a silently-ignored keyword would be worse than a TypeError.
+    """
+    import inspect
+
+    params = inspect.signature(interpret_marker).parameters
+    assert "longtr" not in params
+    assert not any("longtr" in p for p in params)

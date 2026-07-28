@@ -1,9 +1,9 @@
-"""BAM/CRAM header and content validation prior to handing off to LongTR.
+"""BAM/CRAM header and content validation before the pipeline reads a sample.
 
-LongTR is strict about read groups (it uses ``@RG SM``/``LB``) and is happy to
-silently produce nonsense if the reference build mismatches the alignment.
-This module enforces a small set of checks and returns a list of human-readable
-warnings; fatal issues raise :class:`IngestError`.
+Read groups (``@RG SM``/``LB``) and a matching reference build are the two
+things that silently produce nonsense downstream when wrong, in FRONTStr as in
+any caller. This module enforces a small set of checks and returns a list of
+human-readable warnings; fatal issues raise :class:`IngestError`.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ _LOW_MAPQ_THRESHOLD = 10
 
 
 def validate_bam(path: Path, expected_build: str | None = None) -> ValidationReport:
-    """Validate a BAM/CRAM that is being passed through to LongTR.
+    """Validate a BAM/CRAM before it is read by the pipeline.
 
     Args:
         path: Path to an indexed (or indexable) BAM/CRAM.
@@ -77,7 +77,7 @@ def validate_bam(path: Path, expected_build: str | None = None) -> ValidationRep
     if missing_sm:
         raise IngestError(
             f"BAM {path} has @RG entries without SM tag: {missing_sm!r}. "
-            "LongTR requires SM to assign reads to samples."
+            "SM is what assigns reads to a sample."
         )
     report.sample_names = sorted({rg["SM"] for rg in rgs})
 
@@ -108,8 +108,7 @@ def validate_bam(path: Path, expected_build: str | None = None) -> ValidationRep
     report.median_mapq = _median(mapqs) if mapqs else 0
     if mapqs and report.median_mapq < _LOW_MAPQ_THRESHOLD:
         report.warnings.append(
-            f"Median MAPQ={report.median_mapq} (< {_LOW_MAPQ_THRESHOLD}); "
-            "LongTR may drop many reads"
+            f"Median MAPQ={report.median_mapq} (< {_LOW_MAPQ_THRESHOLD}); many reads may be dropped"
         )
 
     bam.close()

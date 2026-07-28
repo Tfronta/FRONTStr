@@ -40,10 +40,12 @@ Coverage is counted, not divided out of a caller's `BPDIFFS` field, and the
 ISFG bracket string is computed from the cluster consensus rather than from a
 VCF `ALT`.
 
-> **LongTR is optional and off by default.** `frontstr.caller` wraps it, but it
-> runs only if you pass `--longtr-vcf`, and all it does then is cross-check —
-> disagreement raises a flag for an analyst, never changes a call. FRONTStr
-> does not need LongTR installed.
+> **LongTR is not part of the pipeline.** It used to be wired in as an optional
+> cross-check; that is gone. `frontstr.caller` still ships — the runner, the VCF
+> parser and the BED writer are intact and importable — but nothing in the
+> pipeline calls it, and no command exposes it. Benchmarking FRONTStr against
+> another caller is a separate exercise from running FRONTStr, and mixing the
+> two made it hard to say which tool produced a number.
 
 Four choices drive most of what the tool reports, each measured rather than
 asserted:
@@ -115,7 +117,7 @@ census.
 
 For a cohort, `frontstr tidy` builds one long table across many runs — see below.
 
-The VCF is native, not an annotation of LongTR's output. `ALT` carries the
+The VCF is native, not an annotation of another caller's output. `ALT` carries the
 allele's sequence so iso-alleles stay distinct; the repeat count rides in
 `FORMAT/MC` and per-allele coverage in `FORMAT/AD`. It is bgzip/tabix
 indexable and bcftools-queryable, which is the point — it exists so FRONTStr
@@ -137,9 +139,14 @@ dropped out appear as `called = false` rows rather than vanishing, and each row
 carries the panel version, POA backend and stutter model that produced it — so
 a cohort collected across two calibrations can still be analysed honestly.
 
+Add `--log` to `interpret` to watch the run rather than only its conclusion:
+the configuration, then one line per marker with the call rule, coverage,
+cluster count and how each allele number was derived. It goes to stderr, so
+redirecting the table still separates cleanly.
+
 Other commands: `evidence` (per-locus cluster dump), `batch` (multi-sample from
-a manifest), `calibrate-stutter` (fit a stutter model to your own data), `call`
-(LongTR), `doctor`, `inspect`. Run `frontstr --help` for the full list.
+a manifest), `calibrate-stutter` (fit a stutter model to your own data),
+`doctor`, `inspect`. Run `frontstr --help` for the full list.
 
 ## Limitations
 
@@ -207,7 +214,7 @@ If you use FRONTStr in research, please cite:
 
 FRONTStr is an independent implementation. It uses and draws on:
 
-- **LongTR** — Tang et al. Wrapped as an optional cross-check.
+- **LongTR** — Tang et al. A wrapper ships in `frontstr.caller`, unused by the pipeline.
 - **ISFG sequence nomenclature** — the bracketed-repeat convention FRONTStr
   emits follows the ISFG recommendations and the counting rules described by
   Phillips (2018).

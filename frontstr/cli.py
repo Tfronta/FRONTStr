@@ -123,7 +123,7 @@ def run(
     """Run the full FRONTStr pipeline on a single sample.
 
     NOTE: not yet implemented end-to-end. Phase 1 of the roadmap wires the
-    layers (ingest → align/passthrough → LongTR → evidence → interp → report).
+    layers (ingest → align/passthrough → evidence → interp → report).
     """
     _ = _input, sample, panel, reference, out, platform
     console.print(
@@ -243,76 +243,6 @@ def batch(
 
     if errors:
         raise typer.Exit(code=1)
-
-
-@app.command("call")
-def call(
-    bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM.")],
-    panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
-    reference: Annotated[
-        Path, typer.Option("--reference", "-r", help="Reference FASTA (indexed).")
-    ],
-    out_dir: Annotated[Path, typer.Option("--out", "-o", help="Output directory.")],
-    platform: Annotated[str, typer.Option("--platform", help="ont|hifi.")] = "ont",
-    chrom: Annotated[
-        str | None, typer.Option("--chrom", help="Restrict to a single chromosome.")
-    ] = None,
-    phased: Annotated[bool, typer.Option("--phased", help="Pass --phased-bam.")] = False,
-    binary: Annotated[
-        str | None, typer.Option("--longtr-bin", help="Path to LongTR binary.")
-    ] = None,
-    parse_only: Annotated[
-        Path | None,
-        typer.Option("--parse-only", help="Skip subprocess; just parse this VCF."),
-    ] = None,
-) -> None:
-    """Run LongTR on a sample and pretty-print the parsed results.
-
-    Use ``--parse-only PATH`` to skip the LongTR call entirely and just
-    inspect a pre-existing VCF (handy for offline development).
-    """
-    from frontstr.caller import LongTRRunner, parse_longtr_vcf
-    from frontstr.panel.loader import load_panel
-
-    if parse_only is not None:
-        try:
-            results = parse_longtr_vcf(parse_only)
-        except FrontstrError as exc:
-            console.print(f"[red]parse error:[/red] {exc}")
-            raise typer.Exit(code=2) from exc
-    else:
-        try:
-            panel = load_panel(panel_path)
-            runner = LongTRRunner(
-                panel=panel,
-                reference=reference,
-                platform=platform,
-                phased=phased,
-                binary=binary,
-            )
-            run = runner.run(bam=bam, out_dir=out_dir, chrom=chrom)
-            results = run.results
-            console.print(f"[green]LongTR finished[/green] → {run.vcf}")
-        except FrontstrError as exc:
-            console.print(f"[red]caller error:[/red] {exc}")
-            raise typer.Exit(code=2) from exc
-
-    t = Table(title=f"LongTR results ({len(results)} loci)")
-    t.add_column("Marker", style="bold")
-    t.add_column("Position")
-    t.add_column("Motif")
-    t.add_column("GT")
-    t.add_column("Q", justify="right")
-    t.add_column("DP", justify="right")
-    t.add_column("Alleles (bp_diff)")
-    for r in results:
-        sample = next(iter(r.samples.values()), None)
-        gt = "/".join(str(i) for i in sample.gt_indices) if sample and sample.gt_indices else "."
-        q = f"{sample.posterior:.2f}" if sample and sample.posterior is not None else "."
-        dp = str(sample.depth) if sample else "."
-        bp_diffs = ",".join(str(a.bp_diff) for a in r.alleles)
-        t.add_row(r.marker_name, f"{r.chrom}:{r.pos}", r.motif or "?", gt, q, dp, bp_diffs)
-    console.print(t)
 
 
 @app.command("doctor")
@@ -466,9 +396,6 @@ def export_cmd(
     sample_name: Annotated[
         str | None, typer.Option("--sample", help="Sample name (defaults to BAM stem).")
     ] = None,
-    longtr_vcf: Annotated[
-        Path | None, typer.Option("--longtr-vcf", help="Optional LongTR VCF.")
-    ] = None,
     operator: Annotated[str | None, typer.Option("--operator")] = None,
     run_id: Annotated[str | None, typer.Option("--run-id")] = None,
     platform: Annotated[str, typer.Option("--platform")] = "ont",
@@ -503,7 +430,6 @@ def export_cmd(
     """
     import logging
 
-    from frontstr.caller import parse_longtr_vcf
     from frontstr.exports import (
         write_evidence_csv,
         write_profile_csv,
@@ -512,7 +438,7 @@ def export_cmd(
         write_run_xlsx,
         write_seqs_csv,
     )
-    from frontstr.interp import index_longtr_results, interpret_run
+    from frontstr.interp import interpret_run
     from frontstr.log import PROCESS_LOG_NAME, configure_logging
     from frontstr.panel.loader import load_panel
     from frontstr.report import RunContext, build_report, serialize_run
@@ -546,11 +472,9 @@ def export_cmd(
 
     try:
         panel = load_panel(panel_path)
-        longtr_map = index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
         results = interpret_run(
             bam=bam,
             panel=panel,
-            longtr_results=longtr_map,
             min_mapq=min_mapq,
             identity_threshold=identity,
             analytical_thresh=analytical_thresh,
@@ -563,7 +487,6 @@ def export_cmd(
             panel_name=panel.name,
             panel_version=panel.version,
             bam_path=bam,
-            longtr_vcf_path=longtr_vcf,
             platform=platform,
             operator=operator,
             run_id=run_id,
@@ -620,9 +543,6 @@ def report(
     sample_name: Annotated[
         str | None, typer.Option("--sample", help="Sample name (defaults to BAM stem).")
     ] = None,
-    longtr_vcf: Annotated[
-        Path | None, typer.Option("--longtr-vcf", help="Optional LongTR VCF.")
-    ] = None,
     operator: Annotated[str | None, typer.Option("--operator")] = None,
     run_id: Annotated[str | None, typer.Option("--run-id")] = None,
     platform: Annotated[str, typer.Option("--platform")] = "ont",
@@ -639,20 +559,17 @@ def report(
 
     Usage::
 
-        frontstr report --bam s.bam --panel codis.yaml --out s.html [--longtr-vcf s.vcf]
+        frontstr report --bam s.bam --panel codis.yaml --out s.html
     """
-    from frontstr.caller import parse_longtr_vcf
-    from frontstr.interp import index_longtr_results, interpret_run
+    from frontstr.interp import interpret_run
     from frontstr.panel.loader import load_panel
     from frontstr.report import RunContext, build_report
 
     try:
         panel = load_panel(panel_path)
-        longtr_map = index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
         results = interpret_run(
             bam=bam,
             panel=panel,
-            longtr_results=longtr_map,
             min_mapq=min_mapq,
             identity_threshold=identity,
             analytical_thresh=analytical_thresh,
@@ -664,7 +581,6 @@ def report(
             panel_name=panel.name,
             panel_version=panel.version,
             bam_path=bam,
-            longtr_vcf_path=longtr_vcf,
             platform=platform,
             operator=operator,
             run_id=run_id,
@@ -850,9 +766,6 @@ def calibrate_stutter(
 def interpret(
     bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM or CRAM.")],
     panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
-    longtr_vcf: Annotated[
-        Path | None, typer.Option("--longtr-vcf", help="Optional LongTR VCF for concordance.")
-    ] = None,
     min_mapq: Annotated[int, typer.Option("--min-mapq")] = 20,
     identity: Annotated[float, typer.Option("--identity")] = 0.97,
     len_tolerance: Annotated[int, typer.Option("--len-tolerance")] = 0,
@@ -872,26 +785,38 @@ def interpret(
             "--catalog", help="Optional allele catalog JSON for ISFG/iso-allele annotation."
         ),
     ] = None,
+    log: Annotated[
+        bool,
+        typer.Option("--log", "-l", help="Print the per-marker process log to stderr."),
+    ] = False,
 ) -> None:
     """End-to-end forensic call: pileup → cluster → ISFG → classify → call.
 
     This is the canonical FRONTStr command. It runs the evidence layer for
-    every marker in ``--panel`` and prints one line per called allele plus
-    LongTR concordance flags when ``--longtr-vcf`` is supplied.
+    every marker in ``--panel`` and prints one line per called allele.
+
+    Pass ``--log`` to watch what it does rather than only what it concluded:
+    the run configuration, then one line per marker with the call rule, the
+    coverage, the cluster count and how each allele number was derived. It goes
+    to stderr, so ``frontstr interpret ... --log > table.txt`` still separates
+    cleanly.
     """
-    from frontstr.caller import parse_longtr_vcf
-    from frontstr.interp import index_longtr_results, interpret_run
+    import logging
+
+    from frontstr.interp import interpret_run
+    from frontstr.log import configure_logging
     from frontstr.panel.catalog import load_catalog
     from frontstr.panel.loader import load_panel
+
+    if log:
+        configure_logging(level=logging.DEBUG, console=True)
 
     try:
         panel = load_panel(panel_path)
         catalog = load_catalog(catalog_path) if catalog_path else None
-        longtr_map = index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
         results = interpret_run(
             bam=bam,
             panel=panel,
-            longtr_results=longtr_map,
             min_mapq=min_mapq,
             identity_threshold=identity,
             len_tolerance_bp=len_tolerance,
@@ -910,19 +835,14 @@ def interpret(
     t.add_column("Tri", style="yellow")
     t.add_column("Alleles called")
     t.add_column("Cov", justify="right")
-    t.add_column("LongTR?")
     for r in results:
         called = ", ".join(_interpret_allele_cell(a) for a in r.alleles_called)
-        longtr_flag = (
-            "[red]discordant[/red]" if r.discordant else ("ok" if r.longtr_result else "-")
-        )
         t.add_row(
             r.marker_name,
             r.call_rule.value,
             r.tri_type.value or "-",
             called or "-",
             str(r.total_reads),
-            longtr_flag,
         )
     console.print(t)
 

@@ -67,19 +67,23 @@ Allele candidates to a forensic genotype. Every decision rule lives here.
 | `catalog` | Annotates alleles against a curated iso-allele catalog (optional). |
 | `triallelic` | `call_profile` — 1, 2 or 3+ alleles, plus mixture suspicion. |
 | `amel` | Amelogenin sex typing. Not a tandem repeat, so it bypasses the STR path entirely. |
-| `concordance` | Cross-check against LongTR when a VCF was supplied; raises a flag, never changes a call. |
 | `flags` | Marker-level flags intrinsic to a finished call (triallelic, iso-allele, unpolished consensus). |
 | `qc` | Run-level flags that depend on a laboratory threshold (coverage, strand bias, kit nomenclature). |
 | `profile` | The orchestrator: `interpret_marker` and `interpret_run`. |
 
 ---
 
-## Caller — `frontstr.caller` (optional)
+## Caller — `frontstr.caller` (present, not wired)
 
-Wraps LongTR. **Not part of the pipeline**: it runs only when the CLI is given
-`--longtr-vcf`, and its output feeds only `interp.concordance`, which raises a
-`LONGTR_DISCORDANT` flag on disagreement. FRONTStr produces complete profiles
-with LongTR absent from the machine.
+Wraps LongTR. **Nothing in the pipeline calls it and no command exposes it.**
+It was once an optional cross-check behind `--longtr-vcf`; that wiring, and the
+`interp.concordance` glue it fed, were removed. Benchmarking FRONTStr against
+another caller is a separate exercise from running FRONTStr, and doing both at
+once made it hard to say which tool produced a number.
+
+The code stays because the argv construction, BED emission and VCF parsing are
+the tedious parts and are worth keeping for a future benchmark harness. It is
+importable and tested; it is simply not cabled to anything.
 
 | Module | Responsibility |
 |---|---|
@@ -125,24 +129,18 @@ FASTQ  ──►  ingest.align_to_reference        ✗ NOT IMPLEMENTED — align
 indexed BAM / CRAM
         │   single source of truth for everything downstream
         │
-        ├──► caller.longtr ──► tr_calls.vcf ──┐   optional, --longtr-vcf only
-        │                                     │
-        └──► evidence.pileup                  │
-                 │                            │
-                 ▼                            │
-             evidence.cluster                 │
-                 │                            │
-                 ▼                            │
-             evidence.consensus               │
-                 │                            │
-                 ▼                            │
-             interp.profile                   │
-               isfg → stutter → classify      │
-               → haplotype → catalog          │
-               → triallelic                   │
-                 │                            │
-                 ▼                            │
-             interp.concordance  ◄────────────┘   flags disagreement only
+        └──► evidence.pileup
+                 │
+                 ▼
+             evidence.cluster
+                 │
+                 ▼
+             evidence.consensus
+                 │
+                 ▼
+             interp.profile
+               naming → isfg → stutter → classify
+               → haplotype → catalog → triallelic
                  │
                  ▼
              interp.flags  →  interp.qc
@@ -164,8 +162,9 @@ indexed BAM / CRAM
 - **Provenance is traceable.** Every cluster knows the read IDs that produced
   it, every allele knows its cluster, and every run records the software
   versions, backends and thresholds that produced it in a sealed audit record.
-- **Independent of any external caller.** Coverage comes from Evidence. If
-  LongTR changes, or is absent, the numbers do not move.
+- **Independent of any external caller.** Coverage comes from Evidence, and no
+  external caller is wired in at all, so there is nothing whose version or
+  absence could move the numbers.
 - **Thresholds are defensible and located.** Stutter rates live in a versioned
   `StutterModel`, QC thresholds in a `QcThresholds` object, marker parameters
   in the panel YAML. None of them are buried in caller flags, and all of them

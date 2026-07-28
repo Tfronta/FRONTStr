@@ -21,14 +21,9 @@ def _tetramer(name: str = "TH01_X") -> System:
     )
 
 
-def test_resolve_explicit_overrides_panel_and_longtr() -> None:
+def test_resolve_explicit_overrides_panel_span() -> None:
     s = _tetramer()
-    assert resolve_ref_anchor_bp(s, explicit=99, longtr_ref_len=50) == 99
-
-
-def test_resolve_prefers_longtr_over_panel_span() -> None:
-    s = _tetramer()
-    assert resolve_ref_anchor_bp(s, explicit=None, longtr_ref_len=50) == 50
+    assert resolve_ref_anchor_bp(s, explicit=99) == 99
     assert s.span() == 48
 
 
