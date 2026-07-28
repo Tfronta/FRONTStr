@@ -13,15 +13,21 @@ def _allele(
     *,
     status: AlleleStatus = AlleleStatus.ALLELE,
     consensus: str | None = None,
+    hp: int | None = None,
+    n_tagged: int | None = None,
 ) -> Allele:
+    """Build a candidate. ``hp`` puts ``n_tagged`` (default all) reads on that haplotype."""
+    tagged = n_reads if n_tagged is None else n_tagged
+    hp1 = tagged if hp == 1 else 0
+    hp2 = tagged if hp == 2 else 0
     return Allele(
         cluster_index=idx,
         consensus=consensus or f"SEQ{idx}",
         length_bp=10 + idx,
         n_reads_total=n_reads,
-        n_reads_hp1=0,
-        n_reads_hp2=0,
-        n_reads_hp_none=n_reads,
+        n_reads_hp1=hp1,
+        n_reads_hp2=hp2,
+        n_reads_hp_none=n_reads - hp1 - hp2,
         n_forward=n_reads,
         n_reverse=0,
         mean_qual=30.0,
@@ -176,3 +182,78 @@ def test_only_allele_status_considered() -> None:
     )
     # only the two ALLELEs survive
     assert len(a) == 2 and rule == CallRule.HETEROZYGOUS
+
+
+class TestHaplotypeRescuedHeterozygote:
+    """The PHR floor must yield to phasing evidence.
+
+    Modelled on HG00113 D2S1338: 17 reads (100% HP1) against 5 reads (100% HP2)
+    is a PHR of 0.29, under the 0.4 floor, so it was called homozygous 20 —
+    against an Illumina, LongTR and STRspy consensus of 17/20.
+    """
+
+    def test_opposite_haplotypes_override_the_phr_floor(self) -> None:
+        a1 = _allele(0, 17, hp=1)
+        a2 = _allele(1, 5, hp=2)
+        assert a2.n_reads_total / a1.n_reads_total < 0.4  # would collapse on ratio alone
+        called, rule, tri = call_profile([a1, a2], _system())
+        assert rule == CallRule.HETEROZYGOUS
+        assert called == [a1, a2]
+        assert a2.hp_rescued is True
+        assert tri == TriType.NONE
+
+    def test_same_haplotype_still_collapses(self) -> None:
+        """Two candidates on one haplotype cannot be two alleles — unchanged."""
+        a1, a2 = _allele(0, 17, hp=1), _allele(1, 5, hp=1)
+        called, rule, _ = call_profile([a1, a2], _system())
+        assert rule == CallRule.HOMOZYGOUS
+        assert called == [a1]
+        assert a2.hp_rescued is False
+
+    def test_unphased_bam_is_unaffected(self) -> None:
+        """No HP tags means the read ratio is still the only evidence there is."""
+        a1, a2 = _allele(0, 17), _allele(1, 5)
+        called, rule, _ = call_profile([a1, a2], _system())
+        assert rule == CallRule.HOMOZYGOUS
+        assert called == [a1]
+
+    def test_too_few_tagged_reads_does_not_rescue(self) -> None:
+        """Below the 3-tagged-read floor a haplotype claim is not evidence."""
+        a1 = _allele(0, 17, hp=1)
+        a2 = _allele(1, 5, hp=2, n_tagged=2)
+        _called, rule, _ = call_profile([a1, a2], _system())
+        assert rule == CallRule.HOMOZYGOUS
+
+    def test_impure_major_allele_does_not_rescue(self) -> None:
+        """A major cluster split across both haplotypes is not evidence either.
+
+        This is HG00154 D18S51 (11 HP1 / 7 HP2 on the major allele): Illumina
+        calls it heterozygous, but our own phasing does not support it, and
+        guessing from an unbalanced ratio is what this rule exists to avoid.
+        """
+        a1 = _allele(0, 18, hp=1, n_tagged=11)
+        a1.n_reads_hp2 = 7
+        a1.n_reads_hp_none = 0
+        a2 = _allele(1, 5, hp=2)
+        _called, rule, _ = call_profile([a1, a2], _system())
+        assert rule == CallRule.HOMOZYGOUS
+
+    def test_balanced_heterozygote_is_not_marked_rescued(self) -> None:
+        """The flag must mean "called on phasing", not "is phased"."""
+        a1, a2 = _allele(0, 20, hp=1), _allele(1, 18, hp=2)
+        called, rule, _ = call_profile([a1, a2], _system())
+        assert rule == CallRule.HETEROZYGOUS
+        assert all(a.hp_rescued is False for a in called)
+
+    def test_rescue_lets_a_third_allele_be_considered(self) -> None:
+        """A rescued locus continues into the triallelic logic, not around it.
+
+        Before the rescue this returned homozygous immediately, so a third
+        allele at a triallelic-capable marker could never be reached.
+        """
+        a1 = _allele(0, 17, hp=1)
+        a2 = _allele(1, 5, hp=2)
+        a3 = _allele(2, 5, hp=2)  # clears both calling_thresh and min_reads_third
+        called, rule, _tri = call_profile([a1, a2, a3], _system(allow_tri=True))
+        assert rule != CallRule.HOMOZYGOUS
+        assert len(called) == 3

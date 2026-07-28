@@ -7,7 +7,7 @@ read start to finish once, then used as a lookup.
 Companion documents: [`architecture.md`](architecture.md) for module layout,
 [`stutter_calibration.md`](stutter_calibration.md) for the stutter measurement.
 
-Status as of July 2026 — 462 tests passing, ~9,700 lines across 54 modules.
+Status as of July 2026 — 479 tests passing, ~9,800 lines across 54 modules.
 
 ---
 
@@ -380,6 +380,14 @@ evidence that resolves it correctly, to `289 / 301`.
 fires at 1 locus out of ~110, down from 13. Core binning alone takes false
 mixtures from 5 to 0.
 
+### The same invariant, read backwards
+
+If two candidates on the *same* haplotype cannot both be real, then two on
+*opposite* haplotypes cannot be the same allele — however unbalanced their read
+counts. `on_opposite_haplotypes()` exposes that reading, and §8 uses it to stop
+the peak-height ratio from collapsing a genuine heterozygote. Same evidence,
+same gates, opposite direction: one deletes alleles, the other rescues them.
+
 ---
 
 ## 7. Iso-allele catalog (optional)
@@ -409,7 +417,7 @@ Surviving candidates, sorted by read count, become a genotype:
 | Candidates | Outcome |
 |---|---|
 | 0 | `no_data` |
-| 1, or 2nd below 40% of the 1st | `homozygous` |
+| 1, or 2nd below 40% of the 1st **and not on the opposite haplotype** | `homozygous` |
 | 2 | `heterozygous` |
 | 3+, marker allows triallelic | `triallelic_type_I` / `type_II` / `review` by balance |
 | 3+, marker does not | `heterozygous`, or `mixture_suspected` if the 3rd is substantial |
@@ -417,6 +425,32 @@ Surviving candidates, sorted by read count, become a genotype:
 A 3rd candidate must clear both the fractional calling threshold and an
 absolute floor of 5 reads. With core binning and haplotype suppression both in
 place, this floor is now redundant belt-and-braces.
+
+### The 40% floor is not the best evidence available
+
+`min_phr_for_het` is inherited from capillary electrophoresis, where peak height
+is all there is. On phased long reads it is not. HG00113 D2S1338:
+
+```
+20 · 17 reads · 100% HP1
+17 ·  5 reads · 100% HP2     PHR = 0.29, under the 0.4 floor
+```
+
+That was called homozygous `20`, against an Illumina, LongTR **and** STRspy
+consensus of `17/20` — a false exclusion, the costliest error this caller can
+make. At ONT depths a 5-vs-17 split is ordinary sampling; the phasing says
+plainly that these are two alleles.
+
+So the ratio now yields to `on_opposite_haplotypes()` (§6), under the same gates
+— ≥ 3 tagged reads at ≥ 80% purity on *both* sides, hence a no-op on unphased
+BAMs, where the ratio is again the only evidence there is. The rescued allele
+carries `hp_rescued` and the marker raises `HP_RESCUED_HET`, so a call resting
+on phasing rather than balance is never silent.
+
+It stays rare by construction: across the five test samples it fires at exactly
+one locus. A version of this that fires broadly is no longer an appeal to
+phasing evidence, it is a lowered threshold — `test_phasing_rescue_does_not_invent_heterozygotes`
+guards that.
 
 **Amelogenin takes a separate path** (`interp/amel.py`): it is not a tandem
 repeat. It counts reads at the AMELX and AMELY regions and reports X, Y or
@@ -550,7 +584,7 @@ benchmark, asserted by `tests/test_regression_hg00113.py`.
 | TH01 | **9.3(10)** / 7(7) | 25 | |
 | TPOX | 9(19) / 11(16) | 44 | |
 | CSF1PO | 10(14) / 12(14) | 32 | |
-| D2S1338 | 20(17) | 23 | |
+| D2S1338 | 20(17) / 17(5) | 23 | `hp_rescued_het` |
 | D19S433 | 14(22) / 12(17) | 45 | |
 | D10S1248 | 13(19) / 15(11) | 33 | |
 | D1S1656 | 13(13) / 11(12) | 27 | |
@@ -577,9 +611,27 @@ looked correct on some samples and not others. `DXS7132` moved 15 → 14 here;
 its `corr_value` had been calibrated against FRONTStr's own output rather than
 an external truth.
 
-`D2S1338` reports one allele; the reference is 20/17. The second allele does
-not clear the calling threshold in this slice. That is coverage, not
-nomenclature.
+`D2S1338` is now 20/17, matching the reference. Its minor allele is carried by
+5 reads against 17 — under the 40% peak-height floor — and is called because
+phasing puts the two clusters on opposite haplotypes (§8).
+
+### Concordance against the external reference
+
+Measured across all five slices against the `Illumina` sheet of
+`1000GEN-ONT-Merged-Compar.xlsx`, restricted to markers that sheet actually
+calls: **91 of 95 genotypes (95.8%)**. The four remaining are all the minor
+allele of a heterozygote lost to a threshold, none to nomenclature:
+
+| Sample | Marker | Reference | FRONTStr | Why |
+|---|---|---|---|---|
+| HG00154 | D18S51 | 13/14 | 14 | major cluster is 11 HP1 / 7 HP2, so phasing cannot rescue it |
+| HG00263 | D18S51 | 12/16 | 12 | minor allele is 3 reads = 9.1%, just under the 10% calling threshold |
+| HG00154 | D5S818 | 12/13 | 13 | 11 reads at the locus; genuine low-coverage dropout |
+| HG00154 | FGA | 22/19 | 24/19 | **not a FRONTStr error** — LongTR and STRspy both call 24 |
+
+The FGA row is worth reading carefully: Illumina is the outlier there, out-voted
+3–1 by the long-read methods. Short reads under-call long FGA alleles, which is
+the failure mode this project exists to avoid.
 
 ---
 
@@ -591,7 +643,7 @@ Pileup, clustering, POA consensus, ISFG, allele numbering, stutter,
 classification, haplotype suppression, catalog annotation, genotype calling, QC
 flags, all seven export formats, the audit trail, and batch mode over a
 manifest. Regression-tested against a real ONT sample; CI green on ruff, ruff
-format, mypy and 462 tests.
+format, mypy and 479 tests.
 
 ### Does not work / does not exist
 
@@ -616,6 +668,9 @@ format, mypy and 462 tests.
 | Stutter model fitted on PCR-free WGS | Under-predicts stutter on amplicon casework |
 | Stutter calibrated only over LUS 10–14 | Outside that range the model clamps rather than extrapolating |
 | DYS393 and AMEL have no STRNaming range | Both keep the legacy arithmetic; DYS393's number is unverified against an external truth |
+| The sex markers have no external reference at all | DYS391 is `NA` in the reference workbook and DYS393/DXS7132/DXS8378 are absent; those four expectations are FRONTStr's own output |
+| D21S11 has no orthogonal reference | HipSTR does not call it; 29/31 rests on LongTR and STRspy, both long-read |
+| Two heterozygotes still lost to thresholds | HG00154 D18S51 (phasing too impure to rescue) and HG00263 D18S51 (3 reads, just under the 10% calling threshold) |
 | The bracket string is still FRONTStr's own, not STRNaming's | ISFG Recommendation 2 asks for STRNaming's formatting; only the *number* has been adopted so far |
 | Catalog is a 4-entry demo seed | Iso-allele calling works, but has almost nothing to match against |
 | X markers in males reported `homozygous` | They are hemizygous; the label is misleading |

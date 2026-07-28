@@ -51,6 +51,18 @@ Suppressed clusters are demoted to :class:`AlleleStatus.HP_PHANTOM` rather
 than deleted: they stay in the record, the owning allele records how many
 reads were absorbed, and the marker carries a ``HP_PHANTOM_COLLAPSED`` flag so
 the decision is auditable.
+
+The same invariant, read backwards
+----------------------------------
+
+If two clusters on the *same* haplotype cannot both be real, then two clusters
+on *opposite* haplotypes cannot be the same allele — no matter how unbalanced
+their read counts are. :func:`on_opposite_haplotypes` exposes that reading, and
+:func:`frontstr.interp.triallelic.call_profile` uses it to stop the
+peak-height-ratio filter from collapsing a genuine heterozygote. Measured on
+HG00113 D2S1338: 17 reads (100% HP1) against 5 reads (100% HP2) is a PHR of
+0.29, under the 0.4 floor, so it was called homozygous 20 — against an Illumina,
+LongTR and STRspy consensus of 17/20.
 """
 
 from __future__ import annotations
@@ -98,6 +110,33 @@ def dominant_hp(
     if allele.n_reads_hp2 / tagged >= hp_purity:
         return 2
     return None
+
+
+def on_opposite_haplotypes(
+    a: Allele,
+    b: Allele,
+    *,
+    hp_purity: float = DEFAULT_HP_PURITY,
+    min_tagged_reads: int = DEFAULT_MIN_TAGGED_READS,
+) -> bool:
+    """True when ``a`` and ``b`` are each confidently on a *different* haplotype.
+
+    The same invariant as :func:`suppress_hp_phantoms`, read the other way
+    round. One allele per haplotype means that two clusters sharing a haplotype
+    cannot both be real — and that two clusters on *opposite* haplotypes cannot
+    be the same allele, however unbalanced their read counts are.
+
+    That second reading is what rescues an imbalanced heterozygote from the
+    peak-height-ratio filter: a read ratio is an indirect proxy for "these are
+    two alleles", and phasing is direct evidence of it. Returns ``False`` unless
+    both clusters clear ``min_tagged_reads`` at ``hp_purity``, so this is a
+    no-op on unphased BAMs.
+    """
+    hp_a = dominant_hp(a, hp_purity=hp_purity, min_tagged_reads=min_tagged_reads)
+    if hp_a is None:
+        return False
+    hp_b = dominant_hp(b, hp_purity=hp_purity, min_tagged_reads=min_tagged_reads)
+    return hp_b is not None and hp_a != hp_b
 
 
 def suppress_hp_phantoms(

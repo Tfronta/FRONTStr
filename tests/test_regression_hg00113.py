@@ -13,8 +13,20 @@ the data is absent. To run them::
 
 Sample: HG00113, 1000 Genomes GBR, male. Slice of
 ``HG00113-ONT-hg38-R10-LSK114-dorado090_sup_5mCG_5hmCG_v500.phased.bam``,
-±10 kb around each panel locus. Reference genotypes from Book1.xlsx (HipSTR on
-the matched Illumina data) cross-checked against the CODIS profile.
+±10 kb around each panel locus.
+
+Reference genotypes come from the ``Illumina`` sheet of
+``1000GEN-ONT-Merged-Compar.xlsx`` (HipSTR on the matched Illumina data). Its
+``Concordancia-3-tecnologias`` sheet adds LongTR and STRspy side by side and is
+what adjudicates a disagreement. Two caveats that matter when reading a failure
+here:
+
+- **D21S11 is not called by HipSTR at all** (``NA`` for every sample), so its
+  29/31 rests on LongTR and STRspy only — both long-read, i.e. caller-vs-caller
+  rather than an orthogonal method.
+- **The sex markers have no external reference whatsoever.** DYS391 is ``NA``
+  and DYS393/DXS7132/DXS8378 are absent from the workbook, so those four
+  expectations are FRONTStr's own output. Do not treat them as validated.
 """
 
 from __future__ import annotations
@@ -58,9 +70,10 @@ EXPECTED_PROFILE: dict[str, set[str]] = {
     "TH01": {"9.3", "7"},
     "TPOX": {"9", "11"},
     "CSF1PO": {"10", "12"},
-    # Reference is 20/17; the 17 allele does not clear the calling threshold in
-    # this slice. A coverage limitation, not a nomenclature one.
-    "D2S1338": {"20"},
+    # 17 is carried by 5 reads against the major allele's 17 — a PHR of 0.29,
+    # under the 0.4 floor. Called heterozygous because the two clusters are
+    # 100% HP1 and 100% HP2 respectively; see the HP-rescue test below.
+    "D2S1338": {"20", "17"},
     "D19S433": {"14", "12"},
     "D10S1248": {"13", "15"},
     "D1S1656": {"13", "11"},
@@ -194,6 +207,43 @@ def test_markers_without_a_range_keep_the_legacy_path(
     assert [a.strnaming_status for a in dys393.alleles_called] == ["no_range"]
     assert {a.number_method for a in dys393.alleles_called} == {"period_ce"}
     assert {a.number_label for a in dys393.alleles_called} == EXPECTED_PROFILE["DYS393"]
+
+
+def test_imbalanced_heterozygote_is_rescued_by_phasing(
+    hg00113_results: list[MarkerResult],
+) -> None:
+    """D2S1338 is 17/20 in Illumina, LongTR and STRspy; FRONTStr used to say 20.
+
+    The minor allele has 5 reads against 17 — a peak-height ratio of 0.29,
+    under the 0.4 het floor inherited from capillary electrophoresis. The two
+    clusters are 100% HP1 and 100% HP2, which is direct evidence of two alleles,
+    so the ratio must not overrule it. Guards against the rule silently
+    regressing to a false homozygote — a false exclusion, the costliest error
+    this caller can make.
+    """
+    result = next(r for r in hg00113_results if r.marker_name == "D2S1338")
+    assert result.call_rule == CallRule.HETEROZYGOUS
+    rescued = [a for a in result.alleles_called if a.hp_rescued]
+    assert len(rescued) == 1, "the 17 allele should be called on phasing"
+    assert rescued[0].number_label == "17"
+    assert any(f.code == FlagCode.HP_RESCUED_HET for f in result.flags), (
+        "a call that rests on phasing rather than peak balance must be flagged"
+    )
+
+
+def test_phasing_rescue_does_not_invent_heterozygotes(
+    hg00113_results: list[MarkerResult],
+) -> None:
+    """The rescue must stay rare and targeted, not loosen calling generally.
+
+    It fires at exactly one locus in this sample. If a change makes it fire
+    broadly, it has stopped being an appeal to phasing evidence and become a
+    lowered threshold.
+    """
+    rescued = [
+        r.marker_name for r in hg00113_results if any(a.hp_rescued for a in r.alleles_called)
+    ]
+    assert rescued == ["D2S1338"]
 
 
 def test_resolved_markers_no_longer_warn_about_kit_nomenclature(

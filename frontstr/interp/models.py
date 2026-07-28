@@ -93,6 +93,7 @@ class FlagCode(StrEnum):
     CE_NOMENCLATURE_OFFSET = "ce_nomenclature_offset"
     CONSENSUS_FALLBACK = "consensus_fallback"
     HP_PHANTOM_COLLAPSED = "hp_phantom_collapsed"
+    HP_RESCUED_HET = "hp_rescued_het"
 
 
 _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
@@ -113,6 +114,10 @@ _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
     # INFO: the collapse is the *correct* call, but it must stay visible so a
     # reviewer can see that a candidate was suppressed and why.
     FlagCode.HP_PHANTOM_COLLAPSED: FlagSeverity.INFO,
+    # INFO, same reasoning as above: the heterozygous call is the correct one,
+    # but a reviewer must be able to see that it rests on phasing rather than on
+    # peak balance, because the read ratio alone would read as homozygous.
+    FlagCode.HP_RESCUED_HET: FlagSeverity.INFO,
 }
 
 
@@ -200,6 +205,10 @@ class Allele(BaseModel):
     #: (see :mod:`frontstr.interp.haplotype`). Reported so coverage is not
     #: understated; ``n_reads_total`` deliberately stays as observed.
     n_reads_absorbed: int = 0
+    #: Set when this allele was called only because phasing put it on the
+    #: opposite haplotype from the major allele — the peak-height ratio alone
+    #: would have collapsed the locus to homozygous. Raises ``HP_RESCUED_HET``.
+    hp_rescued: bool = False
     status: AlleleStatus = AlleleStatus.PENDING
     longtr_match: bool = False
     longtr_inexact: bool = False

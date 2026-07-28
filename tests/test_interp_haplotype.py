@@ -13,6 +13,7 @@ import pytest
 from frontstr.interp.haplotype import (
     DEFAULT_MAX_PHANTOM_BP,
     dominant_hp,
+    on_opposite_haplotypes,
     suppress_hp_phantoms,
 )
 from frontstr.interp.models import Allele, AlleleStatus
@@ -202,3 +203,39 @@ def test_weak_real_allele_survives_when_the_strong_pair_are_both_phantoms() -> N
     assert [a.length_bp for a in survivors] == [289, 301]
     assert hp1_owner.n_reads_absorbed == 6
     assert hp2_real.n_reads_absorbed == 4
+
+
+# ---------------------------------------------------------------------------
+# on_opposite_haplotypes — the same invariant, read backwards
+# ---------------------------------------------------------------------------
+
+
+def test_opposite_haplotypes_detected() -> None:
+    assert on_opposite_haplotypes(_allele(0, 100, hp1=17), _allele(1, 104, hp2=5)) is True
+
+
+def test_same_haplotype_is_not_opposite() -> None:
+    assert on_opposite_haplotypes(_allele(0, 100, hp1=17), _allele(1, 104, hp2=0, hp1=5)) is False
+
+
+def test_unphased_pair_is_not_opposite() -> None:
+    """No tags at all — the whole mechanism must be a no-op."""
+    assert (
+        on_opposite_haplotypes(_allele(0, 100, untagged=17), _allele(1, 104, untagged=5)) is False
+    )
+
+
+def test_one_side_below_the_tagged_floor_is_not_opposite() -> None:
+    assert on_opposite_haplotypes(_allele(0, 100, hp1=17), _allele(1, 104, hp2=2)) is False
+
+
+def test_impure_side_is_not_opposite() -> None:
+    """A cluster straddling both haplotypes cannot anchor the invariant."""
+    assert on_opposite_haplotypes(_allele(0, 100, hp1=11, hp2=7), _allele(1, 104, hp2=5)) is False
+
+
+def test_untagged_reads_do_not_block_the_call() -> None:
+    """Missing phasing evidence is not evidence against, as in dominant_hp."""
+    a = _allele(0, 100, hp1=9, untagged=8)
+    b = _allele(1, 104, hp2=4, untagged=3)
+    assert on_opposite_haplotypes(a, b) is True

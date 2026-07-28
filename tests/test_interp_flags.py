@@ -274,3 +274,27 @@ def test_hp_phantom_collapse_is_flagged_for_audit() -> None:
     flag = next(f for f in r.flags if f.code == FlagCode.HP_PHANTOM_COLLAPSED)
     assert flag.severity == FlagSeverity.INFO
     assert "252 bp / 5 reads" in flag.message
+
+
+def test_hp_rescued_het_flag_is_raised() -> None:
+    """A heterozygote called on phasing rather than peak balance must be visible."""
+    major = _bare_allele(n_reads_total=17, n_reads_hp1=17, n_reads_hp2=0)
+    minor = _bare_allele(
+        cluster_index=1, n_reads_total=5, n_reads_hp1=0, n_reads_hp2=5, hp_rescued=True
+    )
+    r = _result(TriType.NONE, CallRule.HETEROZYGOUS)
+    r.alleles = [major, minor]
+    r.alleles_called = [major, minor]
+    derive_marker_flags(r)
+    flag = next(f for f in r.flags if f.code == FlagCode.HP_RESCUED_HET)
+    assert flag.severity == FlagSeverity.INFO
+    assert "opposite haplotype" in flag.message
+    assert "5 reads vs 17" in flag.message
+
+
+def test_no_hp_rescued_flag_for_an_ordinary_heterozygote() -> None:
+    a, b = _bare_allele(), _bare_allele(cluster_index=1)
+    r = _result(TriType.NONE, CallRule.HETEROZYGOUS)
+    r.alleles = r.alleles_called = [a, b]
+    derive_marker_flags(r)
+    assert FlagCode.HP_RESCUED_HET not in {f.code for f in r.flags}
