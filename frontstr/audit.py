@@ -1,8 +1,16 @@
 """Audit trail: what was run, with what, and what it flagged.
 
-A forensic result is only as good as the account of how it was produced. Three
+A forensic result is only as good as the account of how it was produced. Four
 layers, in increasing durability:
 
+0. **Locus trace** — :mod:`frontstr.trace`, written per sample as
+   ``<sample>.trace.txt``. Answers the question the other three cannot:
+   *where* did a call go wrong. Every read rejected and why, the length bins,
+   the clusters and their consensus, the aligned sequences, the haplotype
+   counts per candidate, how each allele number was derived, and why each
+   candidate was called or discarded. It is the difference between a caller
+   that can be audited and a black box, so ``frontstr batch`` writes it by
+   default rather than on request.
 1. **Process log** — a JSONL record of what the pipeline did, one event per
    line, written next to the outputs. Answers "what happened, in what order,
    and how long did it take". Ephemeral in the sense that it is not part of the

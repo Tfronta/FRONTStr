@@ -432,8 +432,14 @@ def test_trace_writes_one_narrative_file_per_sample(
         assert "Loci processed" in text, "the run summary is missing"
 
 
-def test_trace_off_by_default(tmp_path: Path, two_sample_bams: tuple[Path, Path]) -> None:
-    """Tracing costs nothing and writes nothing unless asked for."""
+def test_trace_written_by_default(tmp_path: Path, two_sample_bams: tuple[Path, Path]) -> None:
+    """The audit record is not opt-in.
+
+    A run that kept no trace cannot be questioned afterwards without being
+    repeated, and generating it costs nothing measurable (18.5 s against 19.0 s
+    over five samples). ``--no-trace`` exists, but nobody has to remember it to
+    get an auditable run.
+    """
     bam_het, _ = two_sample_bams
     out = tmp_path / "batch_out"
 
@@ -443,6 +449,23 @@ def test_trace_off_by_default(tmp_path: Path, two_sample_bams: tuple[Path, Path]
         out_dir=out,
         formats=frozenset({"json"}),
         workers=1,
+    )
+
+    assert (out / "HET" / "HET.trace.txt").exists(), "no trace without being asked for one"
+
+
+def test_no_trace_opts_out(tmp_path: Path, two_sample_bams: tuple[Path, Path]) -> None:
+    """The escape hatch still works, for a genuinely constrained output dir."""
+    bam_het, _ = two_sample_bams
+    out = tmp_path / "batch_out"
+
+    run_batch(
+        entries=[ManifestEntry("HET", bam_het, "sample")],
+        panel=_synth_panel(),
+        out_dir=out,
+        formats=frozenset({"json"}),
+        workers=1,
+        trace=False,
     )
 
     assert not (out / "HET" / "HET.trace.txt").exists()
