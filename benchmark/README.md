@@ -1,33 +1,50 @@
-# Cohort validation harness
+# Development benchmark
 
-Runs FRONTStr over the 1000 Genomes ONT cohort and scores it against the
-external truth genotypes. Dev tooling — `pyproject.toml` ships only `frontstr`,
-so nothing here is installed with the package and nothing in the caller imports
-it.
+**This is not part of FRONTStr. Nothing here runs when you call a sample.**
+
+FRONTStr is for anyone with their own ONT data, where there is no Illumina
+profile, no truth table and no second caller to compare against. That is the
+normal case, and the caller is built for it: a genotype has to be defensible
+from the evidence behind it, not from agreeing with somebody else's answer.
+`frontstr interpret --trace` is where that happens — the reads, the bins, the
+clusters, the haplotypes and the naming, per locus.
+
+This directory is the opposite situation, and it exists only for us. A handful
+of public 1000 Genomes samples have Illumina and other-caller genotypes
+published; scoring against them is how we answer "is the caller right" while
+developing it. That is **benchmarking**, and it is kept under its own name so it
+can never read as a step in calling a sample.
+
+If you are running FRONTStr on your own samples, you want
+[`docs/how_it_works.md`](../docs/how_it_works.md) and `--trace`. Not this.
 
 ## Why it is not a `frontstr` command
 
-The truth workbook is not in this repository and its layout is bespoke: merged
-header rows, Spanish field names, three technologies side by side, marker blocks
-of unequal width. Baking that into the shipped CLI would make a private
-spreadsheet part of the package's contract. The seam is deliberate —
-`truth.py` knows about the workbook, and nothing downstream of it does.
+Two reasons, and the second is the important one:
+
+1. The truth workbook is not in this repository and its layout is bespoke —
+   merged header rows, Spanish field names, three technologies side by side,
+   marker blocks of unequal width. Baking that into the shipped CLI would make a
+   private spreadsheet part of the package's contract.
+2. A caller that offers "compare against longTR" as a subcommand teaches the
+   wrong thing: that a call is trustworthy when a second caller agrees. Most
+   users have no second caller. The evidence view has to carry the weight.
 
 ## The three steps
 
 ```bash
-python -m validation.cohort fetch --out cohort/slices \
+python -m benchmark.cohort fetch --out cohort/slices \
     --workbook ~/Desktop/1000GEN-ONT-Merged-Compar.xlsx
 
 frontstr batch --manifest cohort/slices/manifest.tsv \
     -p examples/panels/codis_20_grch38.yaml -o cohort/run \
     --formats profile,json -j 4
 
-python -m validation.compare --summary cohort/run/batch_summary.csv \
+python -m benchmark.compare --summary cohort/run/batch_summary.csv \
     --workbook ~/Desktop/1000GEN-ONT-Merged-Compar.xlsx --out cohort
 ```
 
-`python -m validation.cohort plan` reports what `fetch` would download without
+`python -m benchmark.cohort plan` reports what `fetch` would download without
 downloading anything.
 
 ### Measured cost, on one sample

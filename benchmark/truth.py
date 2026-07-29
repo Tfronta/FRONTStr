@@ -1,10 +1,13 @@
 """Read the external truth genotypes out of ``1000GEN-ONT-Merged-Compar.xlsx``.
 
 The workbook is not part of this repository and its layout is bespoke, so this
-module is deliberately dev tooling under ``validation/`` rather than part of the
+module is deliberately dev tooling under ``benchmark/`` rather than part of the
 ``frontstr`` package. It converts the spreadsheet into a tidy table that the
 comparator can consume, so nothing downstream has to know about merged header
 cells or Spanish column names.
+
+Only the public samples in that workbook have any of this. A user calling their
+own ONT samples has no truth table and needs none — see :mod:`benchmark`.
 
 Sheet ``Concordancia-3-tecnologias`` layout:
 

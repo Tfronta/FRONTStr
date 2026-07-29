@@ -1,18 +1,22 @@
-"""Score a FRONTStr batch against the external truth workbook.
+"""Score a FRONTStr batch against published genotypes for the same samples.
+
+**A development benchmark, not a step in calling a sample.** It only works on
+the handful of public samples that have published genotypes; run FRONTStr on
+your own data and there is nothing here to run. See :mod:`benchmark`.
 
 Reads the ``batch_summary.csv`` that ``frontstr batch`` writes, joins it to the
-three-technology sheet via :mod:`validation.truth`, and reports concordance per
+three-technology sheet via :mod:`benchmark.truth`, and reports concordance per
 marker plus a line-by-line discordance table.
 
 Illumina is the only external anchor — longTR and STRspy are ONT callers on the
-same reads, so agreeing with them is not independent validation. They are still
-reported on every discordance, because that is what makes a disagreement
+same reads, so agreeing with them is not independent confirmation. They are
+still reported on every discordance, because that is what makes a disagreement
 adjudicable: FRONTStr contradicting Illumina while matching both ONT callers is
 a different finding from FRONTStr standing alone.
 
 Usage::
 
-    python -m validation.compare \\
+    python -m benchmark.compare \\
         --summary out/batch_summary.csv \\
         --workbook ~/Desktop/1000GEN-ONT-Merged-Compar.xlsx \\
         --out out/concordance
@@ -31,7 +35,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from validation.truth import (
+from benchmark.truth import (
     NO_EXTERNAL_TRUTH,
     TRUTH_SHEET,
     Genotype,

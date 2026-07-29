@@ -7,10 +7,10 @@ those regions occupy and nothing else — a few tens of megabytes per sample.
 
 Two steps, kept separate on purpose so the expensive one runs once::
 
-    python -m validation.cohort fetch --out cohort/slices
+    python -m benchmark.cohort fetch --out cohort/slices
     frontstr batch --manifest cohort/slices/manifest.tsv \\
         -p examples/panels/codis_20_grch38.yaml -o cohort/run
-    python -m validation.compare --summary cohort/run/batch_summary.csv \\
+    python -m benchmark.compare --summary cohort/run/batch_summary.csv \\
         --workbook ~/Desktop/1000GEN-ONT-Merged-Compar.xlsx --out cohort
 
 ``fetch`` is resumable: a sample whose slice and index already exist is skipped,
@@ -34,8 +34,8 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
+from benchmark.truth import canonical_sample_id, load_truth
 from frontstr.panel.loader import load_panel
-from validation.truth import canonical_sample_id, load_truth
 
 app = typer.Typer(add_completion=False, help=__doc__)
 console = Console()

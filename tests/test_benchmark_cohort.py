@@ -1,4 +1,4 @@
-"""Tests for the cohort validation harness in ``validation/``.
+"""Tests for the cohort validation harness in ``benchmark/``.
 
 Dev tooling, but the slicing BED it produces decides which reads a two-hour
 cohort fetch will ever see, and a region missing from it fails silently rather
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from validation.cohort import eligible_basecall, parse_path_list, write_slice_bed
+from benchmark.cohort import eligible_basecall, parse_path_list, write_slice_bed
 
 PANEL = Path("examples/panels/codis_20_grch38.yaml")
 
