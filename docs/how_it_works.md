@@ -7,7 +7,7 @@ read start to finish once, then used as a lookup.
 Companion documents: [`architecture.md`](architecture.md) for module layout,
 [`stutter_calibration.md`](stutter_calibration.md) for the stutter measurement.
 
-Status as of July 2026 — 591 tests passing, ~11,200 lines across 56 modules.
+Status as of July 2026 — 596 tests passing, ~11,300 lines across 56 modules.
 
 ---
 
@@ -514,6 +514,37 @@ reads) and ask how often it falls below the calling threshold:
 markers on HG00113 — a flag that fires on half the panel trains reviewers to
 ignore it.
 
+**Coverage is the evidence behind the call.** `Cov` in the CLI and the report
+is `called_reads` — the reads supporting the reported genotype — not every read
+spanning the window. Reads the caller rejected were rejected for a reason;
+counting them overstates the evidence and makes the per-allele numbers look as
+if they fail to add up. `total_reads` survives internally because it is the
+denominator every fraction threshold is measured against, and any spanning read
+that supported no called allele shows as a trailing `+n`.
+
+`low_coverage` moved to the same number, and that is a correctness fix rather
+than tidying: the binomial models *N reads split between two alleles*, and
+reads clustering into neither are not draws from that pair. Measuring the
+spanning total instead let HG00263 D18S51 pass silently — called on 11 reads
+out of 33 spanning, missing the second allele Illumina sees.
+
+Re-deriving the floor against ONT depths confirmed **20** but corrected the
+claim attached to it. Read as "from this coverage upward the risk never again
+exceeds", the curve is a sawtooth, and the trade is:
+
+| Floor | Dropout risk | Loci flagged |
+|---|---|---|
+| 17 | 9.7% | 12% |
+| **20** | **5.7%** | **25%** |
+| 25 | 4.6% | 43% |
+
+20 is the knee: 17 → 20 halves the risk for 13 points of flag rate, while
+20 → 25 buys one point of risk for eighteen. The docstring previously claimed
+~1.1% risk at N=20; that figure came from measuring against the spanning total
+and does not survive. A quarter of loci flagged at ~30x ONT is the expected
+rate, not a symptom — median called coverage in the reference slices is 26 and
+the lower quartile is 20, so the floor sits at Q1 by construction.
+
 **Strand bias** uses an exact two-sided binomial test written out in six lines
 rather than adding SciPy. Alleles below 10 reads are not tested at all, because
 the test cannot reach significance even for a perfect 0/n split, so testing
@@ -981,7 +1012,7 @@ Pileup, clustering, POA consensus, ISFG, allele numbering, stutter,
 classification, haplotype suppression, catalog annotation, genotype calling, QC
 flags, all seven export formats, the audit trail, and batch mode over a
 manifest. Regression-tested against a real ONT sample; CI green on ruff, ruff
-format, mypy and 591 tests.
+format, mypy and 596 tests.
 
 ### Does not work / does not exist
 

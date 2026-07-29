@@ -118,9 +118,12 @@ PARAM_SPECS: tuple[ParamSpec, ...] = (
         "low_coverage_reads",
         20,
         "derived",
-        "Read floor below which a called locus is flagged. Derived by binomial: "
-        "at the most unbalanced heterozygote the caller accepts, the minor "
-        "allele is missed ~1% of the time at N=20 and 10.2% at N=12.",
+        "Read floor below which a called locus is flagged, measured against the "
+        "reads supporting the genotype rather than every read spanning the "
+        "window. Re-derived by binomial against ONT depths: at the most "
+        "unbalanced heterozygote the caller accepts, the minor allele is missed "
+        "~5.7% of the time from N=20 upward, ~9.7% from 17 and ~4.6% from 25. "
+        "20 is the knee — below it the risk climbs fast, above it barely falls.",
     ),
     ParamSpec(
         "balanced_ab_max",

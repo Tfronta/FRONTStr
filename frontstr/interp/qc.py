@@ -60,18 +60,43 @@ class QcThresholds(BaseModel):
 
     #: A called locus below this many reads risks allele dropout.
     #:
-    #: The default is derived rather than chosen. Take the most unbalanced
-    #: heterozygote the caller still accepts (``min_phr_for_het`` = 0.4, so the
-    #: minor allele is 0.4/1.4 = 28.6% of reads) and ask how often it lands
-    #: below ``calling_thresh``. Binomial, by coverage:
+    #: Measured against :attr:`~frontstr.interp.models.MarkerResult.called_reads`
+    #: — the reads supporting the genotype — not every read spanning the window.
+    #: Reads that clustered into neither allele are not draws from the pair the
+    #: derivation models. Using the spanning total instead hid a real dropout:
+    #: HG00263 D18S51 is called on 11 reads out of 33 spanning, misses the
+    #: second allele Illumina sees, and raised no flag.
     #:
-    #:     N=10 → 3.5%   N=12 → 10.2%   N=15 → 4.5%
-    #:     N=20 → 1.1%   N=25 →  1.3%   N=30 → 0.3%
+    #: **Derivation, re-run against ONT data (2026-07).** The risk is a true
+    #: heterozygote whose minor allele falls under ``calling_thresh`` and is
+    #: therefore not called, so a homozygote is reported — a false exclusion.
+    #: Take the most unbalanced heterozygote the caller still accepts
+    #: (``min_phr_for_het`` = 0.4, so the minor allele is 0.4/1.4 = 28.6% of the
+    #: pair) and ask how often it lands below ``calling_thresh`` × the spanning
+    #: total. Called coverage is a median 0.795 of spanning across 117 called
+    #: loci in the reference slices, which converts one to the other.
     #:
-    #: 20 is where that risk settles at ~1% and stays there, so it is the point
-    #: below which a homozygous call genuinely deserves a second look. (The
-    #: non-monotonicity below 20 is the discreteness of the read-count floor,
-    #: not noise in the estimate.)
+    #: The curve is a sawtooth — the read floor is an integer, so the risk jumps
+    #: whenever it crosses one — and reading it at a single N is misleading. Read
+    #: as "from this coverage upward the risk never again exceeds":
+    #:
+    #:     floor 12 → 12.2% risk,  3% of loci flagged
+    #:     floor 15 → 12.2% risk,  8%
+    #:     floor 17 →  9.7% risk, 12%
+    #:     floor 20 →  5.7% risk, 25%   ← the knee
+    #:     floor 22 →  5.7% risk, 31%
+    #:     floor 25 →  4.6% risk, 43%
+    #:
+    #: 20 is where the curve turns: 17 → 20 halves the risk for 13 points of
+    #: flag rate, while 20 → 25 buys one point of risk for eighteen. So the
+    #: value survives the re-derivation — but the **claim attached to it did
+    #: not**. This docstring previously said the risk at N=20 was ~1.1%; that
+    #: figure came from measuring against the spanning total and is wrong under
+    #: the corrected model. It is ~5.7%.
+    #:
+    #: A quarter of loci flagged on ~30x ONT is therefore the expected rate, not
+    #: a symptom. Median called coverage in the reference slices is 26 and the
+    #: lower quartile is 20, so the floor sits at Q1 by construction.
     low_coverage_reads: int = Field(default=20, ge=0)
 
     #: Largest :attr:`~frontstr.interp.models.MarkerResult.allele_balance` a
@@ -147,7 +172,7 @@ def _flag_coverage(result: MarkerResult, thr: QcThresholds) -> None:
             f"({result.total_reads} read(s) at the locus).",
         )
         return
-    if result.total_reads < thr.low_coverage_reads:
+    if result.called_reads < thr.low_coverage_reads:
         # A haploid locus has no second allele to drop out, so the usual
         # dropout wording would be misleading; the call is still thin.
         risk = (
@@ -159,7 +184,8 @@ def _flag_coverage(result: MarkerResult, thr: QcThresholds) -> None:
         _add(
             result,
             FlagCode.LOW_COVERAGE,
-            f"{result.marker_name} called on {result.total_reads} reads, below the "
+            f"{result.marker_name} called on {result.called_reads} read(s) supporting "
+            f"the genotype (of {result.total_reads} spanning the window), below the "
             f"{thr.low_coverage_reads}-read floor; {risk}.",
         )
 

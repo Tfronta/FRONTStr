@@ -73,7 +73,10 @@ def _result(
     call_rule: CallRule = CallRule.HETEROZYGOUS,
     total_reads: int = 40,
 ) -> MarkerResult:
-    called = alleles if alleles is not None else [_allele()]
+    # Coverage is expressed through the alleles when none are given: a locus
+    # cannot have 12 spanning reads and a 20-read allele, and low_coverage now
+    # measures the reads supporting the call rather than the spanning total.
+    called = alleles if alleles is not None else [_a(total_reads)]
     return MarkerResult(
         marker_name=(system or _system()).name,
         system=system or _system(),
@@ -319,3 +322,52 @@ class TestAlleleImbalanceFlag:
         r = _het(30)
         derive_run_qc_flags([r])
         assert FlagCode.ALLELE_IMBALANCE not in _codes(r)
+
+
+class TestCoverageIsMeasuredOnTheCall:
+    """The floor watches the evidence behind the genotype, not the pileup size.
+
+    Reads that clustered into neither allele are not draws from the pair the
+    binomial models, so counting them made the flag looser than derived — and
+    it stayed silent on HG00263 D18S51, which is called on 11 reads out of 33
+    spanning and misses the second allele Illumina sees.
+    """
+
+    def test_a_thinly_supported_call_is_flagged_despite_deep_pileup(self) -> None:
+        r = _result(alleles=[_a(11)], total_reads=33)
+        derive_run_qc_flags([r])
+        assert FlagCode.LOW_COVERAGE in _codes(r)
+
+    def test_a_well_supported_call_is_not_flagged(self) -> None:
+        r = _result(alleles=[_a(15), _a(15)], total_reads=40)
+        derive_run_qc_flags([r])
+        assert FlagCode.LOW_COVERAGE not in _codes(r)
+
+    def test_the_message_quotes_both_numbers(self) -> None:
+        """A reviewer needs to see the gap, not just the smaller number."""
+        r = _result(alleles=[_a(11)], total_reads=33)
+        derive_run_qc_flags([r])
+        msg = next(f.message for f in r.flags if f.code == FlagCode.LOW_COVERAGE)
+        assert "11" in msg and "33" in msg
+
+    def test_the_floor_sits_at_the_knee_of_the_risk_curve(self) -> None:
+        """Guards the re-derivation: 20 is chosen because 17 -> 20 halves the
+        dropout risk while 20 -> 25 barely moves it. If someone changes the
+        default, the reasoning in QcThresholds has to be redone, not assumed.
+        """
+        from math import comb
+
+        p_minor, calling, ratio = 0.4 / 1.4, 0.10, 0.795
+
+        def worst_risk_from(floor: int) -> float:
+            def risk(n: int) -> float:
+                need = calling * (n / ratio)
+                k_min = int(need) + (0 if float(need).is_integer() else 1)
+                return sum(comb(n, k) * p_minor**k * (1 - p_minor) ** (n - k) for k in range(k_min))
+
+            return max(risk(n) for n in range(floor, 81))
+
+        assert QcThresholds().low_coverage_reads == 20
+        assert worst_risk_from(17) > 0.09, "below the knee the risk climbs"
+        assert worst_risk_from(20) < 0.06, "at the knee it is ~5.7%"
+        assert worst_risk_from(25) > 0.04, "above it, more flags buy almost nothing"

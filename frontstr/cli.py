@@ -208,6 +208,22 @@ def _render_params(params: Any) -> str:
     return "\n".join(out)
 
 
+def _coverage_cell(result: Any) -> str:
+    """Coverage of the *call*, with any rejected spanning reads shown as ``+n``.
+
+    Leading with the called sum answers the question a reader actually has —
+    how much evidence is behind this genotype — and makes the parenthesised
+    per-allele counts add up. The rejected reads are still worth a glance,
+    because a locus where most reads support nothing is a locus with a problem,
+    so they ride along rather than disappearing.
+    """
+    if not result.alleles_called:
+        return f"[dim]0 (+{result.total_reads})[/dim]" if result.total_reads else "0"
+    if result.discarded_reads:
+        return f"{result.called_reads} [dim]+{result.discarded_reads}[/dim]"
+    return str(result.called_reads)
+
+
 def _balance_cell(result: Any) -> str:
     """Allele balance, dimmed while inside the balanced band."""
     ab = result.allele_balance
@@ -1195,7 +1211,7 @@ def interpret(
     # no_wrap: an allele list broken across two lines costs more room than the
     # column saves, and makes the per-allele reads hard to pair with a number.
     t.add_column("Alleles called", no_wrap=True)
-    t.add_column("Total", justify="right")
+    t.add_column("Cov", justify="right")
     t.add_column("AB", justify="right")
     # fold, not truncate: a QC column that shows "allele_imbala…" is worse
     # than one that wraps, because the reader cannot tell which flag fired.
@@ -1207,15 +1223,15 @@ def interpret(
             r.call_rule.value,
             r.tri_type.value or "-",
             called or "-",
-            str(r.total_reads),
+            _coverage_cell(r),
             _balance_cell(r),
             _qc_cell(r),
         )
     console.print(t)
     console.print(
-        "[dim]Alleles called: number(reads on that allele). Total: every read spanning "
-        "the window, so it exceeds the sum of the alleles by whatever went to "
-        "discarded candidates — run --trace to see them.[/dim]"
+        "[dim]Alleles called: number(reads on that allele). Cov: reads supporting the "
+        "called genotype. A trailing +n counts spanning reads that supported no called "
+        "allele — run --trace to see what they were and which rule discarded each.[/dim]"
     )
 
 

@@ -161,14 +161,18 @@ def test_interpret_requires_regions_from_somewhere() -> None:
     assert result.exit_code != 0
 
 
-def test_profile_table_names_the_total_column_consistently() -> None:
-    """The CLI called it Cov while the HTML and CSV called it Total — one number
-    with two names, and nothing said it exceeds the sum of the alleles."""
+def test_profile_table_reports_the_coverage_behind_the_call() -> None:
+    """Cov is the reads supporting the genotype, not every read spanning the
+    window. Reads the caller rejected were rejected for a reason; counting them
+    as coverage overstates the evidence and makes the per-allele numbers look
+    like they fail to add up."""
     import inspect
 
     from frontstr import cli
 
     src = inspect.getsource(cli.interpret)
-    assert 'add_column("Total"' in src
-    assert 'add_column("Cov"' not in src
-    assert "exceeds the sum of the alleles" in src, "the footnote must explain the gap"
+    assert 'add_column("Cov"' in src
+    assert "_coverage_cell(r)" in src
+    assert "A trailing +n counts spanning reads" in src, "the footnote must explain +n"
+    # And the cell itself leads with the called sum.
+    assert "called_reads" in inspect.getsource(cli._coverage_cell)

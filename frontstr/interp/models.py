@@ -394,6 +394,27 @@ class MarkerResult(BaseModel):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
+    def called_reads(self) -> int:
+        """Reads supporting the reported genotype — the coverage worth quoting.
+
+        :attr:`total_reads` is every read spanning the window, including those
+        that ended up in clusters the caller rejected. It stays, because it is
+        the denominator every fraction threshold is measured against and
+        changing it would move what counts as noise. But it is the wrong number
+        to *report*: a locus showing 38 when 33 reads support alleles reads as
+        better evidenced than it is, and the arithmetic invites the reader to
+        look for a mistake that is not there.
+        """
+        return sum(a.n_reads_total for a in self.alleles_called)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def discarded_reads(self) -> int:
+        """Spanning reads that supported no called allele."""
+        return self.total_reads - self.called_reads
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
     def allele_balance(self) -> float | None:
         """Coverage share of the strongest called allele. ``None`` unless het.
 
