@@ -39,8 +39,11 @@ Output layout
 from __future__ import annotations
 
 import csv
+import logging
 import traceback
+from collections.abc import Callable, Iterator
 from concurrent.futures import Future, ProcessPoolExecutor, as_completed
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -155,6 +158,8 @@ def run_batch(
     run_id: str | None = None,
     workers: int = 1,
     progress_callback: Any | None = None,
+    log: bool = False,
+    trace: bool = False,
 ) -> list[BatchResult]:
     """Run the full pipeline on each manifest entry, optionally in parallel.
 
@@ -167,6 +172,10 @@ def run_batch(
         workers: Number of parallel processes (1 = sequential, no subprocess).
         progress_callback: Optional callable invoked as ``callback(sample_id)``
             after each sample completes (used by CLI for live progress).
+        log: Emit the per-marker process log on stderr as each sample runs,
+            every line tagged with its sample.
+        trace: Write the full per-locus narrative to
+            ``<out>/<sample>/<sample>.trace.txt``, one file per sample.
 
     Returns:
         One :class:`BatchResult` per entry in input order.
@@ -191,6 +200,8 @@ def run_batch(
                 platform=platform,
                 operator=operator,
                 run_id=run_id,
+                log=log,
+                trace=trace,
             )
             results_map[entry.sample_id] = r
             if progress_callback:
@@ -212,6 +223,8 @@ def run_batch(
                     platform=platform,
                     operator=operator,
                     run_id=run_id,
+                    log=log,
+                    trace=trace,
                 )
                 futures_to_entry[fut] = entry
             for fut in as_completed(futures_to_entry):
@@ -236,6 +249,69 @@ def run_batch(
     return results
 
 
+@contextmanager
+def _trace_sink(
+    path: Path | None, *, entry: ManifestEntry, panel: Panel
+) -> Iterator[Callable[[Any], None] | None]:
+    """Yield an ``on_trace`` callback that writes one sample's narrative to disk.
+
+    Per sample, per file. A cohort's traces cannot go to the terminal — one
+    sample is already hundreds of lines, so a hundred samples would bury the
+    progress the operator is actually watching, and with parallel workers the
+    loci of different samples would interleave into nonsense. ``--log`` is the
+    live channel; this is the one you read afterwards for a locus you doubt.
+
+    Yields ``None`` when ``path`` is ``None``, so the caller passes ``on_trace``
+    unconditionally and tracing costs nothing when it is off.
+    """
+    if path is None:
+        yield None
+        return
+
+    from frontstr.evidence.consensus import poa_backend_name
+    from frontstr.interp.naming import default_namer
+    from frontstr.trace import (
+        LocusTrace,
+        RunHeader,
+        render_header,
+        render_locus,
+        render_run_summary,
+    )
+    from frontstr.version import __version__
+
+    namer = default_namer()
+    traces: list[LocusTrace] = []
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with path.open("w", encoding="utf-8") as fh:
+        fh.write(
+            render_header(
+                RunHeader(
+                    inputs=[str(entry.bam)],
+                    panel_name=panel.name,
+                    panel_version=panel.version or "",
+                    n_markers=len(panel.systems),
+                    consensus_backend=poa_backend_name(),
+                    naming_markers=sum(
+                        1 for s in panel.systems if namer and namer.has_range(s.name)
+                    ),
+                    tool_version=__version__,
+                )
+            )
+            + "\n"
+        )
+
+        def emit(locus: LocusTrace) -> None:
+            traces.append(locus)
+            fh.write(render_locus(locus) + "\n\n")
+
+        try:
+            yield emit
+        finally:
+            if traces:
+                fh.write(render_run_summary(traces) + "\n")
+
+
 def _process_one_sample(
     *,
     entry: ManifestEntry,
@@ -250,11 +326,20 @@ def _process_one_sample(
     platform: str,
     operator: str | None,
     run_id: str | None,
+    log: bool = False,
+    trace: bool = False,
 ) -> BatchResult:
     """Worker function: runs one sample end-to-end and writes output files.
 
     Must be a module-level function so it is picklable for ProcessPoolExecutor.
+
+    ``log`` and ``trace`` are configured *here*, inside the worker, not in the
+    parent: with more than one worker these run in separate processes, and on
+    macOS the pool spawns rather than forks, so a logging setup done in the
+    parent would not reach them at all.
     """
+    import structlog
+
     from frontstr.exports import (
         write_evidence_csv,
         write_profile_csv,
@@ -264,20 +349,31 @@ def _process_one_sample(
     from frontstr.interp import interpret_run
     from frontstr.report import RunContext, build_report, serialize_run
 
+    if log:
+        from frontstr.log import configure_logging
+
+        configure_logging(level=logging.DEBUG, console=True)
+        # Every line carries its sample. With parallel workers the lines
+        # interleave, and an unattributed marker line is worse than no line.
+        structlog.contextvars.bind_contextvars(sample=entry.sample_id)
+
     try:
         sample_dir = out_dir / entry.sample_id
         sample_dir.mkdir(parents=True, exist_ok=True)
         stem = sample_dir / entry.sample_id
 
-        marker_results = interpret_run(
-            bam=entry.bam,
-            panel=panel,
-            min_mapq=min_mapq,
-            identity_threshold=identity,
-            analytical_thresh=analytical_thresh,
-            calling_thresh=calling_thresh,
-            reference_fasta=reference_fasta,
-        )
+        trace_path = stem.with_suffix(".trace.txt") if trace else None
+        with _trace_sink(trace_path, entry=entry, panel=panel) as on_trace:
+            marker_results = interpret_run(
+                bam=entry.bam,
+                panel=panel,
+                min_mapq=min_mapq,
+                identity_threshold=identity,
+                analytical_thresh=analytical_thresh,
+                calling_thresh=calling_thresh,
+                reference_fasta=reference_fasta,
+                on_trace=on_trace,
+            )
 
         context = RunContext(
             sample_name=entry.sample_id,

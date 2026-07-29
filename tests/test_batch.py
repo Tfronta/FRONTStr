@@ -395,3 +395,76 @@ def test_summary_carries_the_amel_designation() -> None:
     y = x.model_copy(update={"cluster_index": 1, "isfg": "Y"})
 
     assert _extract_marker_ces([_marker_result("AMEL", [x, y])]) == {"AMEL": "X,Y"}
+
+
+# ---------------------------------------------------------------------------
+# --log / --trace
+# ---------------------------------------------------------------------------
+
+
+def test_trace_writes_one_narrative_file_per_sample(
+    tmp_path: Path, two_sample_bams: tuple[Path, Path]
+) -> None:
+    """Each sample gets its own trace beside its other outputs.
+
+    Per sample, per file — not the terminal. One sample's trace is already
+    hundreds of lines, so a cohort's would bury the progress the operator is
+    watching, and parallel workers would interleave loci into nonsense.
+    """
+    bam_het, bam_hom = two_sample_bams
+    entries = [ManifestEntry("HET", bam_het, "sample"), ManifestEntry("HOM", bam_hom, "sample")]
+    out = tmp_path / "batch_out"
+
+    run_batch(
+        entries=entries,
+        panel=_synth_panel(),
+        out_dir=out,
+        formats=frozenset({"json"}),
+        workers=1,
+        trace=True,
+    )
+
+    for sample_id in ("HET", "HOM"):
+        trace = out / sample_id / f"{sample_id}.trace.txt"
+        assert trace.exists(), f"no trace for {sample_id}"
+        text = trace.read_text(encoding="utf-8")
+        assert "SYNTH_MARKER" in text, "the locus narrative is missing"
+        assert "Loci processed" in text, "the run summary is missing"
+
+
+def test_trace_off_by_default(tmp_path: Path, two_sample_bams: tuple[Path, Path]) -> None:
+    """Tracing costs nothing and writes nothing unless asked for."""
+    bam_het, _ = two_sample_bams
+    out = tmp_path / "batch_out"
+
+    run_batch(
+        entries=[ManifestEntry("HET", bam_het, "sample")],
+        panel=_synth_panel(),
+        out_dir=out,
+        formats=frozenset({"json"}),
+        workers=1,
+    )
+
+    assert not (out / "HET" / "HET.trace.txt").exists()
+    assert (out / "HET" / "HET.json").exists(), "the normal outputs must still be there"
+
+
+def test_log_tags_every_line_with_its_sample(
+    tmp_path: Path, two_sample_bams: tuple[Path, Path], capfd: pytest.CaptureFixture[str]
+) -> None:
+    """With workers running in parallel, an unattributed log line is useless."""
+    bam_het, bam_hom = two_sample_bams
+    out = tmp_path / "batch_out"
+
+    run_batch(
+        entries=[ManifestEntry("HET", bam_het, "sample"), ManifestEntry("HOM", bam_hom, "sample")],
+        panel=_synth_panel(),
+        out_dir=out,
+        formats=frozenset({"json"}),
+        workers=1,
+        log=True,
+    )
+
+    stderr = capfd.readouterr().err
+    assert "sample=HET" in stderr
+    assert "sample=HOM" in stderr

@@ -368,8 +368,25 @@ def batch(
     identity: Annotated[float, typer.Option("--identity")] = 0.97,
     analytical_thresh: Annotated[float, typer.Option("--analytical-thresh")] = 0.02,
     calling_thresh: Annotated[float, typer.Option("--calling-thresh")] = 0.10,
+    log: Annotated[
+        bool, typer.Option("--log", help="Watch the run: one line per marker, per sample.")
+    ] = False,
+    trace: Annotated[
+        bool,
+        typer.Option("--trace", help="Write the full per-locus narrative, one file per sample."),
+    ] = False,
 ) -> None:
     """Run FRONTStr on a multi-sample batch from a manifest TSV.
+
+    Pass ``--log`` to follow the run rather than only its progress counter:
+    the per-marker process log on stderr, every line tagged with the sample it
+    came from, which is what makes it readable when ``-j`` runs several at once.
+
+    Pass ``--trace`` for the full account of every locus — reads, bins,
+    clusters, consensus, haplotypes, naming and the call. It goes to
+    ``<out>/<sample>/<sample>.trace.txt``, one file per sample, because a
+    cohort's traces cannot go to a terminal: one sample is already hundreds of
+    lines. Use ``frontstr interpret --trace`` to watch a single sample live.
 
     The manifest is a tab-separated file with columns ``sample_id``, ``bam``
     and optionally ``role`` (sample|positive_ctrl|negative_ctrl|reagent_blank).
@@ -430,6 +447,8 @@ def batch(
             run_id=run_id,
             workers=effective_workers,
             progress_callback=_tick,
+            log=log,
+            trace=trace,
         )
     except FrontstrError as exc:
         console.print(f"[red]batch error:[/red] {exc}")
