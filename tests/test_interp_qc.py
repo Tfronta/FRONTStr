@@ -248,3 +248,74 @@ def test_returns_the_thresholds_actually_applied() -> None:
     applied = derive_run_qc_flags([_result()], QcThresholds(low_coverage_reads=17))
     assert applied.low_coverage_reads == 17
     assert derive_run_qc_flags([_result()]).low_coverage_reads == 20
+
+
+# ---------------------------------------------------------------------------
+# Allele balance
+# ---------------------------------------------------------------------------
+
+
+def _a(n_reads: int) -> Allele:
+    """A called allele carrying exactly ``n_reads``."""
+    return _allele(n_forward=n_reads // 2, n_reverse=n_reads - n_reads // 2)
+
+
+def _het(*counts: int) -> MarkerResult:
+    return _result(alleles=[_a(n) for n in counts], total_reads=sum(counts))
+
+
+class TestAlleleBalance:
+    """AB replaces the peak-height ratio in output; it must not contradict it."""
+
+    def test_perfectly_balanced_het_is_half(self) -> None:
+        assert _het(20, 20).allele_balance == 0.5
+
+    def test_scale_runs_from_the_strongest_allele(self) -> None:
+        """Stated convention: strongest over the pair, so AB is one-sided."""
+        assert _het(17, 16).allele_balance == 0.515
+        # The order of the called list must not change the answer.
+        assert _het(16, 17).allele_balance == _het(17, 16).allele_balance
+
+    def test_undefined_for_a_homozygote(self) -> None:
+        assert _het(30).allele_balance is None
+
+    def test_undefined_for_a_triallelic_locus(self) -> None:
+        """One ratio across three alleles would be a fiction."""
+        assert _het(20, 18, 17).allele_balance is None
+
+    def test_undefined_when_no_allele_is_called(self) -> None:
+        assert _result(alleles=[]).allele_balance is None
+
+    def test_the_calling_floor_lands_outside_the_balanced_band(self) -> None:
+        """min_phr_for_het = 0.4 is AB 0.714, so the band sits *inside* the
+        callable range: it warns about a het rather than rejecting it."""
+        assert QcThresholds().balanced_ab_max < 1 / (1 + 0.4)
+
+
+class TestAlleleImbalanceFlag:
+    def test_uneven_het_is_flagged(self) -> None:
+        r = _het(20, 8)
+        derive_run_qc_flags([r])
+        assert FlagCode.ALLELE_IMBALANCE in _codes(r)
+
+    def test_balanced_het_is_not_flagged(self) -> None:
+        r = _het(17, 16)
+        derive_run_qc_flags([r])
+        assert FlagCode.ALLELE_IMBALANCE not in _codes(r)
+
+    def test_a_phasing_rescue_suppresses_the_duplicate_warning(self) -> None:
+        """HP_RESCUED_HET already says the read ratio was the problem.
+
+        Two warnings for one phenomenon trains a reviewer to skim them.
+        """
+        r = _het(17, 5)
+        r.alleles_called[1].hp_rescued = True
+        assert r.allele_balance is not None
+        assert r.allele_balance > QcThresholds().balanced_ab_max
+        derive_run_qc_flags([r])
+        assert FlagCode.ALLELE_IMBALANCE not in _codes(r)
+
+    def test_homozygote_never_raises_it(self) -> None:
+        r = _het(30)
+        derive_run_qc_flags([r])
+        assert FlagCode.ALLELE_IMBALANCE not in _codes(r)

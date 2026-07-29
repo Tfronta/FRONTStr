@@ -99,6 +99,7 @@ class FlagCode(StrEnum):
     HP_PHANTOM_COLLAPSED = "hp_phantom_collapsed"
     HP_RESCUED_HET = "hp_rescued_het"
     PHASE_BLOCK_SPLIT = "phase_block_split"
+    ALLELE_IMBALANCE = "allele_imbalance"
 
 
 _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
@@ -128,6 +129,10 @@ _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
     # reviewer comparing HP counts by eye would draw a conclusion the caller
     # deliberately refused to draw.
     FlagCode.PHASE_BLOCK_SPLIT: FlagSeverity.WARN,
+    # WARN: an imbalanced heterozygote is the visible half of a locus that may
+    # be dropping the other allele elsewhere in the run — degradation, a primer
+    # variant under a flank, or simply thin coverage.
+    FlagCode.ALLELE_IMBALANCE: FlagSeverity.WARN,
 }
 
 
@@ -349,3 +354,39 @@ class MarkerResult(BaseModel):
     #: Structured, auditable marker-level conditions. Replaces free-text
     #: warnings so the run is filterable/aggregatable for batch + audit.
     flags: list[Flag] = Field(default_factory=list)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def allele_balance(self) -> float | None:
+        """Coverage share of the strongest called allele. ``None`` unless het.
+
+        **Convention: strongest allele over the sum of called alleles**, so the
+        value runs from 0.50 (perfectly balanced) to 1.0 (all reads on one
+        allele). Stating that matters — with the *strongest* allele on top the
+        scale is one-sided, and a band written as if it were symmetric around
+        0.5 would have half of itself unreachable.
+
+        This replaces the peak-height ratio in reported output rather than
+        joining it. AB and PHR are the same measurement (``AB = 1/(1+PHR)``),
+        and shipping both would put two numbers for one quantity in front of a
+        reviewer — the mistake that once had the same allele reading ``Δ-2`` in
+        the CLI and ``14`` in the report.
+
+        Where the landmarks fall:
+
+            AB 0.500   perfectly balanced
+            AB 0.650   edge of the balanced band (``QcThresholds``)
+            AB 0.714   ``min_phr_for_het`` = 0.4; below this no het is called
+                       on read counts alone
+            AB 0.773   HG00113 D2S1338, called het on phasing alone
+
+        Only defined for a two-allele call: a homozygote has nothing to
+        balance, and for a triallelic locus a single ratio would be a fiction.
+        """
+        if len(self.alleles_called) != 2:
+            return None
+        counts = sorted((a.n_reads_total for a in self.alleles_called), reverse=True)
+        total = counts[0] + counts[1]
+        if total <= 0:
+            return None
+        return round(counts[0] / total, 3)

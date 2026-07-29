@@ -133,6 +133,10 @@ class LocusTrace:
     #: Rendered in place of the funnel/binning/clustering sections.
     note: str = ""
     n_suppressed_phantoms: int = 0
+    #: Coverage share of the strongest called allele; ``None`` unless the call
+    #: is a heterozygote. See :attr:`MarkerResult.allele_balance`.
+    allele_balance: float | None = None
+    balanced_ab_max: float = 0.65
     call_rule: str = ""
     tri_type: str = ""
     called_labels: list[str] = field(default_factory=list)
@@ -234,7 +238,7 @@ def render_locus(t: LocusTrace) -> str:
 
     if t.note:
         add(_row(t.note, ""))
-        add(_row("Genotype", f"{_genotype(t)}   [{t.call_rule}]"))
+        add(_row("Genotype", f"{_genotype(t)}   [{t.call_rule}]{_qc_suffix(t)}"))
         return "\n".join(lines)
 
     # 1. Read funnel ---------------------------------------------------------
@@ -325,14 +329,46 @@ def render_locus(t: LocusTrace) -> str:
         )
 
     # 5. The call ------------------------------------------------------------
-    add(_row("Genotype", f"{_genotype(t)}   [{t.call_rule}]"))
+    add(_row("Genotype", f"{_genotype(t)}   [{t.call_rule}]{_qc_suffix(t)}"))
     if t.counts is not None:
         add(_row("Coverage", _coverage_line(t)))
+    if t.allele_balance is not None:
+        add(_row("Allele balance", _balance_line(t)))
     if t.tri_type:
         add(_row("Triallelic pattern", t.tri_type))
     for severity, code in t.flags:
         add(_row(f"Flag ({severity})", code, indent=6))
     return "\n".join(lines)
+
+
+def _qc_suffix(t: LocusTrace) -> str:
+    """The QC verdict appended to the genotype: the flags themselves, or nothing.
+
+    Deliberately **not** an aggregated ``PASS``. A single green label that
+    stands for several checks trains a reviewer to stop reading the individual
+    ones, and a label that shows on 95% of loci stops carrying information at
+    all. So a clean locus says nothing and a flagged one names what fired.
+    """
+    if not t.flags:
+        return ""
+    worst = (
+        "error"
+        if any(s == "error" for s, _ in t.flags)
+        else ("warn" if any(s == "warn" for s, _ in t.flags) else "info")
+    )
+    return f"   {worst.upper()}: " + ", ".join(code for _, code in t.flags)
+
+
+def _balance_line(t: LocusTrace) -> str:
+    """Allele balance with the scale spelled out, because 0.51 alone is opaque."""
+    ab = t.allele_balance
+    assert ab is not None
+    verdict = "balanced" if ab <= t.balanced_ab_max else "uneven"
+    return (
+        f"{ab:.2f}  ({verdict}; 0.50 is even, "
+        f"balanced up to {t.balanced_ab_max:.2f}, "
+        "strongest allele over the called pair)"
+    )
 
 
 def _genotype(t: LocusTrace) -> str:

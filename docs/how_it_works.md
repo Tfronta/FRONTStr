@@ -7,7 +7,7 @@ read start to finish once, then used as a lookup.
 Companion documents: [`architecture.md`](architecture.md) for module layout,
 [`stutter_calibration.md`](stutter_calibration.md) for the stutter measurement.
 
-Status as of July 2026 — 530 tests passing, ~10,500 lines across 55 modules.
+Status as of July 2026 — 546 tests passing, ~10,600 lines across 55 modules.
 
 ---
 
@@ -666,6 +666,37 @@ genotype. Uncalled candidates are cut at 96 bp, and the cut is disclosed rather
 than silent. Sequences are in canonical (motif) orientation, so a minus-strand
 marker reads the same way as its ISFG string.
 
+**Allele balance, and the QC verdict.** The genotype line carries the flags
+that actually fired, and a heterozygote gets an `Allele balance` line:
+
+```
+  Genotype        20 (17 reads), 17 (5 reads)   [heterozygous]   INFO: hp_rescued_het
+  Allele balance  0.77  (uneven; 0.50 is even, balanced up to 0.65, …)
+```
+
+AB is the **strongest called allele over the called pair**, so it runs from
+0.50 (even) to 1.0. Stating that convention matters: with the strongest allele
+on top the scale is one-sided, and a band written as if it were symmetric
+around 0.5 would have half of itself unreachable. It replaces the peak-height
+ratio in output rather than joining it — `AB = 1/(1+PHR)`, the same
+measurement, and two numbers for one quantity is how the same allele once read
+`Δ-2` in the CLI and `14` in the report.
+
+The landmarks line up: 0.50 even, **0.65** the balanced band, **0.714** is
+`min_phr_for_het` = 0.4 below which no het is called on read counts alone, and
+0.773 is HG00113 D2S1338 — called het on phasing alone. So the band sits inside
+the callable range and warns rather than rejects. It fires at 11 of ~200 called
+loci across the five slices, all of them correctly genotyped: the flag means
+*watch this locus for dropout elsewhere*, not *this call is wrong*. It is
+suppressed when `HP_RESCUED_HET` already fired, since that flag says the ratio
+was the problem.
+
+**There is no aggregated `PASS`.** A single green label standing for several
+checks teaches a reviewer to stop reading the individual ones, and one that
+shows on almost every locus carries no information. A clean locus says nothing;
+a flagged one names what fired, worst severity first. The same applies to the
+`interpret` table, which gained `AB` and `QC` columns.
+
 **The read funnel closes.** `kept + rejected == fetched` at every locus, with
 each rejection under a named reason (`not a primary alignment`, `MAPQ below
 threshold`, `does not reach the left flank anchor`, …). A coverage number a
@@ -816,7 +847,7 @@ Pileup, clustering, POA consensus, ISFG, allele numbering, stutter,
 classification, haplotype suppression, catalog annotation, genotype calling, QC
 flags, all seven export formats, the audit trail, and batch mode over a
 manifest. Regression-tested against a real ONT sample; CI green on ruff, ruff
-format, mypy and 530 tests.
+format, mypy and 546 tests.
 
 ### Does not work / does not exist
 

@@ -315,6 +315,45 @@ class TestPerAlleleCoverage:
         assert "7: HP1 7 HP2 0" in out
 
 
+class TestQcVerdict:
+    """The QC label is the flags themselves, never an aggregated PASS."""
+
+    def test_a_clean_locus_says_nothing(self) -> None:
+        """A green label on 95% of loci teaches a reviewer to stop reading."""
+        out = render_locus(_trace(counts=_counts(), call_rule="homozygous"))
+        genotype = next(x for x in out.splitlines() if "Genotype" in x)
+        assert "PASS" not in genotype
+        assert "OK" not in genotype
+
+    def test_flags_are_named_on_the_genotype_line(self) -> None:
+        t = _trace(counts=_counts(), flags=[("warn", "allele_imbalance")])
+        genotype = next(x for x in render_locus(t).splitlines() if "Genotype" in x)
+        assert "WARN" in genotype
+        assert "allele_imbalance" in genotype
+
+    def test_the_worst_severity_leads(self) -> None:
+        t = _trace(
+            counts=_counts(),
+            flags=[("info", "hp_rescued_het"), ("warn", "low_coverage")],
+        )
+        genotype = next(x for x in render_locus(t).splitlines() if "Genotype" in x)
+        assert genotype.index("WARN") > 0
+        assert "hp_rescued_het" in genotype and "low_coverage" in genotype
+
+    def test_allele_balance_states_its_own_scale(self) -> None:
+        """0.51 alone is opaque; the reader needs to know 0.50 is even."""
+        t = _trace(counts=_counts(), allele_balance=0.52)
+        line = next(x for x in render_locus(t).splitlines() if "Allele balance" in x)
+        assert "0.52" in line and "0.50 is even" in line and "balanced" in line
+
+    def test_an_uneven_balance_says_uneven(self) -> None:
+        t = _trace(counts=_counts(), allele_balance=0.71, balanced_ab_max=0.65)
+        assert "uneven" in render_locus(t)
+
+    def test_no_balance_line_for_a_homozygote(self) -> None:
+        assert "Allele balance" not in render_locus(_trace(counts=_counts()))
+
+
 class TestRunSummary:
     def test_totals_close_over_the_run(self) -> None:
         traces = [

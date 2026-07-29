@@ -30,6 +30,9 @@ Failure modes, in the forensic sense
   microvariant) is provisional. Only LongTR ever produced these; with LongTR
   unwired the condition cannot currently arise, and the check remains so the
   flag works if a reconstructing caller is wired in again.
+- ``ALLELE_IMBALANCE`` — a heterozygote whose two alleles carry very different
+  coverage. The call itself stands; what it warns about is the same locus, or a
+  similar one, dropping its minor allele elsewhere in the run.
 - ``CE_NOMENCLATURE_OFFSET`` — the reported allele number for this marker is
   known not to equal the legacy CE-kit designation. Curated per marker in the
   panel, because which markers diverge is a property of the kit convention a
@@ -70,6 +73,13 @@ class QcThresholds(BaseModel):
     #: non-monotonicity below 20 is the discreteness of the read-count floor,
     #: not noise in the estimate.)
     low_coverage_reads: int = Field(default=20, ge=0)
+
+    #: Largest :attr:`~frontstr.interp.models.MarkerResult.allele_balance` a
+    #: heterozygote may have and still count as balanced. On that scale 0.5 is
+    #: perfect and 0.714 is ``min_phr_for_het`` = 0.4, the point below which no
+    #: het is called on read counts at all — so this band sits *inside* the
+    #: callable range and warns rather than rejects.
+    balanced_ab_max: float = Field(default=0.65, gt=0.5, lt=1.0)
 
     #: Two-sided p-value below which a strand ratio is called biased. Kept
     #: strict: at ONT panel coverages a 5% cutoff fires on ordinary sampling
@@ -117,6 +127,7 @@ def derive_run_qc_flags(
         _flag_coverage(result, thr)
         _flag_strand_bias(result, thr)
         _flag_inexact(result)
+        _flag_allele_imbalance(result, thr)
         _flag_kit_nomenclature(result)
     return thr
 
@@ -175,6 +186,31 @@ def _flag_strand_bias(result: MarkerResult, thr: QcThresholds) -> None:
         f"Strand-skewed allele(s) at {result.marker_name}: {detail}. "
         "In a tandem repeat this can be a strand-specific basecalling artefact "
         "rather than a real allele.",
+    )
+
+
+def _flag_allele_imbalance(result: MarkerResult, thr: QcThresholds) -> None:
+    """Flag a heterozygote whose two alleles are unevenly covered.
+
+    Deliberately silent when the call was rescued by phasing: there
+    ``HP_RESCUED_HET`` already says the read ratio was the problem and that
+    haplotype evidence overrode it. Raising both would put two warnings on one
+    phenomenon and train a reviewer to skim them.
+    """
+    ab = result.allele_balance
+    if ab is None or ab <= thr.balanced_ab_max:
+        return
+    if any(a.hp_rescued for a in result.alleles_called):
+        return
+    major, minor = sorted(result.alleles_called, key=lambda a: -a.n_reads_total)
+    _add(
+        result,
+        FlagCode.ALLELE_IMBALANCE,
+        f"{result.marker_name} heterozygote is unevenly covered: allele balance "
+        f"{ab:.2f} (above {thr.balanced_ab_max:.2f}), "
+        f"{major.number_label} on {major.n_reads_total} reads vs "
+        f"{minor.number_label} on {minor.n_reads_total}. Treat the minor allele as "
+        "at risk of dropping out elsewhere in this sample.",
     )
 
 

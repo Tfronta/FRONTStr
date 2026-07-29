@@ -129,6 +129,7 @@ def interpret_marker(
     derive_marker_flags(result)
     if trace is not None:
         trace.flags = [(f.severity.value, f.code.value) for f in result.flags]
+        trace.allele_balance = result.allele_balance
     return result
 
 

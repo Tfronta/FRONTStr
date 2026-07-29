@@ -39,6 +39,30 @@ def _interpret_allele_cell(a: Allele) -> str:
     return f"{a.number_label or '?'}({a.n_reads_total})"
 
 
+def _balance_cell(result: Any) -> str:
+    """Allele balance, dimmed while inside the balanced band."""
+    ab = result.allele_balance
+    if ab is None:
+        return "[dim]-[/dim]"
+    thr = QcThresholds().balanced_ab_max
+    return f"{ab:.2f}" if ab > thr else f"[dim]{ab:.2f}[/dim]"
+
+
+def _qc_cell(result: Any) -> str:
+    """The flags that actually fired, worst-coloured. Never an aggregated PASS.
+
+    A green PASS standing for several checks teaches a reviewer to stop reading
+    the individual ones, and one that shows on almost every locus stops carrying
+    information. A clean locus therefore says nothing at all.
+    """
+    if not result.flags:
+        return "[dim]-[/dim]"
+    colour = {"error": "red", "warn": "yellow", "info": "cyan"}
+    return " ".join(
+        f"[{colour.get(f.severity.value, 'white')}]{f.code.value}[/]" for f in result.flags
+    )
+
+
 def _version_callback(value: bool) -> None:
     if value:
         console.print(f"[bold]FRONTStr[/bold] {__version__}")
@@ -909,6 +933,10 @@ def interpret(
     t.add_column("Tri", style="yellow")
     t.add_column("Alleles called")
     t.add_column("Cov", justify="right")
+    t.add_column("AB", justify="right")
+    # fold, not truncate: a QC column that shows "allele_imbala…" is worse
+    # than one that wraps, because the reader cannot tell which flag fired.
+    t.add_column("QC", overflow="fold")
     for r in results:
         called = ", ".join(_interpret_allele_cell(a) for a in r.alleles_called)
         t.add_row(
@@ -917,6 +945,8 @@ def interpret(
             r.tri_type.value or "-",
             called or "-",
             str(r.total_reads),
+            _balance_cell(r),
+            _qc_cell(r),
         )
     console.print(t)
 
