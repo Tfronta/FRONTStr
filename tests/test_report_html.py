@@ -309,8 +309,14 @@ def test_profile_row_carries_sample_alleles_coverage_and_sequences(tmp_path: Pat
     joined = " | ".join(headers)
     for wanted in ("Sample", "Marker", "Allele 1", "Reads 1", "Allele 2", "Reads 2"):
         assert wanted in joined, f"missing column {wanted!r} in {joined}"
-    assert any(h.startswith("Sequence") for h in headers)
-    assert sum(h.startswith("Sequence") for h in headers) == 2, "one sequence column per allele"
+    # The bracketed ISFG string, not the raw consensus. This table is the
+    # profile a reader compares against another profile, and a wall of bases
+    # cannot be compared by eye; the full consensus is in Sequences below,
+    # where the row is per allele and there is room for it.
+    assert sum(h.startswith("ISFG") for h in headers) == 2, "one ISFG column per allele"
+    assert not any(h.startswith("Sequence") for h in headers), (
+        "the raw consensus belongs in the Sequences section, not the profile"
+    )
 
     first = _profile_table(html).find(".//tbody/tr")
     assert "S-ROW" in first.text_content()

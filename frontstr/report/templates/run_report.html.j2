@@ -86,8 +86,8 @@
           <th data-sortable="num">Total</th>
           <th data-sortable="num">AB <span class="th-hint">balance</span></th>
           <th data-sortable="text">QC</th>
-          <th>Sequence — allele 1</th>
-          <th>Sequence — allele 2</th>
+          <th>ISFG — allele 1</th>
+          <th>ISFG — allele 2</th>
         </tr>
       </thead>
       <tbody>
@@ -125,12 +125,16 @@
             {% else %}<span class="dim">–</span>{% endif %}
             {% if row.has_iso %}<span class="chip iso" title="Isoalleles present — same allele number, different sequence.">iso</span>{% endif %}
           </td>
+          {# The bracketed ISFG string, not the raw consensus: this table is the
+             profile a reader compares against another profile, and a wall of
+             bases cannot be compared by eye. The full consensus lives one
+             section down, in Sequences, where the row is per allele. #}
           {% for i in [1, 2] %}
-          {% set seq = row['allele' ~ i ~ '_seq'] %}
+          {% set isfg = row['allele' ~ i ~ '_isfg'] %}
           <td class="seq-col">
-            {% if seq %}
-            <div class="seq-scroll" title="{{ seq|length }} bp — scroll sideways">{{ seq }}</div>
-            <button class="seq-copy" type="button" data-copy="{{ seq }}" title="Copy allele {{ i }} sequence">copy</button>
+            {% if isfg %}
+            <div class="seq-scroll mono" title="ISFG bracketed repeat structure — scroll sideways">{{ isfg }}</div>
+            <button class="seq-copy" type="button" data-copy="{{ isfg }}" title="Copy allele {{ i }} ISFG string">copy</button>
             {% else %}<span class="dim">–</span>{% endif %}
           </td>
           {% endfor %}
@@ -139,7 +143,7 @@
       </tbody>
     </table>
     </div>
-    <p class="profile-note"><strong>CE-based genotype.</strong> Each row is one marker. <strong>Genotype</strong> is the called allele numbers; <strong>Allele N</strong> + <strong>Reads N</strong> give the per-allele number and its individual coverage. <strong>Total</strong> is all spanning reads (includes stutter / noise peaks not genotype-called). <strong>Allele number</strong> = repeat units counted from the called sequence: length-based CE for simple loci (<code>period ≥ 1</code>), ISFG bracket count for compound loci (<code>period: -1</code>: vWA, FGA, D21S11, D3S1358 …); cross-comparable with CE / Illumina / other callers. <strong>AB</strong> is allele balance — coverage share of the strongest called allele, 0.50 being perfectly even; it is only defined for a heterozygote. <strong>QC</strong> lists the flags that actually fired, coloured by severity, and tints the row; a clean locus shows nothing rather than a green PASS, because a label that appears on almost every row stops being read. <strong>Sequence</strong> is the full consensus over the marker window — scroll a cell sideways, or use its copy button. The <span class="chip iso">iso</span> chip flags isoalleles (same number, different sequence): click the marker to see them.</p>
+    <p class="profile-note"><strong>CE-based genotype.</strong> Each row is one marker. <strong>Genotype</strong> is the called allele numbers; <strong>Allele N</strong> + <strong>Reads N</strong> give the per-allele number and its individual coverage. <strong>Total</strong> is all spanning reads (includes stutter / noise peaks not genotype-called). <strong>Allele number</strong> = repeat units counted from the called sequence: length-based CE for simple loci (<code>period ≥ 1</code>), ISFG bracket count for compound loci (<code>period: -1</code>: vWA, FGA, D21S11, D3S1358 …); cross-comparable with CE / Illumina / other callers. <strong>AB</strong> is allele balance — coverage share of the strongest called allele, 0.50 being perfectly even; it is only defined for a heterozygote. <strong>QC</strong> lists the flags that actually fired, coloured by severity, and tints the row; a clean locus shows nothing rather than a green PASS, because a label that appears on almost every row stops being read. <strong>ISFG</strong> is the bracketed repeat structure of each called allele — the form the ISFG DNA Commission prescribes, and the one that can be read against another laboratory's profile. The full consensus sequence is in <a href="#sequences">Sequences</a> below, one row per allele, where there is room for it. The <span class="chip iso">iso</span> chip flags isoalleles (same number, different sequence): click the marker to see them.</p>
   </div>
 </section>
 
