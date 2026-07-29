@@ -6,8 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from frontstr.batch import ManifestEntry, parse_manifest, run_batch
+from frontstr.batch import ManifestEntry, _extract_marker_ces, parse_manifest, run_batch
 from frontstr.errors import FrontstrError
+from frontstr.interp.models import (
+    Allele,
+    AlleleStatus,
+    CallRule,
+    MarkerResult,
+    TriType,
+)
 from frontstr.panel.models import Panel, System
 
 from .conftest import SYNTH_CHROM, SYNTH_TR_END, SYNTH_TR_START, SynthRead, write_synth_bam
@@ -308,3 +315,83 @@ def test_batch_cli_two_samples(
     )
     assert result.exit_code == 0, result.output
     assert (tmp_path / "out" / "batch_summary.csv").exists()
+
+
+# ---------------------------------------------------------------------------
+# _extract_marker_ces — the allele numbers batch_summary.csv reports
+# ---------------------------------------------------------------------------
+
+
+def _numbered_allele(idx: int, ce: float, strnaming_ce: float | None) -> Allele:
+    """An allele whose legacy CE and STRNaming CE deliberately disagree."""
+    return Allele(
+        cluster_index=idx,
+        consensus="AATGAATGAATG",
+        length_bp=12,
+        n_reads_total=40,
+        n_reads_hp1=20,
+        n_reads_hp2=20,
+        n_reads_hp_none=0,
+        n_forward=20,
+        n_reverse=20,
+        mean_qual=30.0,
+        ce=ce,
+        strnaming_ce=strnaming_ce,
+        isfg=f"[AATG]{int(ce)}",
+        bp_diff=0,
+        is_deletion=False,
+        status=AlleleStatus.ALLELE,
+    )
+
+
+def _marker_result(name: str, alleles: list[Allele]) -> MarkerResult:
+    return MarkerResult(
+        marker_name=name,
+        system=_synth_panel().systems[0],
+        alleles=alleles,
+        alleles_called=alleles,
+        call_rule=CallRule.HETEROZYGOUS if len(alleles) > 1 else CallRule.HOMOZYGOUS,
+        tri_type=TriType.NONE,
+        total_reads=sum(a.n_reads_total for a in alleles),
+    )
+
+
+def test_summary_reports_the_strnaming_number_not_the_legacy_ce() -> None:
+    """batch_summary.csv must carry the same allele number as every other view.
+
+    Regression: the summary used to read the raw ``Allele.ce``, the
+    length-derived number from before STRNaming became the source of the allele
+    designation. That made this file the one output disagreeing with the same
+    run's report, VCF and XLSX at the six markers whose ``corr_value`` had been
+    miscalibrated — HG00113 vWA read 13/17 here and 14/16 everywhere else.
+    """
+    result = _marker_result(
+        "vWA",
+        [_numbered_allele(0, ce=13.0, strnaming_ce=14.0), _numbered_allele(1, 17.0, 16.0)],
+    )
+
+    assert _extract_marker_ces([result]) == {"vWA": "14,16"}
+
+
+def test_summary_falls_back_to_the_legacy_ce_when_strnaming_declined() -> None:
+    """Markers STRNaming has no range for still get their number from the CE."""
+    result = _marker_result("DYS393", [_numbered_allele(0, ce=14.0, strnaming_ce=None)])
+
+    assert _extract_marker_ces([result]) == {"DYS393": "14"}
+
+
+def test_summary_carries_the_amel_designation() -> None:
+    """AMEL has no allele number; its X/Y designation must survive into the CSV.
+
+    ``number_label`` falls back to the ISFG designation when there is no number,
+    which is the whole reason a non-numeric marker can appear in this file at
+    all. Reading the raw CE gave AMEL an empty cell.
+    """
+    x = _numbered_allele(0, ce=13.0, strnaming_ce=None)
+    x.ce = None
+    x.allele_numeric = None
+    x.length_bp = 0
+    x.isfg = "X"
+    y = x.model_copy(update={"cluster_index": 1, "isfg": "Y"})
+
+    assert _extract_marker_ces([_marker_result("AMEL", [x, y])]) == {"AMEL": "X,Y"}

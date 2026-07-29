@@ -322,16 +322,22 @@ def _process_one_sample(
 
 
 def _extract_marker_ces(marker_results: list[MarkerResult]) -> dict[str, str]:
-    """Build a {marker_name: CE_string} dict from called alleles.
+    """Build a {marker_name: allele_string} dict from called alleles.
 
-    CE_string is e.g. ``"12.0,14.0"`` for het or ``"13.0"`` for hom.
-    ``None`` CE values are rendered as ``"?"``.
+    The string is e.g. ``"12,14"`` for a het or ``"13"`` for a hom, and ``"X,Y"``
+    for AMEL. Undesignatable alleles are rendered as ``"?"``.
+
+    Reads :attr:`Allele.number_label` — the canonical allele number, which comes
+    from STRNaming wherever STRNaming has a range for the marker. The raw
+    :attr:`Allele.ce` is the length-derived number from before that precedence
+    existed; reading it here made ``batch_summary.csv`` the one output still
+    reporting pre-STRNaming designations, so a cohort scored on this file
+    disagreed with the same run's report, VCF and XLSX at the six markers whose
+    ``corr_value`` had been miscalibrated (HG00113 vWA read 13/17, not 14/16).
     """
     out: dict[str, str] = {}
     for r in marker_results:
-        parts = []
-        for a in r.alleles_called:
-            parts.append("?" if a.ce is None else str(a.ce))
+        parts = [a.number_label or "?" for a in r.alleles_called]
         out[r.marker_name] = ",".join(parts) if parts else ""
     return out
 
