@@ -126,3 +126,36 @@ def test_every_exposed_threshold_is_in_the_parameter_table() -> None:
     for flag, param in exposed.items():
         assert flag in opts, f"{flag} is no longer exposed"
         assert param in described, f"{param} is turned by {flag} but not in PARAM_SPECS"
+
+
+def test_doctor_runs_without_a_bam() -> None:
+    """The environment check has to be usable before you have data.
+
+    The failure it exists for is quiet: with no POA backend FRONTStr still
+    emits a full profile, from unpolished single reads, and the damage shows up
+    as microvariants that are not in the sample.
+    """
+    result = CliRunner().invoke(app, ["doctor"])
+    assert result.exit_code == 0, result.stdout
+    assert "POA backend" in result.stdout
+    assert "STRNaming" in result.stdout
+
+
+def test_doctor_exposes_bed_and_region_options() -> None:
+    assert "--bed" in _option_names("interpret")
+    assert "--bed-coords" in _option_names("interpret")
+
+
+def test_interpret_rejects_panel_and_bed_together(tmp_path: Path) -> None:
+    bed = tmp_path / "r.bed"
+    bed.write_text("chr11\t100\t200\tAATG\tTH01\n")
+    result = CliRunner().invoke(
+        app,
+        ["interpret", "--bam", "x.bam", "--panel", "p.yaml", "--bed", str(bed)],
+    )
+    assert result.exit_code != 0
+
+
+def test_interpret_requires_regions_from_somewhere() -> None:
+    result = CliRunner().invoke(app, ["interpret", "--bam", "x.bam"])
+    assert result.exit_code != 0

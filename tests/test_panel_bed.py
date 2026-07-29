@@ -88,3 +88,111 @@ def test_write_codis_panel(tmp_path: Path, codis_panel_yaml: Path) -> None:
         parts = row.split("\t")
         assert len(parts) == 5
         assert parts[0].startswith("chr")
+
+
+# ---------------------------------------------------------------------------
+# Reading a BED back — the escape hatch from curating a panel first
+# ---------------------------------------------------------------------------
+
+
+def _bed(tmp_path: Path, text: str) -> Path:
+    p = tmp_path / "regions.bed"
+    p.write_text(text, encoding="utf-8")
+    return p
+
+
+def test_round_trip_is_exact(tmp_path: Path) -> None:
+    """What we write must be what we read, or the report's BED block lies."""
+    from frontstr.panel.bed import load_panel_from_bed, panel_bed_lines
+
+    panel = load_panel(Path("examples/panels/codis_20_grch38.yaml"))
+    path = _bed(tmp_path, "\n".join(panel_bed_lines(panel)) + "\n")
+    back, _ = load_panel_from_bed(path)
+
+    by_name = {s.name: s for s in back.systems}
+    for s in panel.systems:
+        if not s.motif:
+            continue
+        assert by_name[s.name].ref_start == s.ref_start, f"{s.name} start moved"
+        assert by_name[s.name].ref_end == s.ref_end, f"{s.name} end moved"
+
+
+def test_the_two_conventions_differ_by_exactly_one_base(tmp_path: Path) -> None:
+    """The whole reason `coords` has no default.
+
+    Standard BED is 0-based half-open; the panel YAML is 1-based inclusive. One
+    base at a window edge is the kind of error that yields a plausible wrong
+    answer rather than a crash.
+    """
+    from frontstr.panel.bed import load_panel_from_bed
+
+    path = _bed(tmp_path, "chr11\t2170987\t2171215\tAATG\tTH01\n")
+    as_bed, _ = load_panel_from_bed(path, coords="bed0")
+    as_panel, _ = load_panel_from_bed(path, coords="panel1")
+    assert as_bed.systems[0].ref_start - as_panel.systems[0].ref_start == 1
+
+
+def test_a_motif_column_is_recognised_by_its_alphabet(tmp_path: Path) -> None:
+    from frontstr.panel.bed import load_panel_from_bed
+
+    with_motif, _ = load_panel_from_bed(_bed(tmp_path, "chr11\t100\t200\tAATG\tTH01\n"))
+    assert with_motif.systems[0].motif == "AATG"
+    assert with_motif.systems[0].name == "TH01"
+
+
+def test_a_bed_without_a_motif_is_refused(tmp_path: Path) -> None:
+    """Not a parsing limitation — without a motif there is no repeat-core
+    binning, and binning on raw window length took TH01 from 2 bins to 12."""
+    from frontstr.panel.bed import load_panel_from_bed
+
+    with pytest.raises(PanelError, match="repeat-core length"):
+        load_panel_from_bed(_bed(tmp_path, "chr11\t100\t200\tTH01\n"))
+
+
+def test_compound_motifs_are_accepted(tmp_path: Path) -> None:
+    from frontstr.panel.bed import load_panel_from_bed
+
+    panel, _ = load_panel_from_bed(_bed(tmp_path, "chr12\t100\t200\tTCTA,TCTG\tvWA\n"))
+    assert panel.systems[0].motif == "TCTA,TCTG"
+
+
+def test_markers_without_calibration_are_reported_and_marked(tmp_path: Path) -> None:
+    """A BED carries no period and no corr_value. For a marker STRNaming cannot
+    name, that means the number is an uncalibrated repeat count — which has to
+    reach the reader, not just the loader."""
+    from frontstr.interp.models import FlagCode
+    from frontstr.panel.bed import load_panel_from_bed
+
+    panel, warnings = load_panel_from_bed(
+        _bed(tmp_path, "chr11\t2170987\t2171215\tAATG\tTH01\nchr9\t100\t200\tAAAG\tMADEUP\n")
+    )
+    assert "MADEUP" in warnings
+    assert not any(w.startswith("TH01") for w in warnings), "TH01 has a STRNaming range"
+
+    made_up = next(s for s in panel.systems if s.name == "MADEUP")
+    assert made_up.kit_nomenclature_note, "must carry the note that raises the flag"
+    assert FlagCode.CE_NOMENCLATURE_OFFSET  # the machinery the note drives
+
+
+def test_comments_and_track_lines_are_skipped(tmp_path: Path) -> None:
+    from frontstr.panel.bed import load_panel_from_bed
+
+    panel, _ = load_panel_from_bed(
+        _bed(tmp_path, '# a comment\ntrack name="x"\nchr11\t100\t200\tAATG\tTH01\n')
+    )
+    assert len(panel.systems) == 1
+
+
+def test_malformed_input_fails_loudly(tmp_path: Path) -> None:
+    from frontstr.panel.bed import load_panel_from_bed
+
+    with pytest.raises(PanelError, match="chrom/start/end"):
+        load_panel_from_bed(_bed(tmp_path, "chr11\t100\n"))
+    with pytest.raises(PanelError, match="non-numeric"):
+        load_panel_from_bed(_bed(tmp_path, "chr11\tstart\tend\n"))
+    with pytest.raises(PanelError, match="reversed"):
+        load_panel_from_bed(_bed(tmp_path, "chr11\t300\t200\tAATG\tA\n"))
+    with pytest.raises(PanelError, match="duplicate"):
+        load_panel_from_bed(_bed(tmp_path, "chr11\t100\t200\tAATG\tX\nchr11\t300\t400\tAATG\tX\n"))
+    with pytest.raises(PanelError, match="no usable"):
+        load_panel_from_bed(_bed(tmp_path, "# nothing here\n"))

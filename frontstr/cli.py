@@ -7,6 +7,8 @@ files) and a stub ``run`` that orchestrates the full pipeline.
 
 from __future__ import annotations
 
+import platform
+import sys
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -37,6 +39,156 @@ def _interpret_allele_cell(a: Allele) -> str:
     is called.
     """
     return f"{a.number_label or '?'}({a.n_reads_total})"
+
+
+def _load_regions(
+    panel_path: Path | None, bed: Path | None, bed_coords: str
+) -> tuple[Any, list[str]]:
+    """Resolve ``--panel`` / ``--bed`` into a panel, plus warnings to print.
+
+    A BED is the escape hatch HipSTR and LongTR have and a YAML-only caller does
+    not: point the tool at your own regions without curating a panel first. What
+    it cannot carry is calibration, so the warnings are not decoration — for a
+    marker STRNaming has no range for, the number is an uncalibrated repeat
+    count rather than a kit allele, and the run says so per locus as well.
+    """
+    from frontstr.panel.bed import load_panel_from_bed
+    from frontstr.panel.loader import load_panel
+
+    if bed is not None and panel_path is not None:
+        raise FrontstrError("give --panel or --bed, not both")
+    if bed is None and panel_path is None:
+        raise FrontstrError("need --panel <yaml> or --bed <file>")
+    if bed is None:
+        assert panel_path is not None
+        return load_panel(panel_path), []
+
+    if bed_coords not in ("bed0", "panel1"):
+        raise FrontstrError(f"--bed-coords must be bed0 or panel1, got {bed_coords!r}")
+    panel, uncalibrated = load_panel_from_bed(bed, coords=bed_coords)  # type: ignore[arg-type]
+    warnings = [
+        f"[dim]Regions from {bed} read as "
+        f"{'0-based half-open (standard BED)' if bed_coords == 'bed0' else '1-based inclusive'}"
+        f" — {len(panel.systems)} marker(s).[/dim]"
+    ]
+    if uncalibrated:
+        warnings.append(
+            f"[yellow]warning:[/yellow] {len(uncalibrated)} marker(s) have no STRNaming "
+            "reporting range and no calibration from the BED, so their allele number is "
+            "an uncalibrated repeat count, not a kit CE allele: "
+            f"{', '.join(uncalibrated[:8])}" + (" …" if len(uncalibrated) > 8 else "")
+        )
+    return panel, warnings
+
+
+def _environment_report() -> list[str]:
+    """Check the installation itself. Returns the problems found, if any.
+
+    The failure this exists for is quiet: without a POA backend FRONTStr still
+    emits a complete profile, built from unpolished single reads, and the damage
+    surfaces as microvariants that are not in the sample. Measured on the
+    reference slices, that fallback produced 4 false microvariants in 202 called
+    alleles. Nobody should have to discover it from a flag after the fact.
+    """
+    from frontstr.evidence.consensus import poa_backend_name
+    from frontstr.interp.naming import default_namer
+    from frontstr.version import __version__
+
+    problems: list[str] = []
+    t = Table(title="FRONTStr doctor — environment", show_header=False)
+    t.add_column("Check", style="bold")
+    t.add_column("Result")
+
+    t.add_row("FRONTStr", __version__)
+    t.add_row("Python", sys.version.split()[0])
+    t.add_row("Platform", f"{platform.system()} {platform.machine()}")
+
+    backend = poa_backend_name()
+    if backend:
+        t.add_row("POA backend", f"[green]{backend}[/green]")
+    else:
+        t.add_row("POA backend", "[red]none — consensus will be a single unpolished read[/red]")
+        problems.append("no POA backend: pip install 'frontstr[poa]'")
+
+    namer = default_namer()
+    if namer is None:
+        t.add_row(
+            "STRNaming", "[red]unavailable — allele numbers fall back to bracket counts[/red]"
+        )
+        problems.append("STRNaming unavailable: pip install 'strnaming>=1.2,<1.3'")
+    else:
+        n = sum(1 for _ in _cached_markers())
+        t.add_row("STRNaming", f"[green]ready[/green], {n} markers in the bundled slice cache")
+
+    for mod in ("pysam", "edlib", "cyvcf2"):
+        try:
+            m = __import__(mod)
+            t.add_row(mod, getattr(m, "__version__", "installed"))
+        except ImportError:
+            t.add_row(mod, "[red]missing[/red]")
+            problems.append(f"{mod} is not importable")
+
+    console.print(t)
+    for p in problems:
+        console.print(f"  [red]✗[/red] {p}")
+    if not problems:
+        console.print("  [green]✓[/green] installation looks complete")
+    return problems
+
+
+def _cached_markers() -> list[str]:
+    from frontstr.interp.naming import CACHE_PATH
+
+    try:
+        lines = CACHE_PATH.read_text(encoding="utf-8").splitlines()[1:]
+    except OSError:
+        return []
+    return [x.split("\t")[0] for x in lines if x.strip()]
+
+
+def _phasing_report(af: Any, panel: Any, reference: Path | None) -> None:
+    """Whether the BAM is phased, and whether its blocks survive a locus.
+
+    Haplotype evidence drives two calling rules, and both are silently disabled
+    on an unphased BAM. It is better to know that before reading a profile than
+    to wonder why a rescue never fired.
+    """
+    hp = ps = total = 0
+    blocks_per_locus: list[int] = []
+    for s in panel.systems[:8]:
+        seen: set[int] = set()
+        try:
+            reads = af.fetch(s.chromosome, max(0, s.ref_start - 1), s.ref_end)
+        except (ValueError, OSError):
+            continue
+        for r in reads:
+            total += 1
+            if r.has_tag("HP"):
+                hp += 1
+                if r.has_tag("PS"):
+                    ps += 1
+                    seen.add(int(r.get_tag("PS")))
+        if seen:
+            blocks_per_locus.append(len(seen))
+
+    if total == 0:
+        return
+    if hp == 0:
+        console.print(
+            "[yellow]Phasing:[/yellow] no HP tags — haplotype rules are disabled "
+            "(phantom suppression and the peak-ratio rescue both no-op)."
+        )
+        return
+    pct = 100 * hp / total
+    line = f"[green]Phasing:[/green] {pct:.0f}% of sampled reads carry HP"
+    if ps == 0:
+        line += "; [yellow]no PS tags[/yellow] — blocks cannot be verified"
+    else:
+        split = sum(1 for n in blocks_per_locus if n > 1)
+        line += f", {ps} with PS"
+        if split:
+            line += f"; [yellow]{split} sampled locus/loci span >1 phase block[/yellow]"
+    console.print(line)
 
 
 def _render_params(params: Any) -> str:
@@ -288,38 +440,44 @@ def batch(
 
 @app.command("doctor")
 def doctor(
-    bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM or CRAM.")],
-    panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
+    bam: Annotated[Path | None, typer.Option("--bam", help="Indexed sample BAM or CRAM.")] = None,
+    panel_path: Annotated[Path | None, typer.Option("--panel", "-p", help="Panel YAML.")] = None,
     min_mapq: Annotated[int, typer.Option("--min-mapq")] = 20,
     reference: Annotated[
         Path | None,
         typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
     ] = None,
 ) -> None:
-    """Pre-flight sanity check: BAM ↔ panel compatibility.
+    """Pre-flight check: the environment, then BAM ↔ panel compatibility.
 
-    Runs every marker through the pileup and prints:
-      - whether each chromosome exists in the BAM @SQ headers
-      - read counts at each locus (with and without MAPQ filter)
-      - a chromosome-naming hint if 'chr' prefix mismatches
+    With no arguments it checks the installation alone — the POA backend, the
+    STRNaming slice cache, the compiled dependencies. Worth running after any
+    install, because the failure mode is quiet: without a POA backend FRONTStr
+    still produces a full profile, from unpolished single reads, and the damage
+    shows up as microvariants that are not there.
 
-    Run this BEFORE ``frontstr report`` to debug "no data" results.
+    Given ``--bam`` and ``--panel`` it also runs every marker through the
+    pileup: whether each chromosome exists in the BAM headers, read counts with
+    and without the MAPQ filter, and whether the reads are phased.
+
+    Exits non-zero if anything is broken, so it can gate a batch.
     """
     import pysam
 
-    from frontstr.evidence.consensus import poa_backend_name
     from frontstr.evidence.pileup import pileup_locus
     from frontstr.panel.loader import load_panel
 
-    backend = poa_backend_name()
-    if backend:
-        console.print(f"[green]POA backend:[/green] {backend}")
-    else:
-        console.print(
-            "[red]POA backend: none[/red] — cluster consensus will fall back to a "
-            "single unpolished read, degrading ISFG strings and iso-allele calls.\n"
-            "  Fix: [bold]pip install 'frontstr[poa]'[/bold]"
-        )
+    problems = _environment_report()
+
+    if bam is None or panel_path is None:
+        if bam is not None or panel_path is not None:
+            console.print(
+                "[yellow]note:[/yellow] --bam and --panel are checked together; "
+                "give both for the per-marker table."
+            )
+        if problems:
+            raise typer.Exit(code=1)
+        return
 
     try:
         panel = load_panel(panel_path)
@@ -415,7 +573,10 @@ def doctor(
             status,
         )
     console.print(t)
+    _phasing_report(af, panel, reference)
     af.close()
+    if problems:
+        raise typer.Exit(code=1)
 
 
 @app.command("export")
@@ -831,7 +992,18 @@ def calibrate_stutter(
 @app.command("interpret")
 def interpret(
     bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM or CRAM.")],
-    panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
+    panel_path: Annotated[Path | None, typer.Option("--panel", "-p", help="Panel YAML.")] = None,
+    bed: Annotated[
+        Path | None,
+        typer.Option("--bed", help="Regions as BED instead of a panel. See --bed-coords."),
+    ] = None,
+    bed_coords: Annotated[
+        str,
+        typer.Option(
+            "--bed-coords",
+            help="How to read --bed: bed0 (standard 0-based half-open) or panel1 (1-based inclusive).",
+        ),
+    ] = "bed0",
     min_mapq: Annotated[int, typer.Option("--min-mapq")] = 20,
     identity: Annotated[float, typer.Option("--identity")] = 0.97,
     len_tolerance: Annotated[int, typer.Option("--len-tolerance")] = 0,
@@ -915,7 +1087,6 @@ def interpret(
     from frontstr.interp import interpret_run
     from frontstr.log import configure_logging
     from frontstr.panel.catalog import load_catalog
-    from frontstr.panel.loader import load_panel
     from frontstr.params import RunParameters
     from frontstr.trace import (
         LocusTrace,
@@ -957,7 +1128,9 @@ def interpret(
             print(file=sys.stderr)
 
     try:
-        panel = load_panel(panel_path)
+        panel, bed_warnings = _load_regions(panel_path, bed, bed_coords)
+        for warning in bed_warnings:
+            console.print(warning)
         catalog = load_catalog(catalog_path) if catalog_path else None
         if want_trace:
             from frontstr.evidence.consensus import poa_backend_name

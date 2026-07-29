@@ -7,7 +7,7 @@ read start to finish once, then used as a lookup.
 Companion documents: [`architecture.md`](architecture.md) for module layout,
 [`stutter_calibration.md`](stutter_calibration.md) for the stutter measurement.
 
-Status as of July 2026 — 579 tests passing, ~11,000 lines across 56 modules.
+Status as of July 2026 — 591 tests passing, ~11,200 lines across 56 modules.
 
 ---
 
@@ -775,6 +775,59 @@ rather than buried among forty.
 actually uses; a table that drifts is worse than none, because the report would
 confidently print a default nothing is using.
 
+### Bringing your own regions
+
+`--bed FILE` replaces `--panel`, which is the escape hatch HipSTR and LongTR
+have and a YAML-only caller did not: point the tool at your own intervals
+without curating a panel first.
+
+```
+chrom  start  end  MOTIF  name
+```
+
+**The motif is required**, and that is not a parsing convenience. Without it
+reads cannot be binned by repeat-core length, and binning on raw window length
+instead took TH01 from 2 bins to 12. Better to refuse the file than to call from
+it badly.
+
+**Coordinates have no default anywhere in `panel/bed.py`.** Standard BED is
+0-based half-open; the panel YAML and HipSTR's region files are 1-based
+inclusive. One base at a window edge produces a plausible wrong answer rather
+than a crash, so `--bed-coords` is explicit (`bed0`, the default for reading,
+or `panel1`) and every writer states which it emits. The report's BED block and
+`--bed` use the same convention, so the round trip is exact — asserted in
+`tests/test_panel_bed.py`.
+
+What a BED cannot carry is calibration: no `period`, no `corr_value`, no
+`marker_type`. For markers STRNaming has a reporting range for, that costs
+nothing — which is only true since STRNaming became the canonical namer, and is
+what makes this feature worth having now. For the rest, the number is an
+uncalibrated repeat count rather than a kit allele, so those markers get a
+`kit_nomenclature_note` and every call at them raises
+`CE_NOMENCLATURE_OFFSET` — the same machinery a curated panel uses to say the
+same thing. The run also prints them by name before it starts.
+
+Measured on HG00113, feeding back the panel's own windows as BED: 23 of 25
+genotypes identical to the YAML run. The two that differ are exactly the two
+the warning names — DYS393 (no STRNaming range) and AMEL (a BED cannot say
+`marker_type: amel`, so sex typing degrades to the STR path).
+
+### Checking the installation
+
+`frontstr doctor` with no arguments checks the install alone: the POA backend,
+the STRNaming slice cache, the compiled dependencies. Worth running after any
+install, because the failure mode is quiet — without a POA backend FRONTStr
+still produces a complete profile, built from unpolished single reads, and the
+damage surfaces as microvariants that are not in the sample (4 in 202 called
+alleles, measured). It exits non-zero when something is broken, so it can gate
+a batch.
+
+Given `--bam` and `--panel` it adds the per-marker table and a phasing line:
+what fraction of reads carry `HP`, whether `PS` is present, and whether any
+sampled locus spans more than one phase block. Both haplotype rules are
+silently disabled on an unphased BAM, and it is better to know that before
+reading a profile than to wonder why a rescue never fired.
+
 ### Provenance sections
 
 The Raw / Audit page carries three things a reviewer would otherwise have to
@@ -928,7 +981,7 @@ Pileup, clustering, POA consensus, ISFG, allele numbering, stutter,
 classification, haplotype suppression, catalog annotation, genotype calling, QC
 flags, all seven export formats, the audit trail, and batch mode over a
 manifest. Regression-tested against a real ONT sample; CI green on ruff, ruff
-format, mypy and 579 tests.
+format, mypy and 591 tests.
 
 ### Does not work / does not exist
 
