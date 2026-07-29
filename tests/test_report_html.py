@@ -21,6 +21,7 @@ from frontstr.interp.models import (
     MarkerResult,
     TriType,
 )
+from frontstr.interp.qc import derive_run_qc_flags
 from frontstr.panel.models import System
 from frontstr.report import RunContext, build_report
 
@@ -199,7 +200,7 @@ def test_profile_tri_columns_only_when_tri_chip(tmp_path: Path) -> None:
         out_tri,
     )
     html_tri = out_tri.read_text(encoding="utf-8")
-    assert ">Allele 3 <" in html_tri
+    assert ">Allele 3</th>" in html_tri
 
     th01_only = [
         MarkerResult(
@@ -232,7 +233,7 @@ def test_profile_tri_columns_only_when_tri_chip(tmp_path: Path) -> None:
         out_no,
     )
     html_no = out_no.read_text(encoding="utf-8")
-    assert ">Allele 3 <" not in html_no
+    assert ">Allele 3</th>" not in html_no
 
 
 def test_build_report_is_deterministic(tmp_path: Path) -> None:
@@ -261,3 +262,115 @@ def test_build_report_includes_chips_for_special_calls(tmp_path: Path) -> None:
     # Status chips for both alleles
     assert html.count('class="chip ok"') > 0
     assert "triallelic_type_II" in html
+
+
+# ---------------------------------------------------------------------------
+# Profile table: everything on one row (plan item 2 — flags were invisible here)
+# ---------------------------------------------------------------------------
+
+
+def _flagged_results() -> list[MarkerResult]:
+    """TH01 heterozygous but unevenly covered, so QC has something to show."""
+    alleles = [
+        _allele(0, 9.0, 20, AlleleStatus.ALLELE),
+        _allele(1, 8.0, 6, AlleleStatus.ALLELE),
+    ]
+    r = MarkerResult(
+        marker_name="TH01",
+        system=System(
+            name="TH01",
+            chromosome="chr11",
+            ref_start=2_171_000,
+            ref_end=2_171_050,
+            motif="AATG",
+            period=4,
+        ),
+        alleles=alleles,
+        alleles_called=alleles,
+        call_rule=CallRule.HETEROZYGOUS,
+        tri_type=TriType.NONE,
+        total_reads=26,
+    )
+    derive_run_qc_flags([r])
+    return [r]
+
+
+def _profile_table(html: str):
+    return lxml.html.fromstring(html).find(".//table[@class='profile profile-wide']")
+
+
+def test_profile_row_carries_sample_alleles_coverage_and_sequences(tmp_path: Path) -> None:
+    """One row per locus must answer the whole question without a second view."""
+    out = tmp_path / "r.html"
+    build_report(_make_results(), RunContext(sample_name="S-ROW", panel_name="P"), out)
+    html = out.read_text(encoding="utf-8")
+
+    headers = [th.text_content().strip() for th in _profile_table(html).findall(".//thead/tr/th")]
+    joined = " | ".join(headers)
+    for wanted in ("Sample", "Marker", "Allele 1", "Reads 1", "Allele 2", "Reads 2"):
+        assert wanted in joined, f"missing column {wanted!r} in {joined}"
+    assert any(h.startswith("Sequence") for h in headers)
+    assert sum(h.startswith("Sequence") for h in headers) == 2, "one sequence column per allele"
+
+    first = _profile_table(html).find(".//tbody/tr")
+    assert "S-ROW" in first.text_content()
+
+
+def test_sequences_are_in_their_own_scrollable_cell(tmp_path: Path) -> None:
+    """A ~250 bp consensus wrapped over ten lines destroys the table; truncating
+    it would hide what a sequence-resolved caller exists to show. So: scroll."""
+    out = tmp_path / "r.html"
+    build_report(_make_results(), RunContext(sample_name="S", panel_name="P"), out)
+    html = out.read_text(encoding="utf-8")
+
+    boxes = _profile_table(html).find_class("seq-scroll")
+    assert boxes, "sequence cells must use the scrollable container"
+    assert "AATG" in boxes[0].text_content()
+    css = (Path(__file__).parents[1] / "frontstr/report/static/styles.css").read_text()
+    assert ".seq-scroll" in css
+    block = css.split(".seq-scroll {", 1)[1].split("}", 1)[0]
+    assert "overflow-x: auto" in block
+    assert "white-space: nowrap" in block
+
+
+def test_flags_appear_in_the_profile_table(tmp_path: Path) -> None:
+    """The bug this fixes: flags existed only in the expandable per-locus cards,
+    so a reviewer scanning the profile table could not see a locus was flagged."""
+    out = tmp_path / "r.html"
+    build_report(_flagged_results(), RunContext(sample_name="S-QC", panel_name="P"), out)
+    html = out.read_text(encoding="utf-8")
+    table = _profile_table(html)
+
+    assert "allele_imbalance" in table.text_content()
+    assert table.find_class("sev-warn"), "flag chips must be coloured by severity"
+    row = table.find(".//tbody/tr")
+    assert "row-sev-warn" in (row.get("class") or ""), "a flagged row must be tinted"
+
+
+def test_a_clean_locus_shows_no_pass_label(tmp_path: Path) -> None:
+    """No aggregated PASS: a label on almost every row stops being read."""
+    out = tmp_path / "r.html"
+    build_report(_make_results(), RunContext(sample_name="S", panel_name="P"), out)
+    table = _profile_table(out.read_text(encoding="utf-8"))
+    assert "PASS" not in table.text_content()
+
+
+def test_allele_balance_column_is_present(tmp_path: Path) -> None:
+    out = tmp_path / "r.html"
+    build_report(_flagged_results(), RunContext(sample_name="S", panel_name="P"), out)
+    table = _profile_table(out.read_text(encoding="utf-8"))
+    headers = " ".join(th.text_content() for th in table.findall(".//thead/tr/th"))
+    assert "AB" in headers
+    # 20 vs 6 reads -> 0.77, above the balanced band, so it is highlighted.
+    assert table.find_class("ab-uneven")
+
+
+def test_rows_are_filterable_by_flag(tmp_path: Path) -> None:
+    """Both paths: the select, and typing a flag code into the search box."""
+    out = tmp_path / "r.html"
+    build_report(_flagged_results(), RunContext(sample_name="S", panel_name="P"), out)
+    html = out.read_text(encoding="utf-8")
+    assert 'id="profile-flagged"' in html
+    row = _profile_table(html).find(".//tbody/tr")
+    assert row.get("data-flagged") == "1"
+    assert "allele_imbalance" in (row.get("data-search") or "")

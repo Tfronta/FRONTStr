@@ -7,7 +7,7 @@ read start to finish once, then used as a lookup.
 Companion documents: [`architecture.md`](architecture.md) for module layout,
 [`stutter_calibration.md`](stutter_calibration.md) for the stutter measurement.
 
-Status as of July 2026 — 546 tests passing, ~10,600 lines across 55 modules.
+Status as of July 2026 — 552 tests passing, ~10,700 lines across 55 modules.
 
 ---
 
@@ -711,6 +711,28 @@ and any allele that fell back to the legacy CE path.
 Still missing, and worth adding: the POA step reports only which backend ran,
 not how many positions it corrected.
 
+### The profile table
+
+One row per locus, answering the whole question without a second view: sample,
+both allele numbers, **per-allele coverage**, total, allele balance, the QC
+flags that fired, and **both consensus sequences**.
+
+Each sequence sits in its own fixed-width cell that scrolls sideways. A ~250 bp
+consensus wrapped over ten lines turns every row into a paragraph, and
+truncating it would hide the one thing a sequence-resolved caller exists to
+show. The table itself scrolls as a unit so the sequence columns cannot squeeze
+the rest into slivers.
+
+Flags used to live **only** inside the expandable per-locus cards at the bottom
+of the report, so a reviewer scanning the profile table could not see that a
+locus was flagged at all — the XLSX export had been doing this correctly
+(tinted rows plus a QC sheet) while the HTML had not. Now the row is tinted by
+worst severity, the QC cell names each flag, and the toolbar filters to flagged
+or clean. Typing a flag code into the search box works too.
+
+There is no aggregated `PASS`, for the reason given above: a label that appears
+on almost every row stops being read.
+
 ### Export formats
 
 `frontstr export --formats …` writes any of:
@@ -847,7 +869,7 @@ Pileup, clustering, POA consensus, ISFG, allele numbering, stutter,
 classification, haplotype suppression, catalog annotation, genotype calling, QC
 flags, all seven export formats, the audit trail, and batch mode over a
 manifest. Regression-tested against a real ONT sample; CI green on ruff, ruff
-format, mypy and 546 tests.
+format, mypy and 552 tests.
 
 ### Does not work / does not exist
 

@@ -234,6 +234,72 @@ table.profile td.mono.seq-cell {
   white-space: normal;
   letter-spacing: 0.2px;
 }
+/* The wide profile table carries two full consensus sequences per row, so it
+   is allowed to outgrow the page and scroll as a unit. Without this the
+   sequence columns squeeze every other column into unreadable slivers. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+table.profile.profile-wide { min-width: 1280px; }
+/* Nothing in this table should break mid-word: "heterozygous" split across
+   three lines as "hete / rozy / gous" is unreadable and triples the row
+   height. The table scrolls instead. */
+table.profile.profile-wide thead th,
+table.profile.profile-wide td.mono,
+table.profile.profile-wide td.marker,
+table.profile.profile-wide td.num,
+table.profile.profile-wide td.dim { white-space: nowrap; }
+table.profile.profile-wide td.mono { max-width: none; word-break: normal; }
+
+/* One sequence, one line, its own sideways scrollbar. A ~250 bp consensus
+   wrapped over ten lines makes every row a paragraph and destroys the table;
+   truncating it would hide the very thing a sequence-resolved caller exists to
+   show. So: fixed box, nowrap, scroll. */
+table.profile td.seq-col { white-space: nowrap; }
+table.profile .seq-scroll {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  color: var(--text-soft);
+  width: 240px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  padding-bottom: 3px;
+}
+table.profile .seq-scroll::-webkit-scrollbar { height: 6px; }
+table.profile .seq-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+table.profile .seq-copy {
+  font-family: var(--mono);
+  font-size: 9px;
+  margin-top: 2px;
+  padding: 1px 5px;
+  cursor: pointer;
+  color: var(--text-faint);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+table.profile .seq-copy:hover { color: var(--text); border-color: var(--text-faint); }
+
+table.profile td.qc-cell { white-space: normal; max-width: 210px; }
+table.profile td.qc-cell .chip { margin: 0 3px 3px 0; }
+table.profile td.ab-uneven { color: var(--warn); font-weight: 600; }
+
+/* Row tint by worst flag severity — the XLSX has done this from the start and
+   the HTML did not, which is why a flagged locus was invisible in this table. */
+table.profile tr.row-sev-error td { background: rgba(198, 40, 40, 0.07); }
+table.profile tr.row-sev-warn td { background: rgba(239, 108, 0, 0.06); }
+table.profile tr.row-sev-info td { background: rgba(2, 119, 189, 0.04); }
+
+.chip.sev-error { background: rgba(198, 40, 40, 0.12); color: var(--danger, #c62828); }
+.chip.sev-warn { background: rgba(239, 108, 0, 0.12); color: var(--warn); }
+.chip.sev-info { background: rgba(2, 119, 189, 0.10); color: var(--accent, #0277bd); }
+
 table.profile td.marker { font-weight: 600; }
 table.profile td.dim { color: var(--text-faint); }
 table.profile tr.row-discordant td { background: rgba(239, 108, 0, 0.06); }

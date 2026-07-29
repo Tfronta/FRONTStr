@@ -104,7 +104,7 @@ def serialize_run(
         "summary": summary,
         "qc": qc,
         "audit": _build_audit(results, context),
-        "profile_rows": [_profile_row(r) for r in results],
+        "profile_rows": [_profile_row(r, context.sample_name) for r in results],
         "seq_rows": _seq_rows(results),
         "results": serialized_results,
     }
@@ -225,15 +225,26 @@ def _format_allele_number(a: Allele) -> tuple[float | None, str | None, bool]:
     return (a.number, a.number_label or None, a.number_is_absolute)
 
 
-def _profile_row(r: MarkerResult) -> dict[str, Any]:
-    """Wide row for the profile table: 1 marker, up to 3 alleles."""
+def _profile_row(r: MarkerResult, sample_name: str = "") -> dict[str, Any]:
+    """Wide row for the profile table: 1 marker, up to 3 alleles.
+
+    Carries the **flags** as well as the coarse status chip. They used to live
+    only inside the expandable per-locus cards at the bottom of the report,
+    which meant a reviewer scanning the profile table could not see that a
+    locus was flagged at all — the XLSX export had been doing this correctly
+    (tinted rows plus a QC sheet) while the HTML did not.
+    """
     called = list(r.alleles_called)[:3]
     row: dict[str, Any] = {
+        "sample": sample_name,
         "marker": r.marker_name,
         "call_rule": r.call_rule.value,
         "tri_type": r.tri_type.value,
         "total_reads": r.total_reads,
         "status_chip": _status_chip(r),
+        "allele_balance": r.allele_balance,
+        "flags": [{"code": f.code.value, "severity": f.severity.value} for f in r.flags],
+        "worst_severity": _worst_severity(r),
     }
     for i in range(3):
         slot = called[i] if i < len(called) else None
@@ -271,6 +282,15 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
     # table only reads the resulting marker flag.
     row["has_iso"] = any(f.code == FlagCode.ISOALLELE for f in r.flags)
     return row
+
+
+def _worst_severity(r: MarkerResult) -> str:
+    """``error`` | ``warn`` | ``info`` | ``""`` — drives the row tint."""
+    severities = {f.severity.value for f in r.flags}
+    for level in ("error", "warn", "info"):
+        if level in severities:
+            return level
+    return ""
 
 
 def _allele_number_label(a: Allele) -> str | None:

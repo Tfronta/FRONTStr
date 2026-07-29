@@ -61,71 +61,85 @@
         <option value="mixture">mixture</option>
         <option value="no_data">no data</option>
       </select>
+      <select id="profile-flagged">
+        <option value="">flagged or not</option>
+        <option value="1">flagged only</option>
+        <option value="0">clean only</option>
+      </select>
       <span class="pill" id="profile-count"></span>
     </div>
-    <table class="profile">
+    <div class="table-scroll">
+    <table class="profile profile-wide">
       <thead>
         <tr>
+          <th data-sortable="text">Sample</th>
           <th data-sortable="text">Marker</th>
           <th data-sortable="text">Call</th>
-          <th data-sortable="text">Genotype</th>
-          <th data-sortable="num">Allele 1 <span class="th-hint">CE / bp</span></th>
+          <th data-sortable="num">Allele 1</th>
           <th data-sortable="num">Reads 1</th>
-          <th data-sortable="num">Allele 2 <span class="th-hint">CE / bp</span></th>
+          <th data-sortable="num">Allele 2</th>
           <th data-sortable="num">Reads 2</th>
           {% if profile_show_tri %}
-          <th data-sortable="num">Allele 3 <span class="th-hint">CE / bp</span></th>
+          <th data-sortable="num">Allele 3</th>
           <th data-sortable="num">Reads 3</th>
           {% endif %}
           <th data-sortable="num">Total</th>
-          <th data-sortable="text">Status</th>
+          <th data-sortable="num">AB <span class="th-hint">balance</span></th>
+          <th data-sortable="text">QC</th>
+          <th>Sequence — allele 1</th>
+          <th>Sequence — allele 2</th>
         </tr>
       </thead>
       <tbody>
       {% for row in payload.profile_rows %}
-        <tr data-search="{{ row.marker|lower }} {{ row.call_rule }} {{ row.status_chip }} {{ row.tri_type }}"
+        <tr data-search="{{ row.marker|lower }} {{ row.call_rule }} {{ row.status_chip }} {{ row.tri_type }} {% for f in row.flags %}{{ f.code }} {% endfor %}"
             data-chip="{{ row.status_chip }}"
-            class="{% if row.status_chip == 'mixture' %}row-mixture{% elif row.status_chip == 'no_data' %}row-no-data{% endif %}">
+            data-flagged="{{ '1' if row.flags else '0' }}"
+            class="{% if row.worst_severity %}row-sev-{{ row.worst_severity }}{% elif row.status_chip == 'no_data' %}row-no-data{% endif %}">
+          <td class="dim">{{ row.sample or '–' }}</td>
           <td class="marker"><a href="#seq-{{ row.marker|e }}" class="marker-link" data-marker="{{ row.marker|e }}" title="Show this marker's alleles in the Sequences table">{{ row.marker }}</a></td>
           <td class="mono">{{ row.call_rule }}</td>
-          <td class="mono genotype">{{ row.genotype }}</td>
-          <td class="num{% if row.allele1_ce_is_kit_ce %} ce-kit-ce{% endif %}"
-              data-sort-value="{{ row.allele1_ce_sort if row.allele1_ce_sort is not none else '' }}"
-              {% if row.allele1_ce_label %}
-                {% if row.allele1_ce_is_kit_ce %}title="Allele number = repeat units counted from the called sequence: length-based CE for simple loci, ISFG bracket count for compound (period −1) loci."
+          {% for i in [1, 2, 3] %}
+          {% if i < 3 or profile_show_tri %}
+          {% set ce_label = row['allele' ~ i ~ '_ce_label'] %}
+          {% set ce_sort = row['allele' ~ i ~ '_ce_sort'] %}
+          {% set is_kit = row['allele' ~ i ~ '_ce_is_kit_ce'] %}
+          {% set cov = row['allele' ~ i ~ '_cov'] %}
+          <td class="num{% if is_kit %} ce-kit-ce{% endif %}"
+              data-sort-value="{{ ce_sort if ce_sort is not none else '' }}"
+              {% if ce_label %}
+                {% if is_kit %}title="Allele number = repeat units counted from the called sequence."
                 {% else %}title="Sizing only: tandem-repeat span within the marker window (compound motif; not a CODIS ladder allele)."
                 {% endif %}
-              {% endif %}>{{ row.allele1_ce_label if row.allele1_ce_label else '–' }}</td>
-          <td class="num" data-sort-value="{{ row.allele1_cov or 0 }}">{{ row.allele1_cov if row.allele1_cov is not none else '–' }}</td>
-          <td class="num{% if row.allele2_ce_is_kit_ce %} ce-kit-ce{% endif %}"
-              data-sort-value="{{ row.allele2_ce_sort if row.allele2_ce_sort is not none else '' }}"
-              {% if row.allele2_ce_label %}
-                {% if row.allele2_ce_is_kit_ce %}title="Allele number = repeat units counted from the called sequence: length-based CE for simple loci, ISFG bracket count for compound (period −1) loci."
-                {% else %}title="Sizing only: tandem-repeat span within the marker window (compound motif; not a CODIS ladder allele)."
-                {% endif %}
-              {% endif %}>{{ row.allele2_ce_label if row.allele2_ce_label else '–' }}</td>
-          <td class="num" data-sort-value="{{ row.allele2_cov or 0 }}">{{ row.allele2_cov if row.allele2_cov is not none else '–' }}</td>
-          {% if profile_show_tri %}
-          <td class="num{% if row.allele3_ce_is_kit_ce %} ce-kit-ce{% endif %}"
-              data-sort-value="{{ row.allele3_ce_sort if row.allele3_ce_sort is not none else '' }}"
-              {% if row.allele3_ce_label %}
-                {% if row.allele3_ce_is_kit_ce %}title="Allele number = repeat units counted from the called sequence: length-based CE for simple loci, ISFG bracket count for compound (period −1) loci."
-                {% else %}title="Sizing only: tandem-repeat span within the marker window (compound motif; not a CODIS ladder allele)."
-                {% endif %}
-              {% endif %}>{{ row.allele3_ce_label if row.allele3_ce_label else '–' }}</td>
-          <td class="num" data-sort-value="{{ row.allele3_cov or 0 }}">{{ row.allele3_cov if row.allele3_cov is not none else '–' }}</td>
+              {% endif %}>{{ ce_label if ce_label else '–' }}</td>
+          <td class="num" data-sort-value="{{ cov or 0 }}">{{ cov if cov is not none else '–' }}</td>
           {% endif %}
+          {% endfor %}
           <td class="num">{{ row.total_reads }}</td>
-          <td>
-            <span class="chip {{ row.status_chip }}">{{ row.status_chip }}</span>
-            {% if row.has_iso %}<span class="chip iso" title="Isoalleles present — same allele number, different sequence. See Sequences table.">iso</span>{% endif %}
-            {% if row.tri_type %}<span class="chip tri">{{ row.tri_type }}</span>{% endif %}
+          <td class="num{% if row.allele_balance and row.allele_balance > payload.audit.qc_thresholds.balanced_ab_max %} ab-uneven{% endif %}"
+              data-sort-value="{{ row.allele_balance if row.allele_balance is not none else '' }}"
+              title="Coverage share of the strongest called allele. 0.50 is perfectly even; only defined for a heterozygote.">{{ '%.2f'|format(row.allele_balance) if row.allele_balance is not none else '–' }}</td>
+          <td class="qc-cell">
+            {% if row.flags %}
+              {% for f in row.flags %}<span class="chip sev-{{ f.severity }}" title="{{ f.code }}">{{ f.code }}</span>{% endfor %}
+            {% else %}<span class="dim">–</span>{% endif %}
+            {% if row.has_iso %}<span class="chip iso" title="Isoalleles present — same allele number, different sequence.">iso</span>{% endif %}
           </td>
+          {% for i in [1, 2] %}
+          {% set seq = row['allele' ~ i ~ '_seq'] %}
+          <td class="seq-col">
+            {% if seq %}
+            <div class="seq-scroll" title="{{ seq|length }} bp — scroll sideways">{{ seq }}</div>
+            <button class="seq-copy" type="button" data-copy="{{ seq }}" title="Copy allele {{ i }} sequence">copy</button>
+            {% else %}<span class="dim">–</span>{% endif %}
+          </td>
+          {% endfor %}
         </tr>
       {% endfor %}
       </tbody>
     </table>
-    <p class="profile-note"><strong>CE-based genotype.</strong> Each row is one marker. <strong>Genotype</strong> is the called allele numbers; <strong>Allele N</strong> + <strong>Reads N</strong> give the per-allele number and its individual coverage. <strong>Total</strong> is all spanning reads (includes stutter / noise peaks not genotype-called). <strong>Allele number</strong> = repeat units counted from the called sequence: length-based CE for simple loci (<code>period ≥ 1</code>), ISFG bracket count for compound loci (<code>period: -1</code>: vWA, FGA, D21S11, D3S1358 …); cross-comparable with CE / Illumina / other callers. <strong>Caveat:</strong> for vWA and D21S11 the legacy CE-kit nomenclature does not map 1:1 to the bracket count — interpret alongside the ISFG string in the Sequences table. The <span class="chip iso">iso</span> chip flags isoalleles (same number, different sequence): click the marker to see them.</p>
+    </div>
+    <p class="profile-note"><strong>CE-based genotype.</strong> Each row is one marker. <strong>Genotype</strong> is the called allele numbers; <strong>Allele N</strong> + <strong>Reads N</strong> give the per-allele number and its individual coverage. <strong>Total</strong> is all spanning reads (includes stutter / noise peaks not genotype-called). <strong>Allele number</strong> = repeat units counted from the called sequence: length-based CE for simple loci (<code>period ≥ 1</code>), ISFG bracket count for compound loci (<code>period: -1</code>: vWA, FGA, D21S11, D3S1358 …); cross-comparable with CE / Illumina / other callers. <strong>AB</strong> is allele balance — coverage share of the strongest called allele, 0.50 being perfectly even; it is only defined for a heterozygote. <strong>QC</strong> lists the flags that actually fired, coloured by severity, and tints the row; a clean locus shows nothing rather than a green PASS, because a label that appears on almost every row stops being read. <strong>Sequence</strong> is the full consensus over the marker window — scroll a cell sideways, or use its copy button. The <span class="chip iso">iso</span> chip flags isoalleles (same number, different sequence): click the marker to see them.</p>
   </div>
 </section>
 
