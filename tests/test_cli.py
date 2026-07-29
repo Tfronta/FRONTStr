@@ -77,3 +77,52 @@ def test_interpret_offers_the_log_flag() -> None:
     result = CliRunner().invoke(app, ["interpret", "--help"])
     assert result.exit_code == 0
     assert "--log" in result.stdout
+
+
+def _option_names(command_name: str) -> set[str]:
+    """Registered option strings for a subcommand.
+
+    Introspected rather than scraped from ``--help``: Rich truncates the help
+    to the terminal width, so a text assertion passes or fails depending on the
+    window it runs in.
+    """
+    import typer.main
+
+    group = typer.main.get_command(app)
+    cmd = group.commands[command_name]  # type: ignore[attr-defined]
+    return {opt for p in cmd.params for opt in getattr(p, "opts", [])}
+
+
+def test_interpret_exposes_the_calling_thresholds() -> None:
+    """ "Lower the min reads" has to be reachable without editing the panel."""
+    opts = _option_names("interpret")
+    for opt in ("--min-reads-third", "--min-phr", "--low-coverage-reads", "--balanced-ab-max"):
+        assert opt in opts, f"{opt} missing from interpret"
+
+
+def test_interpret_can_silence_the_parameter_echo() -> None:
+    assert "--show-params" in _option_names("interpret")
+
+
+def test_every_exposed_threshold_is_in_the_parameter_table() -> None:
+    """A knob the CLI turns but the table cannot describe would be invisible in
+    the report and unmarked when overridden."""
+    from frontstr.params import PARAM_SPECS
+
+    described = {s.name for s in PARAM_SPECS}
+    exposed = {
+        "--min-mapq": "min_mapq",
+        "--flank-anchor": "flank_anchor",
+        "--identity": "identity_threshold",
+        "--len-tolerance": "len_tolerance_bp",
+        "--analytical-thresh": "analytical_thresh",
+        "--calling-thresh": "calling_thresh",
+        "--min-phr": "min_phr_for_het",
+        "--min-reads-third": "min_reads_third",
+        "--low-coverage-reads": "low_coverage_reads",
+        "--balanced-ab-max": "balanced_ab_max",
+    }
+    opts = _option_names("interpret")
+    for flag, param in exposed.items():
+        assert flag in opts, f"{flag} is no longer exposed"
+        assert param in described, f"{param} is turned by {flag} but not in PARAM_SPECS"

@@ -39,6 +39,23 @@ def _interpret_allele_cell(a: Allele) -> str:
     return f"{a.number_label or '?'}({a.n_reads_total})"
 
 
+def _render_params(params: Any) -> str:
+    """The parameter block, with overridden values highlighted for a terminal."""
+    from rich.markup import escape
+
+    from frontstr.params import render_echo
+
+    out = []
+    for line in render_echo(params).splitlines():
+        if "CHANGED" in line:
+            out.append(f"[yellow]{escape(line)}[/yellow]")
+        elif line.startswith("Parameters in force"):
+            out.append(f"[bold]{escape(line)}[/bold]")
+        else:
+            out.append(f"[dim]{escape(line)}[/dim]")
+    return "\n".join(out)
+
+
 def _balance_cell(result: Any) -> str:
     """Allele balance, dimmed while inside the balanced band."""
     ab = result.allele_balance
@@ -467,6 +484,7 @@ def export_cmd(
     from frontstr.log import PROCESS_LOG_NAME, configure_logging
     from frontstr.panel.bed import panel_bed_lines
     from frontstr.panel.loader import load_panel
+    from frontstr.params import RunParameters
     from frontstr.report import RunContext, build_report, serialize_run
 
     wanted = {f.strip().lower() for f in formats.split(",") if f.strip()}
@@ -519,17 +537,14 @@ def export_cmd(
             reference_build=panel.reference_build,
             qc_thresholds=qc_thresholds,
             pipeline_argv=list(sys.argv),
-            effective_params={
-                "min_mapq": min_mapq,
-                "identity_threshold": identity,
-                "analytical_thresh": analytical_thresh,
-                "calling_thresh": calling_thresh,
-                "low_coverage_reads": qc_thresholds.low_coverage_reads,
-                "balanced_ab_max": qc_thresholds.balanced_ab_max,
-                "strand_bias_p": qc_thresholds.strand_bias_p,
-                "reference_fasta": str(reference) if reference else None,
-                "panel_path": str(panel_path),
-            },
+            effective_params=RunParameters.of(
+                min_mapq=min_mapq,
+                identity_threshold=identity,
+                analytical_thresh=analytical_thresh,
+                calling_thresh=calling_thresh,
+                low_coverage_reads=qc_thresholds.low_coverage_reads,
+                balanced_ab_max=qc_thresholds.balanced_ab_max,
+            ).as_audit_rows(),
             panel_bed=panel_bed_lines(panel),
         )
         payload = serialize_run(results, context)
@@ -605,6 +620,7 @@ def report(
     from frontstr.interp import interpret_run
     from frontstr.panel.bed import panel_bed_lines
     from frontstr.panel.loader import load_panel
+    from frontstr.params import RunParameters
     from frontstr.report import RunContext, build_report
 
     try:
@@ -628,14 +644,12 @@ def report(
             run_id=run_id,
             reference_build=panel.reference_build,
             pipeline_argv=list(sys.argv),
-            effective_params={
-                "min_mapq": min_mapq,
-                "identity_threshold": identity,
-                "analytical_thresh": analytical_thresh,
-                "calling_thresh": calling_thresh,
-                "reference_fasta": str(reference) if reference else None,
-                "panel_path": str(panel_path),
-            },
+            effective_params=RunParameters.of(
+                min_mapq=min_mapq,
+                identity_threshold=identity,
+                analytical_thresh=analytical_thresh,
+                calling_thresh=calling_thresh,
+            ).as_audit_rows(),
             panel_bed=panel_bed_lines(panel),
         )
         out_path = build_report(results, context, out)
@@ -837,10 +851,37 @@ def interpret(
             "--catalog", help="Optional allele catalog JSON for ISFG/iso-allele annotation."
         ),
     ] = None,
+    flank_anchor: Annotated[
+        int, typer.Option("--flank-anchor", help="bp of clean flank required each side.")
+    ] = 20,
+    min_phr_for_het: Annotated[
+        float,
+        typer.Option("--min-phr", help="Minor/major read ratio to call a heterozygote."),
+    ] = 0.4,
+    min_reads_third: Annotated[
+        int | None,
+        typer.Option(
+            "--min-reads-third", help="Read floor for a 3rd allele. DERIVED — see --help."
+        ),
+    ] = None,
+    low_coverage_reads: Annotated[
+        int,
+        typer.Option("--low-coverage-reads", help="Flag a call below this coverage. DERIVED."),
+    ] = 20,
+    balanced_ab_max: Annotated[
+        float, typer.Option("--balanced-ab-max", help="Largest balanced allele-balance value.")
+    ] = 0.65,
     log: Annotated[
         bool,
         typer.Option("--log", "-l", help="Print the per-marker process log to stderr."),
     ] = False,
+    show_params: Annotated[
+        bool,
+        typer.Option(
+            "--show-params/--no-show-params",
+            help="Print every parameter in force before the run.",
+        ),
+    ] = True,
     trace: Annotated[
         bool,
         typer.Option("--trace", help="Narrate every pipeline step, per locus, to stderr."),
@@ -875,6 +916,7 @@ def interpret(
     from frontstr.log import configure_logging
     from frontstr.panel.catalog import load_catalog
     from frontstr.panel.loader import load_panel
+    from frontstr.params import RunParameters
     from frontstr.trace import (
         LocusTrace,
         RunHeader,
@@ -885,6 +927,21 @@ def interpret(
 
     if log:
         configure_logging(level=logging.DEBUG, console=True)
+
+    params = RunParameters.of(
+        min_mapq=min_mapq,
+        flank_anchor=flank_anchor,
+        identity_threshold=identity,
+        len_tolerance_bp=len_tolerance,
+        analytical_thresh=analytical_thresh,
+        calling_thresh=calling_thresh,
+        min_phr_for_het=min_phr_for_het,
+        min_reads_third=min_reads_third,
+        low_coverage_reads=low_coverage_reads,
+        balanced_ab_max=balanced_ab_max,
+    )
+    if show_params:
+        console.print(_render_params(params))
 
     traces: list[LocusTrace] = []
     trace_fh = trace_out.open("w", encoding="utf-8") if trace_out else None
@@ -923,6 +980,10 @@ def interpret(
                         1 for s in panel.systems if namer and namer.has_range(s.name)
                     ),
                     tool_version=_v,
+                    overrides=[
+                        (spec.name, params[spec.name], spec.default, spec.provenance)
+                        for spec in params.overrides()
+                    ],
                 )
             )
             if trace_fh is not None:
@@ -932,14 +993,13 @@ def interpret(
         results = interpret_run(
             bam=bam,
             panel=panel,
-            min_mapq=min_mapq,
-            identity_threshold=identity,
-            len_tolerance_bp=len_tolerance,
-            analytical_thresh=analytical_thresh,
-            calling_thresh=calling_thresh,
             reference_fasta=reference,
             catalog=catalog,
             on_trace=emit if want_trace else None,
+            params=params,
+            qc_thresholds=QcThresholds(
+                low_coverage_reads=low_coverage_reads, balanced_ab_max=balanced_ab_max
+            ),
         )
     except FrontstrError as exc:
         console.print(f"[red]interpret error:[/red] {exc}")

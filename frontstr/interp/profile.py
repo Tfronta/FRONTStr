@@ -13,7 +13,7 @@ from pathlib import Path
 
 from frontstr.evidence.cluster import Cluster, cluster_observations
 from frontstr.evidence.consensus import poa_backend_name
-from frontstr.evidence.pileup import PileupCounts, pileup_locus
+from frontstr.evidence.pileup import _DEFAULT_FLANK_ANCHOR, PileupCounts, pileup_locus
 from frontstr.interp.allele_numeric import compute_allele_numeric, resolve_ref_anchor_bp
 from frontstr.interp.amel import interpret_amel
 from frontstr.interp.catalog import annotate_alleles
@@ -21,15 +21,16 @@ from frontstr.interp.classify import classify_allele
 from frontstr.interp.flags import derive_marker_flags
 from frontstr.interp.haplotype import suppress_hp_phantoms
 from frontstr.interp.isfg import ce_from_brackets, ce_from_length, compress_isfg
-from frontstr.interp.models import Allele, CallRule, MarkerResult, TriType
+from frontstr.interp.models import Allele, CallRule, Flag, FlagCode, MarkerResult, TriType
 from frontstr.interp.naming import NameStatus, StrNamer, default_namer
 from frontstr.interp.qc import QcThresholds, derive_run_qc_flags
 from frontstr.interp.stutter import build_expected_stutter
-from frontstr.interp.triallelic import call_profile
+from frontstr.interp.triallelic import DEFAULT_MIN_PHR_FOR_HET, call_profile
 from frontstr.log import get_logger
 from frontstr.motifs import repeat_core_span, reverse_complement
 from frontstr.panel.catalog import AlleleCatalog
 from frontstr.panel.models import Panel, System
+from frontstr.params import RunParameters
 from frontstr.trace import FLANK_SHOWN, BinTrace, ClusterTrace, LocusTrace
 
 log = get_logger(__name__)
@@ -50,6 +51,8 @@ def interpret_marker(
     catalog: AlleleCatalog | None = None,
     namer: StrNamer | None = None,
     trace: LocusTrace | None = None,
+    min_phr_for_het: float = DEFAULT_MIN_PHR_FOR_HET,
+    min_reads_third: int | None = None,
 ) -> MarkerResult:
     """Interpret one marker's evidence into a :class:`MarkerResult`.
 
@@ -70,6 +73,10 @@ def interpret_marker(
         trace: Optional :class:`frontstr.trace.LocusTrace` to fill with the
             interpretation half of the per-locus narrative. The evidence half is
             filled by :func:`_safe_pileup_and_cluster`.
+        min_phr_for_het: Minor allele as a fraction of the major before a
+            heterozygote is called on read counts alone.
+        min_reads_third: Absolute read floor for a 3rd candidate; ``None`` uses
+            each marker's own ``min_reads_third``.
     """
     if namer is None:
         namer = default_namer()
@@ -106,7 +113,11 @@ def interpret_marker(
     annotate_alleles(alleles, system, catalog)
 
     alleles_called, call_rule, tri_type = call_profile(
-        alleles, system, calling_thresh=calling_thresh
+        alleles,
+        system,
+        calling_thresh=calling_thresh,
+        min_phr_for_het=min_phr_for_het,
+        min_reads_third=min_reads_third,
     )
     _report_naming_fallbacks(system, alleles, alleles_called)
     if trace is not None:
@@ -146,6 +157,7 @@ def interpret_run(
     catalog: AlleleCatalog | None = None,
     qc_thresholds: QcThresholds | None = None,
     on_trace: Callable[[LocusTrace], None] | None = None,
+    params: RunParameters | None = None,
 ) -> list[MarkerResult]:
     """End-to-end: for each marker in ``panel``, pileup → cluster → interpret.
 
@@ -158,6 +170,10 @@ def interpret_run(
         on_trace: Called with a filled :class:`frontstr.trace.LocusTrace` as each
             locus finishes, so a CLI can narrate the run as it happens rather
             than after it. ``None`` skips trace collection entirely.
+        params: The run's :class:`frontstr.params.RunParameters`. When given it
+            **overrides** the individual keyword arguments above, so there is one
+            source of truth for what a run used; the keywords remain for library
+            callers that only need one or two.
 
     Returns:
         One :class:`MarkerResult` per marker in panel order, each carrying its
@@ -165,6 +181,15 @@ def interpret_run(
         ``NO_DATA`` result rather than failing.
     """
     out: list[MarkerResult] = []
+    if params is not None:
+        min_mapq = params["min_mapq"]
+        identity_threshold = params["identity_threshold"]
+        len_tolerance_bp = params["len_tolerance_bp"]
+        analytical_thresh = params["analytical_thresh"]
+        calling_thresh = params["calling_thresh"]
+    min_phr_for_het = params["min_phr_for_het"] if params else DEFAULT_MIN_PHR_FOR_HET
+    min_reads_third = params["min_reads_third"] if params else None
+    flank_anchor = params["flank_anchor"] if params else _DEFAULT_FLANK_ANCHOR
     # Built once per run: seeding the reference structures is the expensive part
     # and the result is immutable across markers.
     namer = default_namer()
@@ -233,6 +258,7 @@ def interpret_run(
             len_tolerance_bp=len_tolerance_bp,
             reference_fasta=reference_fasta,
             trace=trace,
+            flank_anchor=flank_anchor,
         )
         result = interpret_marker(
             system=system,
@@ -242,6 +268,8 @@ def interpret_run(
             catalog=catalog,
             namer=namer,
             trace=trace,
+            min_phr_for_het=min_phr_for_het,
+            min_reads_third=min_reads_third,
         )
         if on_trace is not None and trace is not None:
             on_trace(trace)
@@ -257,6 +285,8 @@ def interpret_run(
         out.append(result)
 
     thresholds = derive_run_qc_flags(out, qc_thresholds)
+    if params is not None:
+        _flag_non_default_thresholds(out, params)
     log.info(
         "run.complete",
         n_markers=len(out),
@@ -353,6 +383,7 @@ def _safe_pileup_and_cluster(
     len_tolerance_bp: int,
     reference_fasta: Path | None = None,
     trace: LocusTrace | None = None,
+    flank_anchor: int = _DEFAULT_FLANK_ANCHOR,
 ) -> list[Cluster]:
     """Pileup+cluster wrapper that returns ``[]`` instead of raising on empty loci."""
     counts = PileupCounts() if trace is not None else None
@@ -363,6 +394,7 @@ def _safe_pileup_and_cluster(
             system.ref_start - 1,
             system.ref_end,
             min_mapq=min_mapq,
+            flank_anchor=flank_anchor,
             reference_fasta=reference_fasta,
             counts=counts,
         )
@@ -394,6 +426,36 @@ def _safe_pileup_and_cluster(
         ]
         trace.consensus_backend = poa_backend_name()
     return clusters
+
+
+def _flag_non_default_thresholds(results: list[MarkerResult], params: RunParameters) -> None:
+    """Mark every marker when the run overrode a *measured* default.
+
+    Marker-level rather than run-level because that is where flags already live
+    and where every consumer already looks — the audit census, the XLSX QC
+    sheet, the HTML row tint. A run-level-only note would be the one thing a
+    reviewer scanning per-locus rows never sees.
+
+    Only ``derived`` provenance marks the run. Tuning a chosen threshold is
+    ordinary work; overriding one computed from measured data means the profile
+    is not comparable with a default run, and nobody remembers that six months
+    later.
+    """
+    derived = params.derived_overrides()
+    if not derived:
+        return
+    detail = "; ".join(f"{s.name}={params[s.name]} (default {s.default})" for s in derived)
+    for result in results:
+        if any(f.code == FlagCode.NON_DEFAULT_THRESHOLD for f in result.flags):
+            continue
+        result.flags.append(
+            Flag.of(
+                FlagCode.NON_DEFAULT_THRESHOLD,
+                f"Run overrode {len(derived)} threshold(s) whose default was derived "
+                f"from measured data: {detail}. This profile is not comparable with "
+                "a default run.",
+            )
+        )
 
 
 def _report_naming_fallbacks(system: System, alleles: list[Allele], called: list[Allele]) -> None:

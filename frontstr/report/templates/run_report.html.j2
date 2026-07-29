@@ -354,12 +354,21 @@
 
     {% if payload.meta.effective_params %}
     <h3 style="font-size:13px;margin:16px 0 8px;color:var(--text-soft);">Parameters in force</h3>
-    <p class="pane-note">Every value the run actually used, defaults included. The command line above shows only what was typed, and the parameters that decide a call are usually the ones nobody typed.</p>
-    <dl class="raw-grid">
-      {% for key, value in payload.meta.effective_params | dictsort %}
-      <dt>{{ key }}</dt><dd class="mono">{{ value if value is not none else '–' }}</dd>
+    <p class="pane-note">Every value the run actually used, defaults included. The command line above shows only what was typed, and the parameters that decide a call are usually the ones nobody typed. <strong>Provenance</strong> says where a default came from: <code>derived</code> was computed from measured data, <code>chosen</code> is defensible but picked, <code>convention</code> is inherited from forensic practice. Overriding a <code>derived</code> default makes the run non-comparable with a default one and raises <code>non_default_threshold</code> on every marker.</p>
+    <table class="profile params-table">
+      <thead><tr><th>Parameter</th><th>Value</th><th>Default</th><th>Provenance</th><th>Why this default</th></tr></thead>
+      <tbody>
+      {% for row in payload.meta.effective_params %}
+        <tr class="{% if not row.is_default %}row-sev-warn{% endif %}">
+          <td class="mono">{{ row.name }}</td>
+          <td class="num mono">{{ row.value if row.value is not none else '–' }}</td>
+          <td class="num mono dim">{{ row.default }}</td>
+          <td><span class="chip {% if not row.is_default and row.provenance == 'derived' %}sev-warn{% else %}sev-info{% endif %}">{{ row.provenance }}</span></td>
+          <td class="param-note">{{ row.note }}</td>
+        </tr>
       {% endfor %}
-    </dl>
+      </tbody>
+    </table>
     {% endif %}
 
     {% if payload.meta.panel_bed %}

@@ -168,6 +168,8 @@ class RunHeader:
     consensus_backend: str = ""
     naming_markers: int = 0
     tool_version: str = ""
+    #: ``(name, value, default, provenance)`` for every overridden parameter.
+    overrides: list[tuple[str, object, object, str]] = field(default_factory=list)
 
 
 def render_header(h: RunHeader) -> str:
@@ -203,6 +205,21 @@ def render_header(h: RunHeader) -> str:
             else "legacy CE arithmetic (STRNaming unavailable)",
         )
     )
+    if h.overrides:
+        lines.append(
+            _row(
+                "Overridden",
+                ", ".join(f"{n}={v} (default {d})" for n, v, d, _ in h.overrides),
+            )
+        )
+        derived = [n for n, _, _, prov in h.overrides if prov == "derived"]
+        if derived:
+            lines.append(
+                _row(
+                    "NOT a default run",
+                    f"{', '.join(derived)} — measured default(s) overridden",
+                )
+            )
     lines.append("")
     return "\n".join(lines)
 

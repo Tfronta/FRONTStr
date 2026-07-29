@@ -300,6 +300,15 @@ table.profile tr.row-sev-info td { background: rgba(2, 119, 189, 0.04); }
 .chip.sev-warn { background: rgba(239, 108, 0, 0.12); color: var(--warn); }
 .chip.sev-info { background: rgba(2, 119, 189, 0.10); color: var(--accent, #0277bd); }
 
+table.profile.params-table td.param-note {
+  font-size: 11px;
+  color: var(--text-soft);
+  white-space: normal;
+  max-width: 460px;
+  line-height: 1.5;
+}
+table.profile.params-table td.mono { white-space: nowrap; }
+
 .pane-note {
   font-size: 11px;
   color: var(--text-soft);

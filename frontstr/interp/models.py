@@ -100,6 +100,7 @@ class FlagCode(StrEnum):
     HP_RESCUED_HET = "hp_rescued_het"
     PHASE_BLOCK_SPLIT = "phase_block_split"
     ALLELE_IMBALANCE = "allele_imbalance"
+    NON_DEFAULT_THRESHOLD = "non_default_threshold"
 
 
 _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
@@ -133,6 +134,10 @@ _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
     # be dropping the other allele elsewhere in the run — degradation, a primer
     # variant under a flank, or simply thin coverage.
     FlagCode.ALLELE_IMBALANCE: FlagSeverity.WARN,
+    # WARN: the run overrode a threshold whose default was derived from measured
+    # data. The call may be perfectly good — the point is that it is not
+    # comparable with a default run, and six months later nobody will remember.
+    FlagCode.NON_DEFAULT_THRESHOLD: FlagSeverity.WARN,
 }
 
 

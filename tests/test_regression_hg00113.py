@@ -361,3 +361,55 @@ def test_phase_blocks_are_read_from_the_bam(hg00113_results: list[MarkerResult])
     """If PS stopped being parsed, every guard above would silently pass."""
     with_blocks = [a for r in hg00113_results for a in r.alleles if a.phase_set is not None]
     assert with_blocks, "the 1000G ONT slices are phased and do carry PS"
+
+
+def test_lowering_a_measured_threshold_marks_every_marker() -> None:
+    """A laboratory may test a threshold; it may not do so invisibly.
+
+    ``min_reads_third`` = 5 came from the known-bug #6 investigation into ONT
+    basecaller phantoms. Lowering it re-admits those phantoms, so the resulting
+    profile is not comparable with a default run — and six months later nobody
+    remembers which run was the experiment. The flag is per marker because that
+    is where the audit census, the XLSX QC sheet and the HTML row tint all look.
+    """
+    from frontstr.params import RunParameters
+
+    bam = _require("HG00113")
+    panel = load_panel(PANEL_PATH)
+
+    clean = interpret_run(bam=bam, panel=panel, params=RunParameters.defaults())
+    assert not any(f.code == FlagCode.NON_DEFAULT_THRESHOLD for r in clean for f in r.flags), (
+        "a default run must not be marked"
+    )
+
+    tuned = interpret_run(bam=bam, panel=panel, params=RunParameters.of(min_reads_third=2))
+    flagged = [r for r in tuned if any(f.code == FlagCode.NON_DEFAULT_THRESHOLD for f in r.flags)]
+    assert len(flagged) == len(tuned), "every marker must carry the mark"
+    assert "min_reads_third=2" in flagged[0].flags[-1].message
+    assert "default 5" in flagged[0].flags[-1].message
+
+
+def test_tuning_a_chosen_threshold_does_not_mark_the_run() -> None:
+    """Only measured defaults mark. Ordinary tuning must stay quiet, or the
+    flag fires so often it stops being read."""
+    from frontstr.params import RunParameters
+
+    results = interpret_run(
+        bam=_require("HG00113"),
+        panel=load_panel(PANEL_PATH),
+        params=RunParameters.of(calling_thresh=0.08),
+    )
+    assert not any(f.code == FlagCode.NON_DEFAULT_THRESHOLD for r in results for f in r.flags)
+
+
+def test_parameters_actually_reach_the_pipeline() -> None:
+    """The knobs must change behaviour, not just appear in the echo."""
+    from frontstr.params import RunParameters
+
+    bam = _require("HG00113")
+    panel = load_panel(PANEL_PATH)
+    strict = interpret_run(bam=bam, panel=panel, params=RunParameters.of(min_mapq=60))
+    default = interpret_run(bam=bam, panel=panel, params=RunParameters.defaults())
+    assert sum(r.total_reads for r in strict) < sum(r.total_reads for r in default), (
+        "raising min_mapq must drop reads"
+    )

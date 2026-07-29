@@ -58,8 +58,10 @@ class RunContext:
     pipeline_argv: list[str] = field(default_factory=list)
     #: Every parameter actually in force, defaults included — ``pipeline_argv``
     #: alone is misleading, because the values that decide a call are usually
-    #: the ones nobody typed.
-    effective_params: dict[str, Any] = field(default_factory=dict)
+    #: the ones nobody typed. Rows from
+    #: :meth:`frontstr.params.RunParameters.as_audit_rows`, so each carries its
+    #: default, whether it was changed, and where the default came from.
+    effective_params: list[dict[str, Any]] = field(default_factory=list)
     #: The panel's extraction windows as BED lines. See
     #: :func:`frontstr.panel.bed.panel_bed_lines`.
     panel_bed: list[str] = field(default_factory=list)

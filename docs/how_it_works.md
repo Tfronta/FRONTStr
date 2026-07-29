@@ -7,7 +7,7 @@ read start to finish once, then used as a lookup.
 Companion documents: [`architecture.md`](architecture.md) for module layout,
 [`stutter_calibration.md`](stutter_calibration.md) for the stutter measurement.
 
-Status as of July 2026 — 557 tests passing, ~10,800 lines across 55 modules.
+Status as of July 2026 — 579 tests passing, ~11,000 lines across 56 modules.
 
 ---
 
@@ -741,6 +741,40 @@ the full-window scan: a hundred lowercase flank bases before the brackets even
 start. `isfg_source` (`strnaming` | `bracket_scan`) travels with it, and the raw
 window scan is still available as `isfg_window` in the JSON.
 
+### Parameters, and what changing one costs
+
+**Module:** `frontstr/params.py`
+
+Every knob a run can turn lives in one table with its default and where that
+default came from. A run prints the whole table before it starts — not only what
+was typed, because the values that decide a call are usually the ones nobody
+typed, and a run listing only its command line reads as if it were barely
+configured.
+
+Provenance is the reason the table exists rather than a plain dict:
+
+| | Meaning | Changing it |
+|---|---|---|
+| `derived` | Computed from measured data — `low_coverage_reads` from a binomial dropout calculation, `min_reads_third` from the known-bug #6 phantom work | **Marks the run** |
+| `chosen` | Defensible but picked; the analytical and calling thresholds are the honest examples | Ordinary tuning |
+| `convention` | Inherited from forensic practice — `min_phr_for_het` is the CE heterozygote-balance rule, which is why phasing overrides it | Ordinary tuning |
+
+Overriding a `derived` default raises `NON_DEFAULT_THRESHOLD` on **every
+marker**, carrying the value, the default, and why that default existed. Marker
+level rather than run level because that is where flags already live and where
+every consumer already looks: the audit census, the XLSX QC sheet, the HTML row
+tint. A run-level-only note is the one thing a reviewer scanning per-locus rows
+never sees.
+
+The point is not to stop anyone testing a threshold — `--min-reads-third 2` is a
+legitimate experiment. It is that six months later the profile still says which
+numbers were changed, and that the ones with measured backing are called out
+rather than buried among forty.
+
+`tests/test_params.py` asserts the table's defaults equal the ones the pipeline
+actually uses; a table that drifts is worse than none, because the report would
+confidently print a default nothing is using.
+
 ### Provenance sections
 
 The Raw / Audit page carries three things a reviewer would otherwise have to
@@ -894,7 +928,7 @@ Pileup, clustering, POA consensus, ISFG, allele numbering, stutter,
 classification, haplotype suppression, catalog annotation, genotype calling, QC
 flags, all seven export formats, the audit trail, and batch mode over a
 manifest. Regression-tested against a real ONT sample; CI green on ruff, ruff
-format, mypy and 557 tests.
+format, mypy and 579 tests.
 
 ### Does not work / does not exist
 
