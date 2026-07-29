@@ -453,6 +453,7 @@ def export_cmd(
             --formats profile,evidence,seqs,json,html
     """
     import logging
+    import sys
 
     from frontstr.exports import (
         write_evidence_csv,
@@ -464,6 +465,7 @@ def export_cmd(
     )
     from frontstr.interp import interpret_run
     from frontstr.log import PROCESS_LOG_NAME, configure_logging
+    from frontstr.panel.bed import panel_bed_lines
     from frontstr.panel.loader import load_panel
     from frontstr.report import RunContext, build_report, serialize_run
 
@@ -516,6 +518,19 @@ def export_cmd(
             run_id=run_id,
             reference_build=panel.reference_build,
             qc_thresholds=qc_thresholds,
+            pipeline_argv=list(sys.argv),
+            effective_params={
+                "min_mapq": min_mapq,
+                "identity_threshold": identity,
+                "analytical_thresh": analytical_thresh,
+                "calling_thresh": calling_thresh,
+                "low_coverage_reads": qc_thresholds.low_coverage_reads,
+                "balanced_ab_max": qc_thresholds.balanced_ab_max,
+                "strand_bias_p": qc_thresholds.strand_bias_p,
+                "reference_fasta": str(reference) if reference else None,
+                "panel_path": str(panel_path),
+            },
+            panel_bed=panel_bed_lines(panel),
         )
         payload = serialize_run(results, context)
     except FrontstrError as exc:
@@ -585,7 +600,10 @@ def report(
 
         frontstr report --bam s.bam --panel codis.yaml --out s.html
     """
+    import sys
+
     from frontstr.interp import interpret_run
+    from frontstr.panel.bed import panel_bed_lines
     from frontstr.panel.loader import load_panel
     from frontstr.report import RunContext, build_report
 
@@ -609,6 +627,16 @@ def report(
             operator=operator,
             run_id=run_id,
             reference_build=panel.reference_build,
+            pipeline_argv=list(sys.argv),
+            effective_params={
+                "min_mapq": min_mapq,
+                "identity_threshold": identity,
+                "analytical_thresh": analytical_thresh,
+                "calling_thresh": calling_thresh,
+                "reference_fasta": str(reference) if reference else None,
+                "panel_path": str(panel_path),
+            },
+            panel_bed=panel_bed_lines(panel),
         )
         out_path = build_report(results, context, out)
     except FrontstrError as exc:

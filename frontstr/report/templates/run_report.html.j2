@@ -348,8 +348,25 @@
       <dt>Report</dt><dd><span class="hash" id="report-hash">@@REPORT_SHA256@@</span></dd>
     </dl>
     {% if payload.meta.pipeline_argv %}
-    <h3 style="font-size:13px;margin:16px 0 8px;color:var(--text-soft);">Pipeline command</h3>
+    <h3 style="font-size:13px;margin:16px 0 8px;color:var(--text-soft);">Command</h3>
     <pre class="argv">{{ payload.meta.pipeline_argv | join(' ') }}</pre>
+    {% endif %}
+
+    {% if payload.meta.effective_params %}
+    <h3 style="font-size:13px;margin:16px 0 8px;color:var(--text-soft);">Parameters in force</h3>
+    <p class="pane-note">Every value the run actually used, defaults included. The command line above shows only what was typed, and the parameters that decide a call are usually the ones nobody typed.</p>
+    <dl class="raw-grid">
+      {% for key, value in payload.meta.effective_params | dictsort %}
+      <dt>{{ key }}</dt><dd class="mono">{{ value if value is not none else '–' }}</dd>
+      {% endfor %}
+    </dl>
+    {% endif %}
+
+    {% if payload.meta.panel_bed %}
+    <h3 style="font-size:13px;margin:16px 0 8px;color:var(--text-soft);">Panel windows (BED)</h3>
+    <p class="pane-note">The exact intervals this run extracted from, 1-based inclusive: <code>chrom  start  end  motif  name</code>. Copy it into samtools or IGV to look at the same reads the caller saw.
+      <button class="btn-soft" type="button" data-copy="{{ payload.meta.panel_bed | join('\n') }}">copy BED</button></p>
+    <pre class="argv bed-block">{{ payload.meta.panel_bed | join('\n') }}</pre>
     {% endif %}
   </div>
 

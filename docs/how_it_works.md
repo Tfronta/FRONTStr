@@ -7,7 +7,7 @@ read start to finish once, then used as a lookup.
 Companion documents: [`architecture.md`](architecture.md) for module layout,
 [`stutter_calibration.md`](stutter_calibration.md) for the stutter measurement.
 
-Status as of July 2026 — 552 tests passing, ~10,700 lines across 55 modules.
+Status as of July 2026 — 557 tests passing, ~10,800 lines across 55 modules.
 
 ---
 
@@ -733,6 +733,31 @@ or clean. Typing a flag code into the search box works too.
 There is no aggregated `PASS`, for the reason given above: a label that appears
 on almost every row stops being read.
 
+**One repeat string everywhere.** `Allele.repeat_label` is STRNaming's name when
+the marker has a reporting range, and the legacy `compress_isfg` scan otherwise.
+Every view renders it — the same reason `number_label` exists. Before this, the
+trace printed `CE9.3_TGAA[6]TGA[1]TGAA[3]` while the HTML, CSV and XLSX printed
+the full-window scan: a hundred lowercase flank bases before the brackets even
+start. `isfg_source` (`strnaming` | `bracket_scan`) travels with it, and the raw
+window scan is still available as `isfg_window` in the JSON.
+
+### Provenance sections
+
+The Raw / Audit page carries three things a reviewer would otherwise have to
+take on trust:
+
+- **Command** — the exact `sys.argv`.
+- **Parameters in force** — every value the run used, defaults included. The
+  command line alone is misleading, because the parameters that decide a call
+  are usually the ones nobody typed.
+- **Panel windows (BED)** — the extraction intervals verbatim, 1-based
+  inclusive, `chrom start end motif name`, with a copy button. Naming the loci
+  is not the same as showing the intervals they came from; this pastes straight
+  into samtools or IGV to look at the same reads the caller saw.
+
+All three are omitted rather than faked when a library caller supplies none of
+them.
+
 ### Export formats
 
 `frontstr export --formats …` writes any of:
@@ -869,7 +894,7 @@ Pileup, clustering, POA consensus, ISFG, allele numbering, stutter,
 classification, haplotype suppression, catalog annotation, genotype calling, QC
 flags, all seven export formats, the audit trail, and batch mode over a
 manifest. Regression-tested against a real ONT sample; CI green on ruff, ruff
-format, mypy and 552 tests.
+format, mypy and 557 tests.
 
 ### Does not work / does not exist
 

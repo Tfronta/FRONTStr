@@ -14,9 +14,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from frontstr.caller.bed import write_panel_bed
 from frontstr.caller.vcf import LongTRResult, parse_longtr_vcf
 from frontstr.errors import CallerError
+from frontstr.panel.bed import write_panel_bed
 from frontstr.panel.models import Panel
 
 _DEFAULT_BINARY = "LongTR"
@@ -62,7 +62,7 @@ def build_longtr_argv(
     Args:
         bam: Indexed BAM (single-sample for forensic use).
         fasta: Indexed reference FASTA.
-        bed: BED file of TR regions (see :func:`frontstr.caller.bed.write_panel_bed`).
+        bed: BED file of TR regions (see :func:`frontstr.panel.bed.write_panel_bed`).
         chrom: Restrict to one chromosome via ``--chrom``; ``None`` to process all.
         vcf_out: Output ``.vcf.gz`` path.
         platform: ``"ont"`` (R10 simplex defaults) or ``"hifi"``.

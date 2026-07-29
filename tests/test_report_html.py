@@ -374,3 +374,90 @@ def test_rows_are_filterable_by_flag(tmp_path: Path) -> None:
     row = _profile_table(html).find(".//tbody/tr")
     assert row.get("data-flagged") == "1"
     assert "allele_imbalance" in (row.get("data-search") or "")
+
+
+# ---------------------------------------------------------------------------
+# One repeat string everywhere, and run provenance
+# ---------------------------------------------------------------------------
+
+
+def test_report_shows_the_strnaming_string_not_the_window_scan(tmp_path: Path) -> None:
+    """The bug: --trace printed CE9.3_TGAA[6]… while the HTML printed the
+    legacy full-window scan, a hundred lowercase flank bases before the
+    brackets. Two strings for one allele, in a forensic report."""
+    alleles = [_allele(0, 9.0, 20, AlleleStatus.ALLELE)]
+    alleles[0].strnaming_name = "CE9_TGAA[9]"
+    alleles[0].strnaming_ce = 9.0
+    r = MarkerResult(
+        marker_name="TH01",
+        system=System(
+            name="TH01",
+            chromosome="chr11",
+            ref_start=2_171_000,
+            ref_end=2_171_050,
+            motif="AATG",
+            period=4,
+        ),
+        alleles=alleles,
+        alleles_called=alleles,
+        call_rule=CallRule.HOMOZYGOUS,
+        tri_type=TriType.NONE,
+        total_reads=20,
+    )
+    out = tmp_path / "r.html"
+    build_report([r], RunContext(sample_name="S", panel_name="P"), out)
+    html = out.read_text(encoding="utf-8")
+    assert "CE9_TGAA[9]" in html, "the STRNaming name must reach the report"
+
+
+def test_markers_without_a_strnaming_range_keep_the_legacy_string(tmp_path: Path) -> None:
+    """DYS393 and AMEL have no reporting range; they must still show something."""
+    out = tmp_path / "r.html"
+    build_report(_make_results(), RunContext(sample_name="S", panel_name="P"), out)
+    html = out.read_text(encoding="utf-8")
+    assert "[AATG]9" in html, "the bracket-scan fallback must still render"
+
+
+def test_report_embeds_the_panel_bed(tmp_path: Path) -> None:
+    """Naming the loci is not the same as showing the intervals they came from."""
+    out = tmp_path / "r.html"
+    build_report(
+        _make_results(),
+        RunContext(
+            sample_name="S",
+            panel_name="P",
+            panel_bed=["chr11\t2171000\t2171050\tAATG\tTH01"],
+        ),
+        out,
+    )
+    html = out.read_text(encoding="utf-8")
+    assert "Panel windows (BED)" in html
+    assert "2171000" in html and "2171050" in html
+
+
+def test_report_shows_the_command_and_every_effective_parameter(tmp_path: Path) -> None:
+    """argv alone is misleading: the values that decide a call are the defaults."""
+    out = tmp_path / "r.html"
+    build_report(
+        _make_results(),
+        RunContext(
+            sample_name="S",
+            panel_name="P",
+            pipeline_argv=["frontstr", "export", "--bam", "x.bam"],
+            effective_params={"min_mapq": 20, "calling_thresh": 0.1},
+        ),
+        out,
+    )
+    html = out.read_text(encoding="utf-8")
+    assert "frontstr export --bam x.bam" in html
+    assert "Parameters in force" in html
+    assert "min_mapq" in html and "calling_thresh" in html
+
+
+def test_provenance_sections_are_absent_when_unknown(tmp_path: Path) -> None:
+    """A library caller supplies none of this; the report must not fake it."""
+    out = tmp_path / "r.html"
+    build_report(_make_results(), RunContext(sample_name="S", panel_name="P"), out)
+    html = out.read_text(encoding="utf-8")
+    assert "Panel windows (BED)" not in html
+    assert "Parameters in force" not in html

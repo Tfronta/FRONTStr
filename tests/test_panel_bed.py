@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from frontstr.caller.bed import split_panel_by_chromosome, write_panel_bed
-from frontstr.errors import CallerError
+from frontstr.errors import PanelError
+from frontstr.panel.bed import split_panel_by_chromosome, write_panel_bed
 from frontstr.panel.loader import load_panel
 from frontstr.panel.models import Panel, System
 
@@ -59,7 +59,7 @@ def test_write_panel_bed_skips_no_motif(tmp_path: Path) -> None:
 
 def test_write_panel_bed_raises_when_empty(tmp_path: Path) -> None:
     panel = Panel.model_construct(name="empty", version="0", systems=[])
-    with pytest.raises(CallerError):
+    with pytest.raises(PanelError):
         write_panel_bed(panel, tmp_path / "p.bed")
 
 

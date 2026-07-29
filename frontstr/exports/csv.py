@@ -69,6 +69,7 @@ EVIDENCE_HEADERS: tuple[str, ...] = (
     "cluster_index",
     "status",
     "isfg",
+    "isfg_source",
     "motif_repeat_summary",
     "consensus",
     "length_bp",
@@ -93,6 +94,7 @@ SEQS_HEADERS: tuple[str, ...] = (
     "marker",
     "allele_index",
     "isfg",
+    "isfg_source",
     "motif_repeat_summary",
     "ce",
     "allele_numeric",
@@ -171,6 +173,7 @@ def write_evidence_csv(payload: dict[str, Any], out_path: Path) -> Path:
                     "cluster_index": a["cluster_index"],
                     "status": a["status"],
                     "isfg": a["isfg"],
+                    "isfg_source": a.get("isfg_source", ""),
                     "motif_repeat_summary": motif_repeat_summary(
                         a["consensus"], r["system"]["motif"]
                     ),
@@ -207,6 +210,7 @@ def write_seqs_csv(payload: dict[str, Any], out_path: Path) -> Path:
                     "marker": r["marker_name"],
                     "allele_index": i + 1,
                     "isfg": a["isfg"],
+                    "isfg_source": a.get("isfg_source", ""),
                     "motif_repeat_summary": motif_repeat_summary(
                         a["consensus"], r["system"]["motif"]
                     ),

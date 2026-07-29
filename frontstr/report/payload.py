@@ -53,7 +53,16 @@ class RunContext:
     operator: str | None = None
     run_id: str | None = None
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    #: The exact command line, for the report's provenance section. Populated
+    #: by the CLI from ``sys.argv``; empty for library callers.
     pipeline_argv: list[str] = field(default_factory=list)
+    #: Every parameter actually in force, defaults included — ``pipeline_argv``
+    #: alone is misleading, because the values that decide a call are usually
+    #: the ones nobody typed.
+    effective_params: dict[str, Any] = field(default_factory=dict)
+    #: The panel's extraction windows as BED lines. See
+    #: :func:`frontstr.panel.bed.panel_bed_lines`.
+    panel_bed: list[str] = field(default_factory=list)
     dropout_floor: int = DEFAULT_DROPOUT_FLOOR
     #: QC policy applied during interpretation, carried through so the audit
     #: record states the thresholds the calls were actually made under.
@@ -99,6 +108,8 @@ def serialize_run(
             "bam_path": str(context.bam_path) if context.bam_path else None,
             "bam_sha256": context.bam_sha256,
             "pipeline_argv": context.pipeline_argv,
+            "effective_params": context.effective_params,
+            "panel_bed": context.panel_bed,
             "dropout_floor": context.dropout_floor,
         },
         "summary": summary,
@@ -186,7 +197,14 @@ def _serialize_allele(a: Allele, total_reads: int, motif: str, strand: str = "+"
         "number_is_absolute": a.number_is_absolute,
         "allele_numeric": a.allele_numeric,
         "allele_numeric_source": a.allele_numeric_source,
-        "isfg": a.isfg,
+        # The canonical bracketed string: STRNaming's when it has a range for
+        # this marker, the legacy full-window scan otherwise. One string per
+        # allele across every view — see Allele.repeat_label.
+        "isfg": a.repeat_label,
+        "isfg_source": a.repeat_label_source,
+        # The raw window scan, kept so nothing is lost: it spans the whole
+        # extraction window rather than the standard reporting range.
+        "isfg_window": a.isfg,
         "motif_repeat_summary": motif_repeat_summary(a.consensus, motif, strand=strand),
         "bp_diff": a.bp_diff,
         "is_deletion": a.is_deletion,
@@ -249,7 +267,7 @@ def _profile_row(r: MarkerResult, sample_name: str = "") -> dict[str, Any]:
     for i in range(3):
         slot = called[i] if i < len(called) else None
         if slot is not None:
-            row[f"allele{i + 1}_isfg"] = slot.isfg
+            row[f"allele{i + 1}_isfg"] = slot.repeat_label
             row[f"allele{i + 1}_repeat_summary"] = motif_repeat_summary(
                 slot.consensus, r.system.motif, strand=r.system.strand
             )
@@ -319,7 +337,8 @@ def _seq_rows(results: list[MarkerResult]) -> list[dict[str, Any]]:
                     "n_reads_total": a.n_reads_total,
                     "n_reads_hp1": a.n_reads_hp1,
                     "n_reads_hp2": a.n_reads_hp2,
-                    "isfg": a.isfg,
+                    "isfg": a.repeat_label,
+                    "isfg_source": a.repeat_label_source,
                     "motif_repeat_summary": motif_repeat_summary(
                         a.consensus, r.system.motif, strand=r.system.strand
                     ),

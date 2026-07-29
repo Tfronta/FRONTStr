@@ -300,6 +300,20 @@ table.profile tr.row-sev-info td { background: rgba(2, 119, 189, 0.04); }
 .chip.sev-warn { background: rgba(239, 108, 0, 0.12); color: var(--warn); }
 .chip.sev-info { background: rgba(2, 119, 189, 0.10); color: var(--accent, #0277bd); }
 
+.pane-note {
+  font-size: 11px;
+  color: var(--text-soft);
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+pre.argv.bed-block {
+  max-height: 320px;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.5;
+  tab-size: 12;
+}
+
 table.profile td.marker { font-weight: 600; }
 table.profile td.dim { color: var(--text-faint); }
 table.profile tr.row-discordant td { background: rgba(239, 108, 0, 0.06); }

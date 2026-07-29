@@ -88,7 +88,6 @@ importable and tested; it is simply not cabled to anything.
 | Module | Responsibility |
 |---|---|
 | `longtr` | argv construction and subprocess invocation |
-| `bed` | Panel → BED, whole-panel and per-chromosome |
 | `vcf` | cyvcf2 → in-memory result objects |
 
 What this layer never produces: per-allele coverage. That comes from Evidence.
@@ -104,6 +103,7 @@ What this layer never produces: per-allele coverage. That comes from Evidence.
 | `panel.calibrate` | Derives per-marker `corr_value` from a reference FASTA |
 | `panel.stutter_calib` | Measures stutter from real BAMs and fits a `StutterModel` |
 | `panel.seed_strseq` | STRSeq catalog builder — assembly done, the NCBI fetch is a stub |
+| `panel.bed` | Panel → BED. Lives here, not in `caller`: this is how a panel serializes, and the report embeds it |
 | `ingest.detect`, `ingest.validate` | Input format sniffing and BAM header checks |
 | `ingest.align` | minimap2 wrapper — **not implemented**, raises |
 | `report.payload` | `serialize_run`: the single serializer every consumer shares |

@@ -304,6 +304,38 @@ class Allele(BaseModel):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
+    def repeat_label(self) -> str:
+        """The single bracketed-repeat string every view renders.
+
+        Same reasoning as :attr:`number_label`, which exists because the CLI and
+        the report used to format allele numbers independently and could show
+        ``Δ-2`` and ``14`` for one allele. The strings had drifted the same way:
+        ``--trace`` printed STRNaming's ``CE9.3_TGAA[6]TGA[1]TGAA[3]`` while the
+        HTML, CSV and XLSX printed :attr:`isfg`, which is
+        :func:`~frontstr.interp.isfg.compress_isfg` over the **whole panel
+        window** — a hundred lowercase flank bases before the brackets even
+        start. Two strings for one allele, in a forensic report.
+
+        STRNaming's name wins when present: it is the ISFG DNA Commission's
+        prescribed format (Gettings et al. 2024, Recommendation 2), it is scoped
+        to the marker's standard reporting range instead of our extraction
+        window, and it carries flanking variants explicitly. The legacy string
+        remains the fallback for markers STRNaming has no range for (DYS393,
+        AMEL) and is still available as :attr:`isfg` for anything that needs the
+        raw window view.
+        """
+        return self.strnaming_name or self.isfg
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def repeat_label_source(self) -> str:
+        """``strnaming`` | ``bracket_scan`` | ``none`` — how :attr:`repeat_label` was made."""
+        if self.strnaming_name:
+            return "strnaming"
+        return "bracket_scan" if self.isfg else "none"
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
     def number_label(self) -> str:
         """The single human-facing label for this allele.
 
