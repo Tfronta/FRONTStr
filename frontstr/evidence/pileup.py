@@ -103,8 +103,24 @@ class PileupCounts:
         return sum(self.rejected.values())
 
     def reasons(self) -> list[tuple[RejectReason, int]]:
-        """Rejection reasons, most common first, for display."""
+        """Rejection reasons that fired, most common first."""
         return sorted(self.rejected.items(), key=lambda kv: (-kv[1], kv[0].value))
+
+    def all_reasons(self) -> list[tuple[RejectReason, int]]:
+        """*Every* rejection reason with its count, zeros included.
+
+        Declaration order, so the list reads the same at every locus and the
+        eye learns where to look.
+
+        A funnel that prints only what fired cannot be told apart from one that
+        never checked: "2 reads short of the left flank" leaves open whether
+        MAPQ was examined at all. The same reasoning already governs
+        :attr:`~frontstr.audit.AuditRecord.flags_checked`, which lists every
+        code the pipeline can raise so that an absent code provably means
+        "checked and not found". The read funnel is the other half of that
+        promise, and it was making the weaker claim.
+        """
+        return [(reason, self.rejected.get(reason, 0)) for reason in RejectReason]
 
 
 def pileup_locus(

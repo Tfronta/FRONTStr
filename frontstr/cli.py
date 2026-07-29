@@ -1184,6 +1184,7 @@ def interpret(
         if want_trace:
             from frontstr.evidence.consensus import poa_backend_name
             from frontstr.interp.naming import default_namer
+            from frontstr.panel.stutter_calib import DEFAULT_STUTTER_MODEL
             from frontstr.version import __version__ as _v
 
             namer = default_namer()
@@ -1201,6 +1202,7 @@ def interpret(
                     naming_markers=sum(
                         1 for s in panel.systems if namer and namer.has_range(s.name)
                     ),
+                    stutter_model=DEFAULT_STUTTER_MODEL.describe(),
                     tool_version=_v,
                     overrides=[
                         (spec.name, params[spec.name], spec.default, spec.provenance)

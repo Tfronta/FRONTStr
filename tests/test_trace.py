@@ -382,3 +382,55 @@ class TestRunSummary:
 
     def test_empty_run_does_not_crash(self) -> None:
         assert "No loci" in render_run_summary([])
+
+
+def test_funnel_lists_every_rejection_reason_including_the_zeros() -> None:
+    """A zero is a claim: this was checked and found nothing.
+
+    Printing only the reasons that fired cannot be told apart from never having
+    checked — "2 short of the left flank" leaves open whether MAPQ was examined
+    at all. ``AuditRecord.flags_checked`` already makes the strong claim for QC
+    flags; the read funnel is the other half of it.
+    """
+    counts = PileupCounts(fetched=39, kept=35)
+    counts.rejected[RejectReason.NOT_PRIMARY] = 2
+    counts.rejected[RejectReason.LEFT_FLANK_SHORT] = 2
+
+    text = render_locus(
+        LocusTrace(
+            marker="D3S1358",
+            chrom="chr3",
+            start=45_540_634,
+            end=45_540_907,
+            motif="TCTA",
+            period=4,
+            strand="+",
+            counts=counts,
+        )
+    )
+
+    for reason in RejectReason:
+        assert reason.value in text, f"{reason.value} never appears in the funnel"
+
+
+def test_funnel_reasons_keep_declaration_order() -> None:
+    """Stable order, so the eye learns where to look across loci."""
+    counts = PileupCounts(fetched=10, kept=9)
+    counts.rejected[RejectReason.WINDOW_UNLOCATABLE] = 1
+
+    ordered = [reason for reason, _ in counts.all_reasons()]
+
+    assert ordered == list(RejectReason)
+
+
+def test_header_names_the_stutter_model() -> None:
+    """Which model decided what was an artefact is part of reproducing a run."""
+    from frontstr.panel.stutter_calib import DEFAULT_STUTTER_MODEL
+
+    text = render_header(RunHeader(stutter_model=DEFAULT_STUTTER_MODEL.describe()))
+
+    assert "Stutter model" in text
+    assert DEFAULT_STUTTER_MODEL.version in text
+    assert DEFAULT_STUTTER_MODEL.protocol in text, (
+        "the protocol is what invalidates a run: a PCR-free model under-predicts amplicon stutter"
+    )

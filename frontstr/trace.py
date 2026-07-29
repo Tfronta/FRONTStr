@@ -167,6 +167,10 @@ class RunHeader:
     calling_thresh: float = 0.10
     consensus_backend: str = ""
     naming_markers: int = 0
+    #: Version and provenance of the stutter model in force. Named in the
+    #: header because it decides which candidates become artefacts: a run
+    #: whose trace does not say which model it used cannot be reproduced.
+    stutter_model: str = ""
     tool_version: str = ""
     #: ``(name, value, default, provenance)`` for every overridden parameter.
     overrides: list[tuple[str, object, object, str]] = field(default_factory=list)
@@ -197,6 +201,8 @@ def render_header(h: RunHeader) -> str:
     )
     if h.consensus_backend:
         lines.append(_row("Consensus backend", h.consensus_backend))
+    if h.stutter_model:
+        lines.append(_row("Stutter model", h.stutter_model))
     lines.append(
         _row(
             "Allele naming",
@@ -262,13 +268,23 @@ def render_locus(t: LocusTrace) -> str:
     if t.counts is not None:
         funnel = t.counts
         add(_row("Reads fetched around the window", funnel.fetched))
-        if funnel.n_rejected:
-            add(_row(f"Rejected ({funnel.n_rejected})", "", indent=2).rstrip())
-            for reason, n in funnel.reasons():
-                add(_row(reason.value, n, indent=6))
+        # Every reason, including the ones that did not fire. A zero is a
+        # positive statement — this was checked and found nothing — and it is
+        # what separates an auditable funnel from a plausible one.
+        add(_row(f"Rejected ({funnel.n_rejected})", "", indent=2).rstrip())
+        for reason, n in funnel.all_reasons():
+            add(_row(reason.value, n, indent=6))
         add(_row("Spanning the whole window", f"{funnel.kept}   (total locus coverage)"))
         if funnel.kept == 0:
             add(_row("No usable reads", "locus reported as no_data"))
+            add(
+                _row(
+                    "",
+                    f"nothing cleared MAPQ {t.min_mapq} with {t.flank_anchor} bp of clean "
+                    "flank each side; --min-mapq and --flank-anchor are the knobs",
+                    indent=6,
+                ).rstrip()
+            )
             return "\n".join(lines)
     add("")
 
