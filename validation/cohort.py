@@ -26,6 +26,7 @@ it.
 from __future__ import annotations
 
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -132,17 +133,39 @@ def write_slice_bed(panel_path: Path, out_path: Path, padding: int) -> Path:
 
     Derived rather than committed so the slice regions cannot drift away from
     the windows the caller will actually read.
+
+    A system can occupy **two** regions: AMEL carries ``y_chromosome`` /
+    ``y_ref_start`` / ``y_ref_end`` alongside its chrX window, and both have to
+    be in the slice. Emitting one region per system silently drops the chrY
+    half, and the failure is not an error — every male sample simply calls AMEL
+    as ``X`` instead of ``X,Y``, i.e. the whole cohort gets sex-typed female.
     """
     panel = load_panel(panel_path)
+
     lines: list[str] = []
     for system in panel.systems:
-        start = max(0, system.ref_start - 1 - padding)
-        end = system.ref_end + padding
-        lines.append(f"{system.chromosome}\t{start}\t{end}\t{system.name}")
+        lines.append(_bed_row(system.chromosome, system.ref_start, system.ref_end, system.name))
+        if system.y_chromosome and system.y_ref_start and system.y_ref_end:
+            lines.append(
+                _bed_row(
+                    system.y_chromosome, system.y_ref_start, system.y_ref_end, f"{system.name}_Y"
+                )
+            )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    out_path.write_text("\n".join(_pad(line, padding) for line in lines) + "\n", encoding="utf-8")
     return out_path
+
+
+def _bed_row(chromosome: str, ref_start: int, ref_end: int, name: str) -> str:
+    """One unpadded BED row, converting the panel's 1-based start to BED0."""
+    return f"{chromosome}\t{ref_start - 1}\t{ref_end}\t{name}"
+
+
+def _pad(line: str, padding: int) -> str:
+    """Widen a BED row by ``padding`` bases on both sides, clamped at zero."""
+    chromosome, start, end, name = line.split("\t")
+    return f"{chromosome}\t{max(0, int(start) - padding)}\t{int(end) + padding}\t{name}"
 
 
 def fetch_slice(sample: RemoteSample, bed: Path, out_dir: Path, *, timeout: int) -> Path:
@@ -227,19 +250,37 @@ def fetch(
 
     done: list[tuple[str, Path]] = []
     failed: list[tuple[str, str]] = []
+    fetched_seconds: list[float] = []
     for n, sample in enumerate(selected, start=1):
         cached = (out / f"{sample.sample_id}.codis.bam").exists()
-        console.print(
-            f"  [{n}/{len(selected)}] {sample.sample_id}" + ("  (cached)" if cached else "")
-        )
+        started = time.monotonic()
         try:
             bam = fetch_slice(sample, bed, out, timeout=timeout)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             detail = getattr(exc, "stderr", b"") or b""
             failed.append((sample.sample_id, detail.decode("utf-8", "replace").strip()[:200]))
-            console.print(f"    [red]failed:[/red] {failed[-1][1] or type(exc).__name__}")
+            console.print(
+                f"  [{n}/{len(selected)}] {sample.sample_id}  "
+                f"[red]failed:[/red] {failed[-1][1] or type(exc).__name__}"
+            )
             continue
+
+        elapsed = time.monotonic() - started
         done.append((sample.sample_id, bam.resolve()))
+        if cached:
+            console.print(f"  [{n}/{len(selected)}] {sample.sample_id}  (cached)")
+            continue
+
+        # Estimate from what this run actually fetched, not from the cached
+        # ones — they returned instantly and would flatter the remaining time.
+        fetched_seconds.append(elapsed)
+        mean = sum(fetched_seconds) / len(fetched_seconds)
+        remaining = mean * (len(selected) - n)
+        console.print(
+            f"  [{n}/{len(selected)}] {sample.sample_id}  "
+            f"{bam.stat().st_size / 1e6:.0f} MB in {elapsed:.0f}s"
+            f"   [dim]~{remaining / 60:.0f} min left[/dim]"
+        )
 
     manifest = write_manifest(done, out / "manifest.tsv")
     total_mb = sum(bam.stat().st_size for _, bam in done) / 1e6
