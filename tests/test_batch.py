@@ -468,3 +468,53 @@ def test_log_tags_every_line_with_its_sample(
     stderr = capfd.readouterr().err
     assert "sample=HET" in stderr
     assert "sample=HOM" in stderr
+
+
+def test_trace_streams_live_when_serial(
+    tmp_path: Path, two_sample_bams: tuple[Path, Path], capfd: pytest.CaptureFixture[str]
+) -> None:
+    """With one worker the narrative is watchable, not just archived.
+
+    The sequences and the HP1/HP2 counts are what makes a call followable back
+    to the reads; hiding them in a file the operator has to go find afterwards
+    defeats the point of watching a run at all.
+    """
+    bam_het, _ = two_sample_bams
+    out = tmp_path / "batch_out"
+
+    run_batch(
+        entries=[ManifestEntry("HET", bam_het, "sample")],
+        panel=_synth_panel(),
+        out_dir=out,
+        formats=frozenset({"json"}),
+        workers=1,
+        trace=True,
+    )
+
+    stderr = capfd.readouterr().err
+    assert "SYNTH_MARKER" in stderr, "the locus narrative never reached the terminal"
+    assert "Sequences" in stderr, "the aligned sequences must be on screen"
+    assert "HP1" in stderr, "the haplotype counts must be on screen"
+    # And still archived, so a locus can be re-read later.
+    assert (out / "HET" / "HET.trace.txt").exists()
+
+
+def test_trace_does_not_stream_when_parallel(
+    tmp_path: Path, two_sample_bams: tuple[Path, Path], capfd: pytest.CaptureFixture[str]
+) -> None:
+    """Parallel workers would interleave loci from different samples."""
+    bam_het, bam_hom = two_sample_bams
+    out = tmp_path / "batch_out"
+
+    run_batch(
+        entries=[ManifestEntry("HET", bam_het, "sample"), ManifestEntry("HOM", bam_hom, "sample")],
+        panel=_synth_panel(),
+        out_dir=out,
+        formats=frozenset({"json"}),
+        workers=2,
+        trace=True,
+    )
+
+    assert "Sequences" not in capfd.readouterr().err
+    for sample_id in ("HET", "HOM"):
+        assert (out / sample_id / f"{sample_id}.trace.txt").exists()

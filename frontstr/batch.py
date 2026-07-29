@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import sys
 import traceback
 from collections.abc import Callable, Iterator
 from concurrent.futures import Future, ProcessPoolExecutor, as_completed
@@ -175,7 +176,11 @@ def run_batch(
         log: Emit the per-marker process log on stderr as each sample runs,
             every line tagged with its sample.
         trace: Write the full per-locus narrative to
-            ``<out>/<sample>/<sample>.trace.txt``, one file per sample.
+            ``<out>/<sample>/<sample>.trace.txt``, one file per sample. When
+            ``workers`` is 1 it is *also* streamed to stderr as it happens:
+            serial loci arrive in order, so they can be followed. Parallel
+            workers would interleave the loci of different samples into
+            something unreadable, so there the file is the only sink.
 
     Returns:
         One :class:`BatchResult` per entry in input order.
@@ -202,6 +207,7 @@ def run_batch(
                 run_id=run_id,
                 log=log,
                 trace=trace,
+                trace_live=trace,
             )
             results_map[entry.sample_id] = r
             if progress_callback:
@@ -251,15 +257,20 @@ def run_batch(
 
 @contextmanager
 def _trace_sink(
-    path: Path | None, *, entry: ManifestEntry, panel: Panel
+    path: Path | None, *, entry: ManifestEntry, panel: Panel, live: bool = False
 ) -> Iterator[Callable[[Any], None] | None]:
-    """Yield an ``on_trace`` callback that writes one sample's narrative to disk.
+    """Yield an ``on_trace`` callback that writes one sample's narrative.
 
-    Per sample, per file. A cohort's traces cannot go to the terminal — one
-    sample is already hundreds of lines, so a hundred samples would bury the
-    progress the operator is actually watching, and with parallel workers the
-    loci of different samples would interleave into nonsense. ``--log`` is the
-    live channel; this is the one you read afterwards for a locus you doubt.
+    Always to ``path``, one file per sample, so a locus can be re-read
+    afterwards. Also to stderr when ``live`` — which the caller sets only for a
+    serial run.
+
+    The distinction is interleaving, not volume. With one worker the loci
+    arrive in order and watching them is the whole point: the bins, the
+    clusters, the aligned sequences and the HP1/HP2 counts are what makes a
+    call followable. With several workers the loci of different samples land
+    interleaved and the narrative becomes unreadable, so there the file is the
+    only sink and ``--log`` is the live channel.
 
     Yields ``None`` when ``path`` is ``None``, so the caller passes ``on_trace``
     unconditionally and tracing costs nothing when it is off.
@@ -284,26 +295,29 @@ def _trace_sink(
     path.parent.mkdir(parents=True, exist_ok=True)
 
     with path.open("w", encoding="utf-8") as fh:
-        fh.write(
-            render_header(
-                RunHeader(
-                    inputs=[str(entry.bam)],
-                    panel_name=panel.name,
-                    panel_version=panel.version or "",
-                    n_markers=len(panel.systems),
-                    consensus_backend=poa_backend_name(),
-                    naming_markers=sum(
-                        1 for s in panel.systems if namer and namer.has_range(s.name)
-                    ),
-                    tool_version=__version__,
-                )
+        header = render_header(
+            RunHeader(
+                inputs=[str(entry.bam)],
+                panel_name=panel.name,
+                panel_version=panel.version or "",
+                n_markers=len(panel.systems),
+                consensus_backend=poa_backend_name(),
+                naming_markers=sum(1 for s in panel.systems if namer and namer.has_range(s.name)),
+                tool_version=__version__,
             )
-            + "\n"
         )
+        fh.write(header + "\n")
+        if live:
+            print(header, file=sys.stderr, flush=True)
 
         def emit(locus: LocusTrace) -> None:
             traces.append(locus)
-            fh.write(render_locus(locus) + "\n\n")
+            text = render_locus(locus)
+            fh.write(text + "\n\n")
+            if live:
+                # Flushed per locus: a narrative that appears in blocks when a
+                # buffer happens to fill is not something you can follow.
+                print(text, end="\n\n", file=sys.stderr, flush=True)
 
         try:
             yield emit
@@ -328,6 +342,7 @@ def _process_one_sample(
     run_id: str | None,
     log: bool = False,
     trace: bool = False,
+    trace_live: bool = False,
 ) -> BatchResult:
     """Worker function: runs one sample end-to-end and writes output files.
 
@@ -363,7 +378,7 @@ def _process_one_sample(
         stem = sample_dir / entry.sample_id
 
         trace_path = stem.with_suffix(".trace.txt") if trace else None
-        with _trace_sink(trace_path, entry=entry, panel=panel) as on_trace:
+        with _trace_sink(trace_path, entry=entry, panel=panel, live=trace_live) as on_trace:
             marker_results = interpret_run(
                 bam=entry.bam,
                 panel=panel,

@@ -382,11 +382,15 @@ def batch(
     the per-marker process log on stderr, every line tagged with the sample it
     came from, which is what makes it readable when ``-j`` runs several at once.
 
-    Pass ``--trace`` for the full account of every locus — reads, bins,
-    clusters, consensus, haplotypes, naming and the call. It goes to
-    ``<out>/<sample>/<sample>.trace.txt``, one file per sample, because a
-    cohort's traces cannot go to a terminal: one sample is already hundreds of
-    lines. Use ``frontstr interpret --trace`` to watch a single sample live.
+    Pass ``--trace`` for the full account of every locus — the read funnel,
+    the bins, the clusters with their consensus, the aligned sequences, the
+    HP1/HP2 haplotype counts and the call. It is always written to
+    ``<out>/<sample>/<sample>.trace.txt``, one file per sample.
+
+    **With ``-j 1`` it also appears on screen as it happens.** With more than
+    one worker it does not: the loci of different samples would land
+    interleaved and the narrative would be unreadable, so there ``--log`` is
+    the live channel and the trace is read afterwards.
 
     The manifest is a tab-separated file with columns ``sample_id``, ``bam``
     and optionally ``role`` (sample|positive_ctrl|negative_ctrl|reagent_blank).
