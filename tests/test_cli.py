@@ -159,3 +159,16 @@ def test_interpret_rejects_panel_and_bed_together(tmp_path: Path) -> None:
 def test_interpret_requires_regions_from_somewhere() -> None:
     result = CliRunner().invoke(app, ["interpret", "--bam", "x.bam"])
     assert result.exit_code != 0
+
+
+def test_profile_table_names_the_total_column_consistently() -> None:
+    """The CLI called it Cov while the HTML and CSV called it Total — one number
+    with two names, and nothing said it exceeds the sum of the alleles."""
+    import inspect
+
+    from frontstr import cli
+
+    src = inspect.getsource(cli.interpret)
+    assert 'add_column("Total"' in src
+    assert 'add_column("Cov"' not in src
+    assert "exceeds the sum of the alleles" in src, "the footnote must explain the gap"

@@ -1192,8 +1192,10 @@ def interpret(
     t.add_column("Marker", style="bold")
     t.add_column("Call")
     t.add_column("Tri", style="yellow")
-    t.add_column("Alleles called")
-    t.add_column("Cov", justify="right")
+    # no_wrap: an allele list broken across two lines costs more room than the
+    # column saves, and makes the per-allele reads hard to pair with a number.
+    t.add_column("Alleles called", no_wrap=True)
+    t.add_column("Total", justify="right")
     t.add_column("AB", justify="right")
     # fold, not truncate: a QC column that shows "allele_imbala…" is worse
     # than one that wraps, because the reader cannot tell which flag fired.
@@ -1210,6 +1212,11 @@ def interpret(
             _qc_cell(r),
         )
     console.print(t)
+    console.print(
+        "[dim]Alleles called: number(reads on that allele). Total: every read spanning "
+        "the window, so it exceeds the sum of the alleles by whatever went to "
+        "discarded candidates — run --trace to see them.[/dim]"
+    )
 
 
 @app.command("evidence")
