@@ -31,12 +31,13 @@ changed the answer.
 8. [Parameters](#parameters)
 9. [Watching a run](#watching-a-run)
 10. [Output formats](#output-formats)
-11. [Cohort analysis](#cohort-analysis)
-12. [Data requirements](#data-requirements)
-13. [Limitations](#limitations)
-14. [Documentation](#documentation)
-15. [Development](#development)
-16. [License and citation](#license-and-citation)
+11. [File formats](#file-formats)
+12. [Cohort analysis](#cohort-analysis)
+13. [Data requirements](#data-requirements)
+14. [Limitations](#limitations)
+15. [Documentation](#documentation)
+16. [Development](#development)
+17. [License and citation](#license-and-citation)
 
 ---
 
@@ -476,6 +477,97 @@ and a SHA-256 over the record itself.
 | `ISFG` | The bracketed repeat structure, per allele |
 
 ---
+
+## File formats
+
+### Region file (BED)
+
+`--bed` points FRONTStr at your own regions without curating a panel YAML. The
+file is a plain, headerless, tab-separated BED.
+
+**NOTE: the table header below is descriptive. The BED file must not have one.**
+
+| CHROM | START | END | MOTIF | NAME |
+|---|---|---|---|---|
+| chr1 | 230769515 | 230769783 | TAGA,CAGA | D1S1656 |
+| chr10 | 129294140 | 129294395 | GGAA | D10S1248 |
+| chr11 | 2170987 | 2171215 | AATG | TH01 |
+| chr12 | 5983876 | 5984149 | TCTA,TCTG | vWA |
+| chr2 | 1489550 | 1489684 | AATG | TPOX |
+
+| Column | Required | Contents |
+|---|---|---|
+| 1 CHROM | yes | Contig name, matching the BAM header exactly |
+| 2 START | yes | Window start. 0-based half-open by default; `--bed-coords panel1` reads it as 1-based inclusive |
+| 3 END | yes | Window end |
+| 4 MOTIF | **yes** | Repeat motif on the canonical strand. Comma-separated for compound markers |
+| 5 NAME | no | Marker name. Defaults to `chrom_start_end` |
+
+**The motif column is required, and that is not a parsing convenience.** Without
+it reads cannot be binned by repeat-core length, which is the mechanism that
+stops ONT flank indel errors splitting one allele into a dozen clusters. Binning
+on raw window length instead took TH01 from 2 bins to 12. FRONTStr refuses the
+file rather than calling badly from it.
+
+A ready-made file for the shipped panel is in the repository:
+
+```bash
+frontstr interpret --bam demodata/HG00113.demo.bam --bed examples/panels/codis_20_grch38.bed
+```
+
+**A BED cannot carry calibration.** `corr_value`, `reference_ce`, strand and the
+per-marker triallelic settings live in the panel YAML and have no BED column.
+Markers STRNaming has no reporting range for therefore get an uncalibrated
+repeat count instead of a kit allele, the run says so per locus, and every call
+at them raises `CE_NOMENCLATURE_OFFSET`. Use the YAML panel for the CODIS loci
+and a BED for exploratory regions.
+
+> `demodata/demo_regions.bed` is **not** usable with `--bed`. It has no motif
+> column because its only job is to tell `samtools` which regions to cut.
+
+### VCF output
+
+`--formats vcf` writes a native, sequence-resolved VCF. `ALT` carries each
+allele's full sequence, so iso-alleles stay distinct instead of collapsing to a
+repeat count. It needs `--reference`.
+
+**INFO fields** describe the locus.
+
+| Field | Number | Type | Description |
+|---|---|---|---|
+| `END` | 1 | Integer | End of the panel window |
+| `MARKER` | 1 | String | Forensic marker name |
+| `MOTIF` | 1 | String | Repeat motif(s), comma-separated, on the canonical strand |
+| `PERIOD` | 1 | Integer | Repeat period in bp. `-1` for compound markers whose allele number comes from the bracket count |
+| `STRAND` | 1 | String | Strand of the canonical ISFG motif relative to the reference |
+| `NOTE` | . | String | Informational flags that do not filter the call |
+
+**FORMAT fields** describe the genotype. Fields with `Number=R` carry one value
+per allele in REF-then-ALT order.
+
+| Field | Number | Type | Description |
+|---|---|---|---|
+| `GT` | 1 | String | Genotype. Triallelic loci are emitted as three alleles, e.g. `1/2/3` |
+| `DP` | 1 | Integer | Reads spanning the whole window at this locus |
+| `AD` | R | Integer | Allelic depth: reads supporting each allele |
+| `AL` | R | Integer | Allele length in bp |
+| `MC` | R | String | Canonical allele number, the CE or repeat count |
+| `MM` | R | String | How each `MC` was derived: `strnaming`, `period_ce`, `bracket_count`, … |
+| `ISFG` | R | String | ISFG bracketed nomenclature |
+| `ISO` | R | String | Iso-allele suffix from the curated catalog, when one applies |
+| `HP` | R | String | Read partition as `hp1｜hp2｜untagged` |
+| `SB` | R | String | Strand partition as `forward｜reverse` |
+| `CM` | R | String | Consensus method: `poa_spoa`, `poa_abpoa` or `single` |
+
+**FILTER** carries the QC flags. `PASS` means no warning or error flag was
+raised; every other code is one of the QC conditions, so a VCF can be filtered
+on exactly what the report shows.
+
+> **`DP` means something different here than in the profile table.** In the VCF
+> it is every read spanning the window, which is what the VCF specification
+> means by depth and what `bcftools` users expect. In the HTML and CLI profile
+> it is the depth behind the call, the `AD` values added up. The VCF carries
+> both numbers, since summing `AD` recovers the other one.
 
 ## Cohort analysis
 
