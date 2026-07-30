@@ -112,7 +112,7 @@ class _SpoaBackend:
         return str(cons)
 
 
-_BACKEND: _Backend | None | bool = False  # False = resolution not yet attempted
+_BACKEND: _Backend | bool | None = False  # False = resolution not yet attempted
 
 
 def _resolve_backend() -> _Backend | None:

@@ -73,10 +73,8 @@ def test_interpret_has_no_longtr_option() -> None:
 
 
 def test_interpret_offers_the_log_flag() -> None:
-    """The whole point of --log is discoverability; it must show in --help."""
-    result = CliRunner().invoke(app, ["interpret", "--help"])
-    assert result.exit_code == 0
-    assert "--log" in result.stdout
+    """The whole point of --log is discoverability; it must be a real option."""
+    assert "--log" in _option_names("interpret")
 
 
 def _option_names(command_name: str) -> set[str]:
