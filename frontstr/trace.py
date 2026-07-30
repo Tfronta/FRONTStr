@@ -33,6 +33,9 @@ reasons is taken from it, and it is the single most useful part.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 from frontstr.evidence.pileup import PileupCounts
@@ -106,6 +109,91 @@ class ClusterTrace:
 
 
 @dataclass(slots=True)
+class LocusTiming:
+    """Wall-clock seconds per pipeline stage, for one locus.
+
+    Not performance tuning — diagnosis. A locus that takes twenty times its
+    neighbours is telling you something about the data: a pileup that dominates
+    means reads are being fetched and thrown away, and a consensus that
+    dominates means POA is aligning many divergent candidates, which is what a
+    noisy locus looks like from the inside. Both are visible in the numbers
+    before they are visible in the genotype.
+
+    Stages match the order :func:`render_locus` narrates them in, so a slow
+    number can be read against the section that produced it. Only populated
+    when the run is tracing; untraced runs never construct this.
+    """
+
+    #: Fetch reads and apply the read filters.
+    pileup: float = 0.0
+    #: Group by repeat-core length, then split each bin by pairwise identity.
+    clustering: float = 0.0
+    #: POA consensus per cluster. Measured inside clustering and subtracted
+    #: from it, so the two add up rather than double-counting.
+    consensus: float = 0.0
+    #: Derive each candidate's allele number and bracket string (STRNaming).
+    naming: float = 0.0
+    #: Build the expected-stutter table and classify every candidate against it.
+    stutter: float = 0.0
+    #: Haplotype-aware phantom suppression and catalog annotation.
+    suppression: float = 0.0
+    #: Apply the calling rules and settle on a genotype.
+    calling: float = 0.0
+
+    @property
+    def total(self) -> float:
+        """Everything above. Stages are disjoint, so this is their sum."""
+        return (
+            self.pileup
+            + self.clustering
+            + self.consensus
+            + self.naming
+            + self.stutter
+            + self.suppression
+            + self.calling
+        )
+
+    def stages(self) -> list[tuple[str, float]]:
+        """``(label, seconds)`` in pipeline order, for rendering."""
+        return [
+            ("Pileup (fetch + filter)", self.pileup),
+            ("Clustering (bin + identity)", self.clustering),
+            ("Consensus (POA)", self.consensus),
+            ("Allele naming", self.naming),
+            ("Stutter + classification", self.stutter),
+            ("Phantom suppression + catalog", self.suppression),
+            ("Genotype call", self.calling),
+        ]
+
+    def add(self, other: LocusTiming) -> None:
+        """Accumulate ``other`` into this one, for the run total."""
+        self.pileup += other.pileup
+        self.clustering += other.clustering
+        self.consensus += other.consensus
+        self.naming += other.naming
+        self.stutter += other.stutter
+        self.suppression += other.suppression
+        self.calling += other.calling
+
+
+@contextmanager
+def timed(timing: LocusTiming | None, stage: str) -> Iterator[None]:
+    """Add the block's wall-clock seconds to ``timing.<stage>``.
+
+    A no-op when ``timing`` is ``None``, which is every untraced run, so the
+    hot path pays one attribute check rather than two clock reads.
+    """
+    if timing is None:
+        yield
+        return
+    started = time.perf_counter()
+    try:
+        yield
+    finally:
+        setattr(timing, stage, getattr(timing, stage) + time.perf_counter() - started)
+
+
+@dataclass(slots=True)
 class LocusTrace:
     """Everything one locus did, in pipeline order."""
 
@@ -139,6 +227,8 @@ class LocusTrace:
     balanced_ab_max: float = 0.65
     call_rule: str = ""
     tri_type: str = ""
+    #: Wall-clock per stage. Set for every traced locus.
+    timing: LocusTiming | None = None
     called_labels: list[str] = field(default_factory=list)
     flags: list[tuple[str, str]] = field(default_factory=list)  # (severity, code)
 
@@ -371,6 +461,12 @@ def render_locus(t: LocusTrace) -> str:
         add(_row("Triallelic pattern", t.tri_type))
     for severity, code in t.flags:
         add(_row(f"Flag ({severity})", code, indent=6))
+
+    # 6. What it cost ---------------------------------------------------------
+    if t.timing is not None:
+        add("")
+        for line in _render_timing(t.timing, title="Locus timing"):
+            add(line)
     return "\n".join(lines)
 
 
@@ -508,6 +604,22 @@ def _explain_status(c: ClusterTrace, t: LocusTrace) -> str:
     return ""
 
 
+def _render_timing(timing: LocusTiming, *, title: str, indent: int = 2) -> list[str]:
+    """The stage breakdown, with each stage's share of the total.
+
+    The share is the point. Absolute seconds say a locus was slow; the share
+    says *which stage* made it slow, which is the thing you act on. Stages that
+    took no measurable time are still listed, for the same reason the read
+    funnel lists its zeros.
+    """
+    total = timing.total
+    lines = [_row(title, f"{total:.3f} s", indent=indent).rstrip()]
+    for label, seconds in timing.stages():
+        share = f"{seconds / total:5.1%}" if total > 0 else "    —"
+        lines.append(_row(label, f"{seconds:8.4f} s  {share}", indent=indent + 4))
+    return lines
+
+
 def render_run_summary(traces: list[LocusTrace]) -> str:
     """Closing totals across a run, so the tail of the log is not just the last locus."""
     if not traces:
@@ -547,4 +659,34 @@ def render_run_summary(traces: list[LocusTrace]) -> str:
         lines.append(_row("Flags raised", ""))
         for code, n in sorted(flags.items(), key=lambda kv: (-kv[1], kv[0])):
             lines.append(_row(code, n, indent=6))
+
+    timed_loci = [t for t in traces if t.timing is not None]
+    if timed_loci:
+        total = LocusTiming()
+        for t in timed_loci:
+            assert t.timing is not None
+            total.add(t.timing)
+        lines.append("")
+        # "summed over loci", not "whole run": per-run setup — building the
+        # STRNaming reference structures, deriving the run-level QC flags — sits
+        # outside every locus and is deliberately not counted here. Untimed loci
+        # are named rather than quietly dropped from the denominator; AMEL is
+        # sex typing, not the STR path, so it has no stages to attribute.
+        untimed = len(traces) - len(timed_loci)
+        title = "Timing, summed over loci"
+        if untimed:
+            title += f" ({len(timed_loci)} of {len(traces)}; {untimed} not on the STR path)"
+        lines.extend(_render_timing(total, title=title))
+        # The slowest locus by name. An aggregate hides the one pathological
+        # locus inside twenty-four ordinary ones, and that locus is exactly the
+        # one worth opening.
+        slowest = max(timed_loci, key=lambda t: t.timing.total if t.timing else 0.0)
+        if slowest.timing is not None and slowest.timing.total > 0:
+            share = slowest.timing.total / total.total if total.total else 0.0
+            lines.append(
+                _row(
+                    "Slowest locus",
+                    f"{slowest.marker}  {slowest.timing.total:.3f} s ({share:.0%} of the run)",
+                )
+            )
     return "\n".join(lines)

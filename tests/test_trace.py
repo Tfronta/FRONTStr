@@ -13,6 +13,7 @@ from frontstr.evidence.pileup import PileupCounts, RejectReason
 from frontstr.trace import (
     BinTrace,
     ClusterTrace,
+    LocusTiming,
     LocusTrace,
     RunHeader,
     render_header,
@@ -434,3 +435,76 @@ def test_header_names_the_stutter_model() -> None:
     assert DEFAULT_STUTTER_MODEL.protocol in text, (
         "the protocol is what invalidates a run: a PCR-free model under-predicts amplicon stutter"
     )
+
+
+def _timing(**kwargs: float) -> LocusTiming:
+    return LocusTiming(**kwargs)
+
+
+def test_locus_timing_stages_sum_to_the_total() -> None:
+    """The stages are disjoint, so the shares must add up to 100%.
+
+    Consensus is measured *inside* the clustering block and subtracted from it
+    in profile.py; if that subtraction is ever dropped the two overlap and the
+    breakdown silently over-counts.
+    """
+    t = _timing(pileup=0.5, clustering=0.2, consensus=0.1, naming=0.15, stutter=0.05)
+
+    assert t.total == pytest.approx(1.0)
+    assert sum(seconds for _, seconds in t.stages()) == pytest.approx(t.total)
+
+
+def test_locus_timing_renders_every_stage_including_the_idle_ones() -> None:
+    """Same reasoning as the read funnel's zeros: a stage listed was measured."""
+    text = render_locus(
+        LocusTrace(
+            marker="vWA",
+            chrom="chr12",
+            start=5_983_877,
+            end=5_984_149,
+            motif="TCTA",
+            period=-1,
+            strand="-",
+            timing=_timing(pileup=0.22, naming=0.016),
+        )
+    )
+
+    assert "Locus timing" in text
+    for label, _ in LocusTiming().stages():
+        assert label in text, f"{label} missing from the timing block"
+
+
+def test_run_summary_totals_timing_and_names_the_slowest_locus() -> None:
+    """An aggregate hides the one pathological locus among two dozen ordinary ones."""
+    fast = LocusTrace(
+        marker="TPOX", chrom="chr2", start=1, end=2, motif="AATG", period=4, strand="+"
+    )
+    fast.timing = _timing(pileup=0.01)
+    slow = LocusTrace(
+        marker="D3S1358", chrom="chr3", start=1, end=2, motif="TCTA", period=4, strand="+"
+    )
+    slow.timing = _timing(pileup=0.20, consensus=0.09)
+
+    text = render_run_summary([fast, slow])
+
+    assert "Timing, summed over loci" in text
+    assert "Slowest locus" in text
+    assert "D3S1358" in text
+
+
+def test_run_summary_says_how_many_loci_the_timing_covers() -> None:
+    """AMEL is traced but is not the STR path, so it has no stages to attribute.
+
+    Reporting the total without saying so would put it in the denominator of a
+    percentage it never contributed to.
+    """
+    timed_locus = LocusTrace(
+        marker="TPOX", chrom="chr2", start=1, end=2, motif="AATG", period=4, strand="+"
+    )
+    timed_locus.timing = _timing(pileup=0.01)
+    amel = LocusTrace(marker="AMEL", chrom="chrX", start=1, end=2, motif="A", period=1, strand="+")
+
+    text = render_run_summary([timed_locus, amel])
+
+    assert "1 of 2" in text
+    assert "not on the STR path" in text

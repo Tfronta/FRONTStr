@@ -31,7 +31,14 @@ from frontstr.motifs import repeat_core_span, reverse_complement
 from frontstr.panel.catalog import AlleleCatalog
 from frontstr.panel.models import Panel, System
 from frontstr.params import RunParameters
-from frontstr.trace import FLANK_SHOWN, BinTrace, ClusterTrace, LocusTrace
+from frontstr.trace import (
+    FLANK_SHOWN,
+    BinTrace,
+    ClusterTrace,
+    LocusTiming,
+    LocusTrace,
+    timed,
+)
 
 log = get_logger(__name__)
 
@@ -83,42 +90,49 @@ def interpret_marker(
     total_reads = sum(c.n_reads for c in clusters)
     ref_length_bp = resolve_ref_anchor_bp(system, explicit=ref_length_bp)
 
-    alleles = [
-        _allele_from_cluster(idx, c, system, ref_length_bp, namer) for idx, c in enumerate(clusters)
-    ]
+    timing = trace.timing if trace is not None else None
 
-    parents = [
-        c
-        for c, a in zip(clusters, alleles, strict=True)
-        if a.fraction(total_reads) >= parent_fraction and not a.is_deletion
-    ]
-    expected = build_expected_stutter(parents, system)
+    with timed(timing, "naming"):
+        alleles = [
+            _allele_from_cluster(idx, c, system, ref_length_bp, namer)
+            for idx, c in enumerate(clusters)
+        ]
 
-    for a in alleles:
-        a.expected_stutter = expected.get(a.consensus, 0.0)
-        a.status = classify_allele(
-            a,
-            total_reads=total_reads,
-            expected_stutter=expected,
-            analytical_thresh=analytical_thresh,
+    with timed(timing, "stutter"):
+        parents = [
+            c
+            for c, a in zip(clusters, alleles, strict=True)
+            if a.fraction(total_reads) >= parent_fraction and not a.is_deletion
+        ]
+        expected = build_expected_stutter(parents, system)
+
+        for a in alleles:
+            a.expected_stutter = expected.get(a.consensus, 0.0)
+            a.status = classify_allele(
+                a,
+                total_reads=total_reads,
+                expected_stutter=expected,
+                analytical_thresh=analytical_thresh,
+                calling_thresh=calling_thresh,
+            )
+
+    with timed(timing, "suppression"):
+        # Suppress same-haplotype split-allele phantoms before the profile is
+        # called, so a phantom can neither be reported nor raise a false mixture.
+        # No-op on unphased BAMs and on allow_triallelic markers.
+        n_phantoms = suppress_hp_phantoms(alleles, system)
+
+        # Enrich ISFG / CE / iso-allele suffix from the curated catalog (no-op if None).
+        annotate_alleles(alleles, system, catalog)
+
+    with timed(timing, "calling"):
+        alleles_called, call_rule, tri_type = call_profile(
+            alleles,
+            system,
             calling_thresh=calling_thresh,
+            min_phr_for_het=min_phr_for_het,
+            min_reads_third=min_reads_third,
         )
-
-    # Suppress same-haplotype split-allele phantoms before the profile is
-    # called, so a phantom can neither be reported nor raise a false mixture.
-    # No-op on unphased BAMs and on allow_triallelic markers.
-    n_phantoms = suppress_hp_phantoms(alleles, system)
-
-    # Enrich ISFG / CE / iso-allele suffix from the curated catalog (no-op if None).
-    annotate_alleles(alleles, system, catalog)
-
-    alleles_called, call_rule, tri_type = call_profile(
-        alleles,
-        system,
-        calling_thresh=calling_thresh,
-        min_phr_for_het=min_phr_for_het,
-        min_reads_third=min_reads_third,
-    )
     _report_naming_fallbacks(system, alleles, alleles_called)
     if trace is not None:
         _fill_interp_trace(
@@ -246,6 +260,7 @@ def interpret_run(
                 identity_threshold=identity_threshold,
                 analytical_thresh=analytical_thresh,
                 calling_thresh=calling_thresh,
+                timing=LocusTiming(),
             )
             if on_trace is not None
             else None
@@ -387,17 +402,19 @@ def _safe_pileup_and_cluster(
 ) -> list[Cluster]:
     """Pileup+cluster wrapper that returns ``[]`` instead of raising on empty loci."""
     counts = PileupCounts() if trace is not None else None
+    timing = trace.timing if trace is not None else None
     try:
-        obs = pileup_locus(
-            bam,
-            system.chromosome,
-            system.ref_start - 1,
-            system.ref_end,
-            min_mapq=min_mapq,
-            flank_anchor=flank_anchor,
-            reference_fasta=reference_fasta,
-            counts=counts,
-        )
+        with timed(timing, "pileup"):
+            obs = pileup_locus(
+                bam,
+                system.chromosome,
+                system.ref_start - 1,
+                system.ref_end,
+                min_mapq=min_mapq,
+                flank_anchor=flank_anchor,
+                reference_fasta=reference_fasta,
+                counts=counts,
+            )
     except Exception:
         return []
     if trace is not None:
@@ -408,16 +425,24 @@ def _safe_pileup_and_cluster(
     motifs = [m for m in system.motif.split(",") if m]
     bin_sizes: dict[int, int] | None = {} if trace is not None else None
     core_binned: dict[int, int] | None = {} if trace is not None else None
-    clusters = cluster_observations(
-        obs,
-        identity_threshold=identity_threshold,
-        # A per-marker override in the panel wins over the run-wide default.
-        len_tolerance_bp=system.ont_len_tolerance or len_tolerance_bp,
-        motifs=motifs,
-        strand=system.strand,
-        bin_sizes=bin_sizes,
-        core_binned=core_binned,
-    )
+    consensus_seconds: list[float] | None = [] if timing is not None else None
+    with timed(timing, "clustering"):
+        clusters = cluster_observations(
+            obs,
+            identity_threshold=identity_threshold,
+            # A per-marker override in the panel wins over the run-wide default.
+            len_tolerance_bp=system.ont_len_tolerance or len_tolerance_bp,
+            motifs=motifs,
+            strand=system.strand,
+            bin_sizes=bin_sizes,
+            core_binned=core_binned,
+            consensus_seconds=consensus_seconds,
+        )
+    if timing is not None and consensus_seconds is not None:
+        # Consensus ran inside the block just timed, so move it out rather than
+        # letting the two overlap: the stages must add up to the total.
+        timing.consensus = sum(consensus_seconds)
+        timing.clustering -= timing.consensus
     if trace is not None and bin_sizes is not None and core_binned is not None:
         trace.binned_on_core = bool(motifs)
         trace.bins = [

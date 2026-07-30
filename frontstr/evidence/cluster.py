@@ -31,6 +31,7 @@ thing a length-rounding scheme would destroy.
 
 from __future__ import annotations
 
+import time
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -110,6 +111,7 @@ def cluster_observations(
     strand: str = "+",
     bin_sizes: dict[int, int] | None = None,
     core_binned: dict[int, int] | None = None,
+    consensus_seconds: list[float] | None = None,
 ) -> list[Cluster]:
     """Cluster :class:`Observation` instances by length and sequence identity.
 
@@ -130,6 +132,9 @@ def cluster_observations(
             located.
         bin_sizes: Optional dict filled with ``{binning key: n reads}``, so a
             trace can show why reads grouped as they did.
+        consensus_seconds: Optional list appended with the wall-clock seconds
+            each POA consensus took, so a trace can attribute clustering time
+            between binning and consensus. ``None`` skips the clock entirely.
         core_binned: Optional dict filled with ``{binning key: n reads whose
             repeat core was actually locatable}``. A key whose count is lower
             than ``bin_sizes`` contains reads binned on raw window length, which
@@ -162,7 +167,7 @@ def cluster_observations(
 
     clusters: list[Cluster] = []
     for members in bins.values():
-        clusters.extend(_cluster_by_identity(members, identity_threshold))
+        clusters.extend(_cluster_by_identity(members, identity_threshold, consensus_seconds))
 
     clusters.sort(key=lambda c: c.n_reads, reverse=True)
     return clusters
@@ -202,7 +207,11 @@ def _merge_close_length_bins(
     return merged
 
 
-def _cluster_by_identity(members: list[Observation], identity_threshold: float) -> list[Cluster]:
+def _cluster_by_identity(
+    members: list[Observation],
+    identity_threshold: float,
+    consensus_seconds: list[float] | None = None,
+) -> list[Cluster]:
     """Seed-and-grow clustering: each seed is the first uncovered observation."""
     clusters: list[Cluster] = []
     remaining = list(members)
@@ -216,7 +225,15 @@ def _cluster_by_identity(members: list[Observation], identity_threshold: float) 
             else:
                 leftover.append(m)
         remaining = leftover
-        consensus, method = build_consensus([m.sequence for m in cluster_members])
+        if consensus_seconds is None:
+            consensus, method = build_consensus([m.sequence for m in cluster_members])
+        else:
+            # Timed separately so a trace can tell "many divergent candidates
+            # to align" apart from "many reads to bin" — they look the same
+            # from outside clustering and mean very different things.
+            _started = time.perf_counter()
+            consensus, method = build_consensus([m.sequence for m in cluster_members])
+            consensus_seconds.append(time.perf_counter() - _started)
         clusters.append(
             Cluster(
                 consensus=consensus,
