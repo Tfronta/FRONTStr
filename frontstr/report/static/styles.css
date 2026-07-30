@@ -232,7 +232,13 @@ table.profile tbody td {
   vertical-align: top;
 }
 table.profile tbody tr:hover { background: var(--accent-soft); }
-table.profile td.num { text-align: right; font-variant-numeric: tabular-nums; }
+/* Centred, not right-aligned. These columns are short forensic values, not
+   currency: an allele number, a depth, a balance. Ragged-right numbers pull the
+   eye to the wrong edge when the neighbouring column is a label. Tabular
+   figures keep the digits in a column regardless. */
+table.profile td.num,
+table.profile th.num,
+table.profile thead th[data-sortable="num"] { text-align: center; font-variant-numeric: tabular-nums; }
 table.profile td.mono {
   font-family: var(--mono);
   font-size: 12px;
@@ -360,16 +366,18 @@ table.profile thead th .th-hint {
   text-transform: none;
 }
 
+/* This is where the columns are defined, so it has to be readable rather
+   than merely present. 11px was fine print. */
 .profile-note {
-  margin: 12px 0 0;
+  margin: 14px 0 0;
   padding: 0 2px;
-  font-size: 11px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.6;
   color: var(--text-soft);
 }
 
 .profile-note strong { font-weight: 600; color: var(--text); }
-.profile-note code { font-size: 10px; font-family: var(--mono); }
+.profile-note code { font-size: 12px; font-family: var(--mono); }
 
 /* ---------- chips ---------- */
 .chip {
@@ -909,3 +917,13 @@ table.profile.cohort-table .seq-scroll { width: 200px; }
   white-space: nowrap;
 }
 .btn-download:hover { background: var(--primary-hover); text-decoration: none; color: var(--surface); }
+
+/* Back to the cohort. Set apart from the in-page anchors beside it: those
+   scroll, this one leaves the document, and they should not look alike. */
+nav.page-tabs a.nav-back {
+  font-weight: 600;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  margin-right: 8px;
+}
+nav.page-tabs a.nav-back:hover { background: var(--accent-soft); text-decoration: none; }

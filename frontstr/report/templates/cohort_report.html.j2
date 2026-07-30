@@ -101,10 +101,10 @@
           <tr>
             <th>Sample</th>
             <th class="num">Allele 1</th>
-            <th class="num">Reads 1</th>
+            <th class="num">AD <span class="th-hint">allelic depth</span></th>
             <th class="num">Allele 2</th>
-            <th class="num">Reads 2</th>
-            <th class="num">Cov <span class="th-hint">A1+A2</span></th>
+            <th class="num">AD <span class="th-hint">allelic depth</span></th>
+            <th class="num">DP <span class="th-hint">sum of AD</span></th>
             <th class="num">AB</th>
             <th>QC</th>
             <th>ISFG, allele 1</th>
@@ -144,8 +144,8 @@
 
 <footer class="report-footer">
   <p class="profile-note">
-    Coverage is the reads supporting the reported genotype, the two Reads columns added together.
-    Reads that supported no called allele are in each cell's tooltip; they were discarded by the caller and are not coverage.
+<strong>AD</strong> is allelic depth, the reads supporting that allele. <strong>DP</strong> is the depth behind the call, the two AD columns added together.
+    Reads that supported no called allele are in each cell's tooltip; they were discarded by the caller and are not depth.
     QC codes are abbreviated: hover a chip for the condition and the numbers behind it.
     A sample name links to its individual report, where the per-locus evidence lives.
   </p>

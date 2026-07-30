@@ -193,6 +193,13 @@ def run_batch(
     """
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Decided here because this is the only layer that knows a cohort view will
+    # be written. Each sample's report links back with it; a standalone run gets
+    # no link rather than a dead one.
+    cohort_href = (
+        "../cohort.html" if len(entries) > 1 and "json" in formats and "html" in formats else ""
+    )
+
     futures_to_entry: dict[Future[BatchResult], ManifestEntry] = {}
     results_map: dict[str, BatchResult] = {}
 
@@ -214,6 +221,7 @@ def run_batch(
                 log=log,
                 trace=trace,
                 trace_live=trace,
+                cohort_href=cohort_href,
             )
             results_map[entry.sample_id] = r
             if progress_callback:
@@ -237,6 +245,7 @@ def run_batch(
                     run_id=run_id,
                     log=log,
                     trace=trace,
+                    cohort_href=cohort_href,
                 )
                 futures_to_entry[fut] = entry
             for fut in as_completed(futures_to_entry):
@@ -352,6 +361,7 @@ def _process_one_sample(
     log: bool = False,
     trace: bool = False,
     trace_live: bool = False,
+    cohort_href: str = "",
 ) -> BatchResult:
     """Worker function: runs one sample end-to-end and writes output files.
 
@@ -408,6 +418,7 @@ def _process_one_sample(
             operator=operator,
             run_id=run_id,
             reference_build=panel.reference_build,
+            cohort_href=cohort_href,
         )
         payload = serialize_run(marker_results, context)
 

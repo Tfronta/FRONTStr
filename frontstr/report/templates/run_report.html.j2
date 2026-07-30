@@ -38,6 +38,10 @@
 </header>
 
 <nav class="page-tabs">
+  {# Rendered only when a cohort view exists, so the link can never 404. The
+     per-sample report is reached from the cohort table and has to lead back;
+     without this the only way out was the browser's back button. #}
+  {% if payload.meta.cohort_href %}<a class="nav-back" href="{{ payload.meta.cohort_href }}">&#8592; All samples</a>{% endif %}
   <a href="#profile">Profile</a>
   <a href="#sequences">Sequences</a>
   <a href="#qc">QC</a>
@@ -76,14 +80,14 @@
           <th data-sortable="text">Marker</th>
           <th data-sortable="text">Call</th>
           <th data-sortable="num">Allele 1</th>
-          <th data-sortable="num">Reads 1</th>
+          <th data-sortable="num">AD <span class="th-hint">allelic depth</span></th>
           <th data-sortable="num">Allele 2</th>
-          <th data-sortable="num">Reads 2</th>
+          <th data-sortable="num">AD <span class="th-hint">allelic depth</span></th>
           {% if profile_show_tri %}
           <th data-sortable="num">Allele 3</th>
-          <th data-sortable="num">Reads 3</th>
+          <th data-sortable="num">AD <span class="th-hint">allelic depth</span></th>
           {% endif %}
-          <th data-sortable="num">Cov <span class="th-hint">A1+A2</span></th>
+          <th data-sortable="num">DP <span class="th-hint">sum of AD</span></th>
           <th data-sortable="num">AB <span class="th-hint">balance</span></th>
           <th data-sortable="text">QC</th>
           <th>ISFG, allele 1</th>
@@ -164,7 +168,7 @@
       Hover a chip in the table for the full condition and the numbers behind it.
     </p>
     {% endif %}
-    <p class="profile-note"><strong>CE-based genotype.</strong> Each row is one marker. <strong>Genotype</strong> is the called allele numbers; <strong>Allele N</strong> + <strong>Reads N</strong> give the per-allele number and its individual coverage. <strong>Cov</strong> is the coverage of the call, the sum of the <strong>Reads N</strong> beside it, followed by <span class="dim">+n</span>, the spanning reads that supported no called allele (stutter, noise, rejected candidates). They are shown apart because a single total reads as if every spanning read backed the genotype; a locus whose <span class="dim">+n</span> is large is a locus worth opening in the trace. Fraction thresholds are still measured against the two added together, which is what decides where the noise line falls. <strong>Allele number</strong> = repeat units counted from the called sequence: length-based CE for simple loci (<code>period ≥ 1</code>), ISFG bracket count for compound loci (<code>period: -1</code>: vWA, FGA, D21S11, D3S1358 …); cross-comparable with CE / Illumina / other callers. <strong>AB</strong> is allele balance, the coverage share of the strongest called allele, 0.50 being perfectly even. It is only defined for a heterozygote. <strong>QC</strong> lists the flags that actually fired, coloured by severity, and tints the row; a clean locus shows nothing rather than a green PASS, because a label that appears on almost every row stops being read. <strong>ISFG</strong> is the bracketed repeat structure of each called allele. It is the form the ISFG DNA Commission prescribes, and the one that can be read against another laboratory's profile. The full consensus sequence is in <a href="#sequences">Sequences</a> below, one row per allele, where there is room for it. The <span class="chip iso">iso</span> chip flags isoalleles (same number, different sequence): click the marker to see them.</p>
+    <p class="profile-note"><strong>CE-based genotype.</strong> Each row is one marker. <strong>Genotype</strong> is the called allele numbers; <strong>Allele N</strong> + <strong>AD</strong> give the per-allele number and its allelic depth, the reads supporting that allele. <strong>DP</strong> is the depth behind the call, the <strong>AD</strong> columns added together. It is the sum of the <em>called</em> alleles, not every read spanning the window: reads that supported no called allele are stutter, noise or rejected candidates, they were discarded by the caller, and counting them here would report discarded evidence as depth. That spanning count is in each cell's tooltip, because it is still the denominator every fraction threshold is measured against, which is what decides where the noise line falls. <strong>Allele number</strong> = repeat units counted from the called sequence: length-based CE for simple loci (<code>period ≥ 1</code>), ISFG bracket count for compound loci (<code>period: -1</code>: vWA, FGA, D21S11, D3S1358 …); cross-comparable with CE / Illumina / other callers. <strong>AB</strong> is allele balance, the coverage share of the strongest called allele, 0.50 being perfectly even. It is only defined for a heterozygote. <strong>QC</strong> lists the flags that actually fired, coloured by severity, and tints the row; a clean locus shows nothing rather than a green PASS, because a label that appears on almost every row stops being read. <strong>ISFG</strong> is the bracketed repeat structure of each called allele. It is the form the ISFG DNA Commission prescribes, and the one that can be read against another laboratory's profile. The full consensus sequence is in <a href="#sequences">Sequences</a> below, one row per allele, where there is room for it. The <span class="chip iso">iso</span> chip flags isoalleles (same number, different sequence): click the marker to see them.</p>
   </div>
 </section>
 

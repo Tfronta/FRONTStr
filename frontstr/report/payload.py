@@ -69,6 +69,11 @@ class RunContext:
     #: QC policy applied during interpretation, carried through so the audit
     #: record states the thresholds the calls were actually made under.
     qc_thresholds: QcThresholds = field(default_factory=QcThresholds)
+    #: Relative href back to the cohort view, when this sample was one of many.
+    #: Empty for a standalone run, where there is nothing to go back to and a
+    #: dead link would be worse than no link. Set by the batch, which is the
+    #: only layer that knows whether a cohort view will exist.
+    cohort_href: str = ""
 
 
 def serialize_run(
@@ -113,6 +118,7 @@ def serialize_run(
             "effective_params": context.effective_params,
             "panel_bed": context.panel_bed,
             "dropout_floor": context.dropout_floor,
+            "cohort_href": context.cohort_href,
         },
         "summary": summary,
         "qc": qc,

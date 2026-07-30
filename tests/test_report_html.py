@@ -307,8 +307,11 @@ def test_profile_row_carries_sample_alleles_coverage_and_sequences(tmp_path: Pat
 
     headers = [th.text_content().strip() for th in _profile_table(html).findall(".//thead/tr/th")]
     joined = " | ".join(headers)
-    for wanted in ("Sample", "Marker", "Allele 1", "Reads 1", "Allele 2", "Reads 2"):
+    # Forensic nomenclature: AD is allelic depth, DP is the depth behind the
+    # call. "Reads 1" said the same thing in words nobody reports genotypes in.
+    for wanted in ("Sample", "Marker", "Allele 1", "Allele 2", "AD", "DP"):
         assert wanted in joined, f"missing column {wanted!r} in {joined}"
+    assert "Reads" not in joined, "the old label must be gone, not merely joined by a new one"
     # The bracketed ISFG string, not the raw consensus. This table is the
     # profile a reader compares against another profile, and a wall of bases
     # cannot be compared by eye; the full consensus is in Sequences below,
@@ -518,8 +521,8 @@ def test_profile_coverage_is_the_call_not_every_spanning_read(tmp_path: Path) ->
     table = _profile_table(out.read_text(encoding="utf-8"))
 
     headers = [th.text_content().strip() for th in table.findall(".//thead/tr/th")]
-    cov_col = next(i for i, h in enumerate(headers) if h.startswith("Cov"))
-    reads_cols = [i for i, h in enumerate(headers) if h.startswith("Reads")]
+    cov_col = next(i for i, h in enumerate(headers) if h.startswith("DP"))
+    reads_cols = [i for i, h in enumerate(headers) if h.startswith("AD")]
 
     checked = 0
     for tr in table.findall(".//tbody/tr"):
@@ -530,7 +533,37 @@ def test_profile_coverage_is_the_call_not_every_spanning_read(tmp_path: Path) ->
         per_allele = sum(int(cells[i]) for i in reads_cols if cells[i].isdigit())
         if per_allele:
             assert called == per_allele, (
-                f"{cells[1]}: Cov {called} does not equal the per-allele reads {per_allele}"
+                f"{cells[1]}: DP {called} does not equal the summed AD {per_allele}"
             )
             checked += 1
     assert checked, "no called locus was actually checked"
+
+
+def test_no_way_back_to_the_cohort_without_one(tmp_path: Path) -> None:
+    """A standalone run has nowhere to go back to, so it gets no link."""
+    out = tmp_path / "r.html"
+    build_report(_make_results(), RunContext(sample_name="S", panel_name="P"), out)
+
+    # Against the DOM, not the raw text: the class name is also in the inlined
+    # stylesheet, which is always present whether or not the link is rendered.
+    doc = lxml.html.fromstring(out.read_text(encoding="utf-8"))
+    assert not doc.find_class("nav-back"), "a link to a cohort view that does not exist"
+
+
+def test_a_sample_from_a_cohort_can_get_back_to_it(tmp_path: Path) -> None:
+    """Reached from the cohort table, the report has to lead back.
+
+    Without it the only way out was the browser's back button, which is not a
+    control anyone should have to discover.
+    """
+    out = tmp_path / "r.html"
+    build_report(
+        _make_results(),
+        RunContext(sample_name="S", panel_name="P", cohort_href="../cohort.html"),
+        out,
+    )
+    doc = lxml.html.fromstring(out.read_text(encoding="utf-8"))
+
+    back = doc.find_class("nav-back")
+    assert back, "no link back to the cohort"
+    assert back[0].get("href") == "../cohort.html"
