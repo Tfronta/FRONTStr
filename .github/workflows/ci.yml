@@ -3,13 +3,15 @@ name: CI
 on:
   push:
     branches: [main, develop]
-    paths: ["frontstr/**", ".github/workflows/ci.yml"]
+    paths: ["frontstr/**", "tests/**", "pyproject.toml", ".github/workflows/ci.yml"]
   pull_request:
-    paths: ["frontstr/**", ".github/workflows/ci.yml"]
+    paths: ["frontstr/**", "tests/**", "pyproject.toml", ".github/workflows/ci.yml"]
 
-defaults:
-  run:
-    working-directory: frontstr
+# NOTE: no `defaults.run.working-directory` here. The root of this repo IS the
+# project root (pyproject.toml lives beside this file's .github/), and frontstr/
+# is the Python package. Setting working-directory: frontstr puts every step
+# inside the package directory, where `pip install ".[dev]"` fails with
+# "Neither 'setup.py' nor 'pyproject.toml' found".
 
 jobs:
   lint:
@@ -55,4 +57,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage
-          path: frontstr/coverage.xml
+          path: coverage.xml
