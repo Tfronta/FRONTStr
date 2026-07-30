@@ -40,6 +40,8 @@ from frontstr.interp.profile import interpret_run
 from frontstr.panel.loader import load_panel
 
 SLICE_DIR = Path(__file__).parent / "data" / "ont_slices"
+#: The one sample that is versioned. See demodata/README.md.
+DEMO_DIR = Path(__file__).parents[1] / "demodata"
 PANEL_PATH = Path(__file__).parents[1] / "examples" / "panels" / "codis_20_grch38.yaml"
 
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
@@ -105,7 +107,21 @@ SINGLE_SOURCE_SAMPLES = (
 
 
 def _slice_path(sample: str) -> Path:
-    return SLICE_DIR / f"{sample}.codis.bam"
+    """Where this sample's reads are, preferring the versioned demo.
+
+    HG00113 ships in ``demodata/``: a ±1 kb cut of the same public BAM, verified
+    to produce identical genotypes and depths to the ±10 kb slice. Preferring it
+    means the end-to-end assertions in this file **run in CI**, where the large
+    slices do not exist, instead of skipping and leaving the regression suite as
+    something only one laptop ever executed.
+
+    The wider local slices still win when present, since they are what the
+    stutter model and the coverage floor were measured on.
+    """
+    wide = SLICE_DIR / f"{sample}.codis.bam"
+    if wide.exists():
+        return wide
+    return DEMO_DIR / f"{sample}.demo.bam"
 
 
 def _require(sample: str) -> Path:

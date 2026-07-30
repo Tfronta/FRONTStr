@@ -58,3 +58,9 @@ secrets/
 # ONT R10 BAM slices for development (not versioned)
 tests/data/ont_slices/*.bam
 tests/data/ont_slices/*.bai
+
+# The demo sample IS versioned. It is the one dataset a fresh clone can run
+# end to end without downloading anything, so it has to survive the *.bam
+# rule above. 17 MB, and it reproduces the reference profile exactly.
+!demodata/*.bam
+!demodata/*.bam.bai

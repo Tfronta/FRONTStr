@@ -217,23 +217,51 @@ frontstr doctor --bam sample.bam --panel examples/panels/codis_20_grch38.yaml
 
 ## Quick start
 
-FRONTStr takes an **indexed, aligned BAM or CRAM**. If you have one:
+A real ONT sample ships with the repository, so this runs on a fresh clone with
+**nothing else downloaded**:
 
 ```bash
-frontstr interpret --bam sample.bam --panel examples/panels/codis_20_grch38.yaml
+frontstr interpret --bam demodata/HG00113.demo.bam --panel examples/panels/codis_20_grch38.yaml
 ```
 
-That prints the profile and nothing else. To see *how* it got there, add
-`--trace`; to write files, use `export`. If you do not have an ONT BAM to hand,
-the [tutorial](#tutorial-from-a-public-sample-to-a-report) builds one from public
-data in about a minute.
+```
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━┳━━━━━━┳━━━━━━━━━━━┓
+┃ Marker   ┃ Call         ┃ Tri ┃ Alleles called ┃ Cov ┃   AB ┃ QC        ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━╇━━━━━━╇━━━━━━━━━━━┩
+│ D3S1358  │ homozygous   │ -   │ 14(31)         │  31 │    - │ -         │
+│ vWA      │ heterozygous │ -   │ 14(17), 16(16) │  33 │ 0.52 │ -         │
+│ FGA      │ heterozygous │ -   │ 24(15), 21(11) │  26 │ 0.58 │ -         │
+```
+
+Then, in order of how much they tell you:
+
+```bash
+# how it reached every call: reads, bins, clusters, haplotypes, naming
+frontstr interpret --bam demodata/HG00113.demo.bam --panel examples/panels/codis_20_grch38.yaml --trace
+
+# the full set of output files, including a self-contained HTML report
+frontstr export --bam demodata/HG00113.demo.bam --panel examples/panels/codis_20_grch38.yaml \
+  --out-dir out/ --formats profile,seqs,evidence,json,html,xlsx
+```
+
+`demodata/HG00113.demo.bam` is 17 MB: 1,077 ONT R10 reads from a public
+1000 Genomes sample, covering all 25 panel markers. It reproduces the reference
+profile exactly. See [`demodata/README.md`](demodata/README.md) for its
+provenance and expected output.
+
+To run on **your own** data, point `--bam` at any indexed BAM or CRAM aligned to
+GRCh38. The [tutorial](#tutorial-from-a-public-sample-to-a-report) below shows
+how to cut a panel-sized slice from a whole-genome BAM.
 
 ---
 
 ## Tutorial: from a public sample to a report
 
-Every command here runs on a clean machine with no local data. It uses
-**HG00113**, a 1000 Genomes GBR sample from the public ONT open-data bucket.
+The [quick start](#quick-start) already ran on the bundled demo. This section
+does the step the demo skips: **cutting a panel-sized slice out of a
+whole-genome BAM**, which is what you will do with your own samples. It uses
+**HG00113** from the public ONT open-data bucket, the same sample the demo was
+made from, so you can check your result against a known answer.
 
 ### 1. Cut a panel-sized slice from the public BAM
 
@@ -516,11 +544,17 @@ To use your own regions instead, `--bed` takes a plain BED. It cannot carry
 calibration, so markers STRNaming has no reporting range for get an uncalibrated
 repeat count rather than a kit allele, and the run says so per locus.
 
-### Example data is not shipped
+### Example data
 
-The ONT slices the integration tests use are ~200 MB and are **not versioned**.
-The tests skip cleanly when they are absent. Build your own with the tutorial's
-step 1, which is exactly how they were made.
+One sample **is** versioned: [`demodata/HG00113.demo.bam`](demodata/README.md),
+17 MB, so a fresh clone can run the tool without downloading anything. It is a
+±1 kb cut of a public 1000 Genomes ONT BAM with the unused tags stripped, and it
+reproduces the reference profile exactly.
+
+The wider ±10 kb slices the full regression suite uses (five samples, ~200 MB)
+are **not** versioned. Tests needing them skip cleanly; the HG00113 assertions
+run against the demo instead. Build your own with the tutorial's step 1, which
+is how they were made.
 
 ---
 
@@ -565,6 +599,7 @@ Part of the documentation, not a disclaimer.
 | [`docs/parameters.md`](docs/parameters.md) | The ten parameters: what each does, the line that applies it, where its default came from, what changing it costs |
 | [`docs/stutter_calibration.md`](docs/stutter_calibration.md) | How the stutter model was measured, and its caveats |
 | [`docs/architecture.md`](docs/architecture.md) | Module layout |
+| [`demodata/README.md`](demodata/README.md) | The bundled demo sample: provenance, how it was cut, and its expected profile |
 | [`benchmark/README.md`](benchmark/README.md) | The development benchmark against other callers. **Not part of running FRONTStr** |
 | [`ROADMAP.md`](ROADMAP.md) | Delivery plan |
 
@@ -580,9 +615,11 @@ ruff check frontstr tests && ruff format --check frontstr tests && mypy frontstr
 ```
 
 The integration tests run the whole pipeline against a real ONT R10 BAM and
-assert the genotype of every marker. Those slices are not versioned (~200 MB),
-so the tests skip cleanly when the data is absent — see
-[Data requirements](#data-requirements) for how to rebuild them.
+assert the genotype of every marker. **They run on a fresh clone**, against the
+bundled [demo sample](demodata/README.md), so the end-to-end assertions are
+exercised in CI rather than only on one laptop. The tests that need the other
+four samples skip cleanly until those ~200 MB slices are rebuilt — see
+[Data requirements](#data-requirements).
 
 ---
 
