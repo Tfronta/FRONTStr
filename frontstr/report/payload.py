@@ -261,6 +261,12 @@ def _profile_row(r: MarkerResult, sample_name: str = "") -> dict[str, Any]:
         "call_rule": r.call_rule.value,
         "tri_type": r.tri_type.value,
         "total_reads": r.total_reads,
+        # The two numbers the CLI already reports separately. `total_reads` is
+        # the denominator every fraction threshold is measured against, so it
+        # stays; but it is the wrong figure to *show* as the locus coverage —
+        # see MarkerResult.called_reads.
+        "called_reads": r.called_reads,
+        "discarded_reads": r.discarded_reads,
         "status_chip": _status_chip(r),
         "allele_balance": r.allele_balance,
         "flags": [{"code": f.code.value, "severity": f.severity.value} for f in r.flags],

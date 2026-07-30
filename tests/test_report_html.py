@@ -467,3 +467,35 @@ def test_provenance_sections_are_absent_when_unknown(tmp_path: Path) -> None:
     html = out.read_text(encoding="utf-8")
     assert "Panel windows (BED)" not in html
     assert "Parameters in force" not in html
+
+
+def test_profile_coverage_is_the_call_not_every_spanning_read(tmp_path: Path) -> None:
+    """Cov must equal the per-allele Reads beside it, with the rest shown apart.
+
+    Regression: the column was a single ``Total`` of every spanning read, so a
+    locus with 17 + 16 reads on its two alleles displayed 38. It read as better
+    evidenced than it was, the arithmetic on screen did not add up, and it
+    disagreed with `frontstr interpret`, which had already been fixed to lead
+    with the coverage of the call. See MarkerResult.called_reads.
+    """
+    out = tmp_path / "r.html"
+    build_report(_make_results(), RunContext(sample_name="S-COV", panel_name="P"), out)
+    table = _profile_table(out.read_text(encoding="utf-8"))
+
+    headers = [th.text_content().strip() for th in table.findall(".//thead/tr/th")]
+    cov_col = next(i for i, h in enumerate(headers) if h.startswith("Cov"))
+    reads_cols = [i for i, h in enumerate(headers) if h.startswith("Reads")]
+
+    checked = 0
+    for tr in table.findall(".//tbody/tr"):
+        cells = [td.text_content().strip() for td in tr.findall("td")]
+        if not cells or not cells[cov_col]:
+            continue
+        called = int(cells[cov_col].split("+")[0].strip())
+        per_allele = sum(int(cells[i]) for i in reads_cols if cells[i].isdigit())
+        if per_allele:
+            assert called == per_allele, (
+                f"{cells[1]}: Cov {called} does not equal the per-allele reads {per_allele}"
+            )
+            checked += 1
+    assert checked, "no called locus was actually checked"
