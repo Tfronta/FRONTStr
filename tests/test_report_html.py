@@ -347,10 +347,45 @@ def test_flags_appear_in_the_profile_table(tmp_path: Path) -> None:
     html = out.read_text(encoding="utf-8")
     table = _profile_table(html)
 
-    assert "allele_imbalance" in table.text_content()
+    # The chip is the abbreviation, so the QC column stays narrow enough that
+    # Allele 2 and its read count do not fall off the right edge. The full code
+    # rides in the tooltip and in the legend under the table.
+    assert "AI" in table.text_content(), "the abbreviated code must be on the chip"
+    assert "allele_imbalance" not in table.text_content(), (
+        "the full code belongs in the tooltip, not in the cell"
+    )
+    assert 'title="allele_imbalance' in html, "the tooltip must carry the full code"
     assert table.find_class("sev-warn"), "flag chips must be coloured by severity"
     row = table.find(".//tbody/tr")
     assert "row-sev-warn" in (row.get("class") or ""), "a flagged row must be tinted"
+
+
+def test_qc_legend_lists_only_the_codes_this_run_raised(tmp_path: Path) -> None:
+    """A legend of all fifteen codes is a wall nobody reads.
+
+    It also has to expand the abbreviations actually shown, or the narrow chips
+    become unreadable jargon.
+    """
+    out = tmp_path / "r.html"
+    build_report(_flagged_results(), RunContext(sample_name="S-QC", panel_name="P"), out)
+    html = out.read_text(encoding="utf-8")
+
+    legend = lxml.html.fromstring(html).find_class("qc-legend")
+    assert legend, "no QC legend was rendered"
+    text = legend[0].text_content()
+    assert "allele_imbalance" in text, "the raised code must be expanded"
+    assert "phase_block_split" not in text, "a code that never fired must not be listed"
+
+
+def test_every_flag_code_has_an_abbreviation() -> None:
+    """A new code without one would render a blank chip, silently."""
+    from frontstr.interp.models import FlagCode
+
+    shorts = {code: code.short for code in FlagCode}
+
+    assert all(shorts.values()), "every code needs a non-empty abbreviation"
+    assert len(set(shorts.values())) == len(shorts), f"abbreviations collide: {shorts}"
+    assert all(len(s) <= 3 for s in shorts.values()), "abbreviations must stay narrow"
 
 
 def test_a_clean_locus_shows_no_pass_label(tmp_path: Path) -> None:

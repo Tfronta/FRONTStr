@@ -269,7 +269,18 @@ def _profile_row(r: MarkerResult, sample_name: str = "") -> dict[str, Any]:
         "discarded_reads": r.discarded_reads,
         "status_chip": _status_chip(r),
         "allele_balance": r.allele_balance,
-        "flags": [{"code": f.code.value, "severity": f.severity.value} for f in r.flags],
+        # `short` for the chip, `code` and `message` for its tooltip and for
+        # the legend under the table. All three from FlagCode, so the chips
+        # and the legend cannot describe different things.
+        "flags": [
+            {
+                "code": f.code.value,
+                "short": f.code.short,
+                "severity": f.severity.value,
+                "message": f.message,
+            }
+            for f in r.flags
+        ],
         "worst_severity": _worst_severity(r),
     }
     for i in range(3):

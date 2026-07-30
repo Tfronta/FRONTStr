@@ -102,6 +102,40 @@ class FlagCode(StrEnum):
     ALLELE_IMBALANCE = "allele_imbalance"
     NON_DEFAULT_THRESHOLD = "non_default_threshold"
 
+    @property
+    def short(self) -> str:
+        """Two or three letter abbreviation, for a dense table cell.
+
+        Spelled out per code rather than derived from the name, because
+        initials collide (``dropout`` and ``dxs`` would both be D) and because
+        the abbreviation is shown to a reader: it has to be guessable, not
+        merely unique. Every view that abbreviates uses this one, so the legend
+        under a table can never drift from the chips above it.
+        """
+        return _SHORT_CODES[self]
+
+
+#: See :attr:`FlagCode.short`. Kept beside the enum so a new code without an
+#: abbreviation fails the test in tests/test_interp_flags.py rather than
+#: rendering a blank chip.
+_SHORT_CODES: dict[FlagCode, str] = {
+    FlagCode.LOW_COVERAGE: "LC",
+    FlagCode.DROPOUT: "DO",
+    FlagCode.STRAND_BIAS: "SB",
+    FlagCode.TRIALLELIC: "TRI",
+    FlagCode.MIXTURE_SUSPECTED: "MIX",
+    FlagCode.LONGTR_DISCORDANT: "LTD",
+    FlagCode.INEXACT_ALLELE: "IA",
+    FlagCode.ISOALLELE: "ISO",
+    FlagCode.CE_NOMENCLATURE_OFFSET: "CNO",
+    FlagCode.CONSENSUS_FALLBACK: "CF",
+    FlagCode.HP_PHANTOM_COLLAPSED: "HPC",
+    FlagCode.HP_RESCUED_HET: "HPR",
+    FlagCode.PHASE_BLOCK_SPLIT: "PBS",
+    FlagCode.ALLELE_IMBALANCE: "AI",
+    FlagCode.NON_DEFAULT_THRESHOLD: "NDT",
+}
+
 
 _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
     FlagCode.LOW_COVERAGE: FlagSeverity.WARN,

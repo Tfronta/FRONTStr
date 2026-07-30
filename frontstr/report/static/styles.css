@@ -307,7 +307,7 @@ table.profile .seq-copy {
 }
 table.profile .seq-copy:hover { color: var(--text); border-color: var(--text-faint); }
 
-table.profile td.qc-cell { white-space: normal; max-width: 210px; }
+table.profile td.qc-cell { white-space: normal; }
 table.profile td.qc-cell .chip { margin: 0 3px 3px 0; }
 table.profile td.ab-uneven { color: var(--warn); font-weight: 600; }
 
@@ -771,3 +771,23 @@ table.profile thead th[data-sortable] { cursor: pointer; user-select: none; }
 table.profile thead th[data-sortable]:hover { color: var(--primary); }
 table.profile thead th[data-sort-dir="asc"]::after { content: " ▲"; font-size: 10px; }
 table.profile thead th[data-sort-dir="desc"]::after { content: " ▼"; font-size: 10px; }
+
+/* ---------- QC legend ----------
+ * The chips in the QC column are two or three letters so the table fits on a
+ * screen without horizontal scrolling: the full codes (LOW_COVERAGE,
+ * PHASE_BLOCK_SPLIT) pushed Allele 2 and its read count off the right edge,
+ * which hid a called allele behind a scrollbar. The expansion lives here and
+ * in each chip's tooltip.
+ */
+.qc-legend .legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 14px 4px 0;
+  white-space: nowrap;
+}
+.qc-legend code { font-size: 11px; color: var(--text-soft); }
+
+/* Narrower now that the chips are abbreviated; the space goes to the allele
+ * columns, which are what the table is for. */
+table.profile td.qc-cell { max-width: 96px; }
