@@ -13,7 +13,6 @@ toaSTR source exists in this project or in toaSTR's public repository, which
 ships only a Docker Compose file and a SQL schema (verified 2026-07). What the
 notation itself owes to prior art is cited in the README.
 
-Phase 1.5 of ROADMAP.md.
 """
 
 from __future__ import annotations

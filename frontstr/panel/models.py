@@ -2,7 +2,6 @@
 
 A ``System`` is a single STR locus; a ``Panel`` groups multiple systems.
 
-Phase 1.2 of ROADMAP.md. See plan-longtr-improved.md §3.4 and §6.
 """
 
 from __future__ import annotations

@@ -1,7 +1,4 @@
-"""Alignment with minimap2 + samtools sort/index.
-
-Implemented in Phase 1.1 of ROADMAP.md.
-"""
+"""Alignment with minimap2 + samtools sort/index."""
 
 from __future__ import annotations
 

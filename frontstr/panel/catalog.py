@@ -1,4 +1,4 @@
-"""Allele catalog: sequence → ISFG/CE lookup table (Phase 2.1 of ROADMAP).
+"""Allele catalog: sequence to ISFG/CE lookup table.
 
 This is the file-based MVP analogue of ``allele_catalog`` from
 plan-longtr-improved.md §3.1. Instead of a Postgres table we ship a committable

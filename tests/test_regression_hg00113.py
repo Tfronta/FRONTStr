@@ -83,7 +83,7 @@ EXPECTED_PROFILE: dict[str, set[str]] = {
     "D12S391": {"21", "20"},
     "D22S1045": {"16"},
     "AMEL": {"X", "Y"},
-    # Hemizygous in a male; reported as homozygous today (see ROADMAP).
+    # Hemizygous in a male; reported as homozygous today.
     "DYS391": {"10"},
     "DYS393": {"14"},
     "DXS7132": {"14"},

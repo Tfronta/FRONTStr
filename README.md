@@ -676,8 +676,14 @@ Part of the documentation, not a disclaimer.
   ±100 bp and the pileup needs reads that span them fully. A deliberate ONT-first
   choice, not an oversight.
 
-`docs/how_it_works.md` §12 lists the known gaps *inside* what does work.
-[`ROADMAP.md`](ROADMAP.md) covers what is planned and what is deferred.
+### Planned
+
+- Validation across the published 1000 Genomes ONT cohort, against Illumina
+  genotypes for the same samples
+- FASTQ input, with the alignment step wired into `frontstr run`
+- A stutter model fitted on amplicon data, alongside the PCR-free one
+- A per-locus aligned-read view, to inspect the pileup a call was made from
+- CODIS `.cmf` export
 
 ---
 
@@ -690,7 +696,6 @@ Part of the documentation, not a disclaimer.
 | [`docs/architecture.md`](docs/architecture.md) | Module layout |
 | [`demodata/README.md`](demodata/README.md) | The bundled demo sample: provenance, how it was cut, and its expected profile |
 | [`benchmark/README.md`](benchmark/README.md) | The development benchmark against other callers. **Not part of running FRONTStr** |
-| [`ROADMAP.md`](ROADMAP.md) | Delivery plan |
 
 ---
 

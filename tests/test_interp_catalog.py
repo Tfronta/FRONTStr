@@ -78,7 +78,7 @@ def test_exact_match_adopts_isfg_and_suffix() -> None:
 
 
 def test_isoalleles_get_distinct_hits() -> None:
-    """The acceptance test from ROADMAP §2.1: 14a vs 14b → distinct catalog hits."""
+    """14a vs 14b resolve to distinct catalog hits."""
     cat = _catalog()
     a, b = _allele(SEQ_14A), _allele(SEQ_14B)
     annotate_with_catalog(a, D3, cat)

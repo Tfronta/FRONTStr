@@ -476,4 +476,4 @@ they describe the fallback path.
 | Module layout | [`architecture.md`](architecture.md) |
 | The audit trail | `frontstr/audit.py` |
 | Demo sample and its expected profile | [`../demodata/README.md`](../demodata/README.md) |
-| Known limitations, planned work | [`../README.md`](../README.md), [`../ROADMAP.md`](../ROADMAP.md) |
+| Known limitations, planned work | [`../README.md`](../README.md) |

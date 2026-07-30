@@ -320,7 +320,7 @@ def run(
     """
     _ = _input, sample, panel, reference, out, platform
     console.print(
-        "[yellow]not implemented yet[/yellow] — see ROADMAP.md (Phase 1).\n"
+        "[yellow]not implemented yet[/yellow]. Align externally and start from a BAM.\n"
         "Use `frontstr inspect <path>` to validate inputs in the meantime."
     )
     raise typer.Exit(code=64)  # EX_USAGE

@@ -64,3 +64,8 @@ tests/data/ont_slices/*.bai
 # rule above. 17 MB, and it reproduces the reference profile exactly.
 !demodata/*.bam
 !demodata/*.bam.bai
+
+# Internal work plan. Kept local: it carries effort estimates and phase
+# numbering that mean nothing outside the project, and it described an
+# external-caller phase that is no longer part of the pipeline.
+ROADMAP.md

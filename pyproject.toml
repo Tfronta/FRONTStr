@@ -90,7 +90,7 @@ packages = ["frontstr"]
 # with "No module named 'frontstr.cli'" from any directory but the repo root.
 
 [tool.hatch.build.targets.sdist]
-include = ["frontstr", "examples", "tests", "README.md", "ROADMAP.md", "LICENSE"]
+include = ["frontstr", "examples", "tests", "demodata", "README.md", "LICENSE"]
 
 [tool.ruff]
 line-length = 100
