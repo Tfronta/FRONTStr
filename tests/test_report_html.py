@@ -309,9 +309,17 @@ def test_profile_row_carries_sample_alleles_coverage_and_sequences(tmp_path: Pat
     joined = " | ".join(headers)
     # Forensic nomenclature: AD is allelic depth, DP is the depth behind the
     # call. "Reads 1" said the same thing in words nobody reports genotypes in.
-    for wanted in ("Sample", "Marker", "Allele 1", "Allele 2", "AD", "DP"):
+    for wanted in ("Sample", "Marker", "Allele 1", "Allele 2", "AD"):
         assert wanted in joined, f"missing column {wanted!r} in {joined}"
     assert "Reads" not in joined, "the old label must be gone, not merely joined by a new one"
+    # No locus total. Depth is reported per allele and only per allele: that is
+    # the evidence behind each allele separately, and it is what clustering by
+    # sequence buys. A summed column also invites the discarded reads to be read
+    # as if they backed the genotype.
+    for gone in ("Cov", "DP", "ΣAD", "Total"):
+        assert not any(h.strip().startswith(gone) for h in headers), (
+            f"{gone} is a locus total; depth belongs per allele"
+        )
     # The bracketed ISFG string, not the raw consensus. This table is the
     # profile a reader compares against another profile, and a wall of bases
     # cannot be compared by eye; the full consensus is in Sequences below,
@@ -507,36 +515,30 @@ def test_provenance_sections_are_absent_when_unknown(tmp_path: Path) -> None:
     assert "Parameters in force" not in html
 
 
-def test_profile_coverage_is_the_call_not_every_spanning_read(tmp_path: Path) -> None:
-    """Cov must equal the per-allele Reads beside it, with the rest shown apart.
+def test_profile_reports_depth_for_every_called_allele(tmp_path: Path) -> None:
+    """Every called allele carries its own read count, and nothing sums them.
 
-    Regression: the column was a single ``Total`` of every spanning read, so a
-    locus with 17 + 16 reads on its two alleles displayed 38. It read as better
-    evidenced than it was, the arithmetic on screen did not add up, and it
-    disagreed with `frontstr interpret`, which had already been fixed to lead
-    with the coverage of the call. See MarkerResult.called_reads.
+    Per-allele depth is the differentiator: a caller that only sizes the repeat
+    cannot say how many reads stand behind each allele. Regression guard for the
+    column that used to total them, which read as if reads the caller had
+    discarded were part of the evidence.
     """
     out = tmp_path / "r.html"
     build_report(_make_results(), RunContext(sample_name="S-COV", panel_name="P"), out)
     table = _profile_table(out.read_text(encoding="utf-8"))
 
     headers = [th.text_content().strip() for th in table.findall(".//thead/tr/th")]
-    cov_col = next(i for i, h in enumerate(headers) if h.startswith("DP"))
-    reads_cols = [i for i, h in enumerate(headers) if h.startswith("AD")]
+    ad_cols = [i for i, h in enumerate(headers) if h.startswith("AD")]
+    assert len(ad_cols) >= 2, "one AD column per allele slot"
 
     checked = 0
     for tr in table.findall(".//tbody/tr"):
         cells = [td.text_content().strip() for td in tr.findall("td")]
-        if not cells or not cells[cov_col]:
-            continue
-        called = int(cells[cov_col].split("+")[0].strip())
-        per_allele = sum(int(cells[i]) for i in reads_cols if cells[i].isdigit())
-        if per_allele:
-            assert called == per_allele, (
-                f"{cells[1]}: DP {called} does not equal the summed AD {per_allele}"
-            )
-            checked += 1
-    assert checked, "no called locus was actually checked"
+        for i in ad_cols:
+            if cells[i].isdigit():
+                assert int(cells[i]) > 0, "a called allele with zero depth is not a call"
+                checked += 1
+    assert checked, "no per-allele depth was rendered at all"
 
 
 def test_no_way_back_to_the_cohort_without_one(tmp_path: Path) -> None:

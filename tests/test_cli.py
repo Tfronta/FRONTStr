@@ -159,27 +159,25 @@ def test_interpret_requires_regions_from_somewhere() -> None:
     assert result.exit_code != 0
 
 
-def test_profile_table_reports_the_coverage_behind_the_call() -> None:
-    """Cov is the reads supporting the genotype, not every read spanning the
-    window. Reads the caller rejected were rejected for a reason; counting them
-    as coverage overstates the evidence and makes the per-allele numbers look
-    like they fail to add up."""
+def test_profile_table_reports_depth_per_allele_only() -> None:
+    """Per-allele depth, and no locus total.
+
+    Reporting the reads behind each allele separately is a property of having
+    clustered the reads by sequence, and it is what a length-based caller
+    cannot give you. A summed column added nothing the reader could not add up,
+    and it invited the total to be read as if the reads the caller discarded
+    backed the genotype.
+    """
     import inspect
 
     from frontstr import cli
 
     src = inspect.getsource(cli.interpret)
-    assert 'add_column("Cov"' in src
-    assert "_coverage_cell(r)" in src
-    assert "were discarded by the caller and are not counted here" in src, (
-        "the footnote must say the discarded reads are not in this number"
-    )
+    for gone in ('add_column("Cov"', 'add_column("DP"', 'add_column("\u03a3AD"'):
+        assert gone not in src, f"{gone} is a locus total; depth belongs per allele"
+    assert "_interpret_allele_cell" in src, "the per-allele counts must still be rendered"
+    assert "where AD is the reads supporting that " in src, "the footnote must define AD"
 
-    # One integer, the per-allele counts added up. The cell used to trail `+n`
-    # with the spanning reads that supported no called allele; those had already
-    # been discarded, so carrying them in a depth column reported discarded
-    # evidence as depth. The HTML report says the same thing, and the two views
-    # have to agree about what a number means.
-    cell = inspect.getsource(cli._coverage_cell)
-    assert "called_reads" in cell
-    assert "discarded_reads" not in cell, "the discarded count must not be in the depth cell"
+    cell = inspect.getsource(cli._interpret_allele_cell)
+    assert "n_reads_total" in cell
+    assert "number_label" in cell

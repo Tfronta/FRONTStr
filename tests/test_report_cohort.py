@@ -124,7 +124,8 @@ def test_report_carries_alleles_coverage_and_isfg(tmp_path: Path) -> None:
     html = out.read_text(encoding="utf-8")
 
     assert "CE14_TATC[10]" in html, "the ISFG string must be in the table"
-    assert ">33<" in html or ">33 <" in html, "the called coverage must be in the table"
+    assert ">17<" in html, "the per-allele depth must be in the table"
+    assert ">33<" not in html, "no locus total; depth is reported per allele only"
     assert ">LC<" in html, "the QC chip must be abbreviated, as in the single-sample view"
     assert 'title="low_coverage: called on 14 reads"' in html, "and expand on hover"
 

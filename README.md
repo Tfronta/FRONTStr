@@ -218,12 +218,12 @@ frontstr interpret --bam demodata/HG00113.demo.bam --panel examples/panels/codis
 ```
 
 ```
-┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━┳━━━━━━┳━━━━━━━━━━━┓
-┃ Marker   ┃ Call         ┃ Tri ┃ Alleles called ┃ Cov ┃   AB ┃ QC        ┃
-┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━╇━━━━━━╇━━━━━━━━━━━┩
-│ D3S1358  │ homozygous   │ -   │ 14(31)         │  31 │    - │ -         │
-│ vWA      │ heterozygous │ -   │ 14(17), 16(16) │  33 │ 0.52 │ -         │
-│ FGA      │ heterozygous │ -   │ 24(15), 21(11) │  26 │ 0.58 │ -         │
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━━━┓
+┃ Marker   ┃ Call         ┃ Tri ┃ Alleles called ┃   AB ┃ QC        ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━━━┩
+│ D3S1358  │ homozygous   │ -   │ 14(31)         │    - │ -         │
+│ vWA      │ heterozygous │ -   │ 14(17), 16(16) │ 0.52 │ -         │
+│ FGA      │ heterozygous │ -   │ 24(15), 21(11) │ 0.58 │ -         │
 ```
 
 Then, in order of how much they tell you:
@@ -286,12 +286,12 @@ frontstr interpret --bam HG00113.bam --panel examples/panels/codis_20_grch38.yam
 ```
 
 ```
-┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━┳━━━━━━┳━━━━━━━━━━━┓
-┃ Marker   ┃ Call         ┃ Tri ┃ Alleles called ┃ Cov ┃   AB ┃ QC        ┃
-┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━╇━━━━━━╇━━━━━━━━━━━┩
-│ D3S1358  │ homozygous   │ -   │ 14(31)         │  31 │    - │ -         │
-│ vWA      │ heterozygous │ -   │ 14(17), 16(16) │  33 │ 0.52 │ -         │
-│ FGA      │ heterozygous │ -   │ 24(15), 21(11) │  26 │ 0.58 │ -         │
+┏━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━━━━━┓
+┃ Marker   ┃ Call         ┃ Tri ┃ Alleles called ┃   AB ┃ QC        ┃
+┡━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━╇━━━━━━━━━━━┩
+│ D3S1358  │ homozygous   │ -   │ 14(31)         │    - │ -         │
+│ vWA      │ heterozygous │ -   │ 14(17), 16(16) │ 0.52 │ -         │
+│ FGA      │ heterozygous │ -   │ 24(15), 21(11) │ 0.58 │ -         │
 ```
 
 ### 4. Follow one locus back to the reads
@@ -471,10 +471,16 @@ and a SHA-256 over the record itself.
 |---|---|
 | `Allele 1` / `Allele 2` | The called allele numbers |
 | `AD` | Allelic depth: reads supporting that allele |
-| `DP` | Depth behind the call: the AD columns added together. **Not** every spanning read; reads supporting no called allele were discarded by the caller |
 | `AB` | Allele balance: the strongest called allele over the called pair. 0.50 is even, 1.0 is everything on one allele. Only defined for a heterozygote |
 | `QC` | Abbreviated flag codes, expanded in the legend under the table |
 | `ISFG` | The bracketed repeat structure, per allele |
+
+**There is no locus total, on purpose.** Depth is reported per allele and only
+per allele, because that is the evidence standing behind each allele
+separately, and it is what clustering the reads by sequence buys you. A caller
+that only sizes the repeat cannot produce it. The spanning read count still
+exists, since it is the denominator every fraction threshold is measured
+against, and it is reported in the VCF as `DP`.
 
 ---
 
@@ -563,11 +569,10 @@ per allele in REF-then-ALT order.
 raised; every other code is one of the QC conditions, so a VCF can be filtered
 on exactly what the report shows.
 
-> **`DP` means something different here than in the profile table.** In the VCF
-> it is every read spanning the window, which is what the VCF specification
-> means by depth and what `bcftools` users expect. In the HTML and CLI profile
-> it is the depth behind the call, the `AD` values added up. The VCF carries
-> both numbers, since summing `AD` recovers the other one.
+> **`DP` appears only in the VCF.** There it is every read spanning the window,
+> which is what the specification means by depth and what `bcftools` users
+> expect. The profile tables report no locus total at all, only per-allele `AD`,
+> so the two can never be confused for one another.
 
 ## Cohort analysis
 

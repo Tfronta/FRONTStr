@@ -208,22 +208,6 @@ def _render_params(params: Any) -> str:
     return "\n".join(out)
 
 
-def _coverage_cell(result: Any) -> str:
-    """Depth behind the call: the per-allele read counts, added up. Nothing else.
-
-    This used to trail ``+n``, the spanning reads that supported no called
-    allele. They were dropped: the caller had already discarded them, so
-    carrying them in the depth column reports discarded evidence as depth. The
-    same reasoning removed them from the HTML report, and the two views have to
-    agree about what a number means.
-
-    Where those reads went is not lost, it moved to where it can be acted on.
-    ``--trace`` names every one of them and the rule that discarded it, which
-    is the view for a locus where most reads support nothing.
-    """
-    return str(result.called_reads) if result.alleles_called else "0"
-
-
 def _balance_cell(result: Any) -> str:
     """Allele balance, dimmed while inside the balanced band."""
     ab = result.allele_balance
@@ -1246,7 +1230,6 @@ def interpret(
     # no_wrap: an allele list broken across two lines costs more room than the
     # column saves, and makes the per-allele reads hard to pair with a number.
     t.add_column("Alleles called", no_wrap=True)
-    t.add_column("Cov", justify="right")
     t.add_column("AB", justify="right")
     # fold, not truncate: a QC column that shows "allele_imbala…" is worse
     # than one that wraps, because the reader cannot tell which flag fired.
@@ -1258,16 +1241,16 @@ def interpret(
             r.call_rule.value,
             r.tri_type.value or "-",
             called or "-",
-            _coverage_cell(r),
             _balance_cell(r),
             _qc_cell(r),
         )
     console.print(t)
     console.print(
-        "[dim]Alleles called: number(reads on that allele). Cov: the depth behind the "
-        "call, those per-allele counts added up. Reads that supported no called allele "
-        "were discarded by the caller and are not counted here; run --trace to see what "
-        "they were and which rule discarded each.[/dim]"
+        "[dim]Alleles called: allele number(AD), where AD is the reads supporting that "
+        "allele. Per-allele depth is reported because it is the evidence behind each "
+        "allele separately, which a length-based caller cannot give you. Reads that "
+        "supported no called allele were discarded; run --trace to see what they were "
+        "and which rule discarded each.[/dim]"
     )
 
 
