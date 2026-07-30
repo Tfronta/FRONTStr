@@ -171,6 +171,15 @@ def test_profile_table_reports_the_coverage_behind_the_call() -> None:
     src = inspect.getsource(cli.interpret)
     assert 'add_column("Cov"' in src
     assert "_coverage_cell(r)" in src
-    assert "A trailing +n counts spanning reads" in src, "the footnote must explain +n"
-    # And the cell itself leads with the called sum.
-    assert "called_reads" in inspect.getsource(cli._coverage_cell)
+    assert "were discarded by the caller and are not counted here" in src, (
+        "the footnote must say the discarded reads are not in this number"
+    )
+
+    # One integer, the per-allele counts added up. The cell used to trail `+n`
+    # with the spanning reads that supported no called allele; those had already
+    # been discarded, so carrying them in a depth column reported discarded
+    # evidence as depth. The HTML report says the same thing, and the two views
+    # have to agree about what a number means.
+    cell = inspect.getsource(cli._coverage_cell)
+    assert "called_reads" in cell
+    assert "discarded_reads" not in cell, "the discarded count must not be in the depth cell"

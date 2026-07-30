@@ -209,19 +209,19 @@ def _render_params(params: Any) -> str:
 
 
 def _coverage_cell(result: Any) -> str:
-    """Coverage of the *call*, with any rejected spanning reads shown as ``+n``.
+    """Depth behind the call: the per-allele read counts, added up. Nothing else.
 
-    Leading with the called sum answers the question a reader actually has —
-    how much evidence is behind this genotype — and makes the parenthesised
-    per-allele counts add up. The rejected reads are still worth a glance,
-    because a locus where most reads support nothing is a locus with a problem,
-    so they ride along rather than disappearing.
+    This used to trail ``+n``, the spanning reads that supported no called
+    allele. They were dropped: the caller had already discarded them, so
+    carrying them in the depth column reports discarded evidence as depth. The
+    same reasoning removed them from the HTML report, and the two views have to
+    agree about what a number means.
+
+    Where those reads went is not lost, it moved to where it can be acted on.
+    ``--trace`` names every one of them and the rule that discarded it, which
+    is the view for a locus where most reads support nothing.
     """
-    if not result.alleles_called:
-        return f"[dim]0 (+{result.total_reads})[/dim]" if result.total_reads else "0"
-    if result.discarded_reads:
-        return f"{result.called_reads} [dim]+{result.discarded_reads}[/dim]"
-    return str(result.called_reads)
+    return str(result.called_reads) if result.alleles_called else "0"
 
 
 def _balance_cell(result: Any) -> str:
@@ -1264,9 +1264,10 @@ def interpret(
         )
     console.print(t)
     console.print(
-        "[dim]Alleles called: number(reads on that allele). Cov: reads supporting the "
-        "called genotype. A trailing +n counts spanning reads that supported no called "
-        "allele — run --trace to see what they were and which rule discarded each.[/dim]"
+        "[dim]Alleles called: number(reads on that allele). Cov: the depth behind the "
+        "call, those per-allele counts added up. Reads that supported no called allele "
+        "were discarded by the caller and are not counted here; run --trace to see what "
+        "they were and which rule discarded each.[/dim]"
     )
 
 
