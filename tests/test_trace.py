@@ -113,9 +113,9 @@ class TestNarrativeContent:
         out = render_locus(t)
         order = [
             out.index("Reads fetched"),
-            out.index("Step 1 — grouped by length"),
-            out.index("Step 2 — split by sequence"),
-            out.index("Step 3 — consensus per cluster"),
+            out.index("Step 1: grouped by length"),
+            out.index("Step 2: split by sequence"),
+            out.index("Step 3: consensus per cluster"),
             out.index("Candidates"),
             out.index("Genotype"),
         ]

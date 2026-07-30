@@ -46,8 +46,8 @@ def _load_regions(
 ) -> tuple[Any, list[str]]:
     """Resolve ``--panel`` / ``--bed`` into a panel, plus warnings to print.
 
-    A BED is the escape hatch HipSTR and LongTR have and a YAML-only caller does
-    not: point the tool at your own regions without curating a panel first. What
+    A BED is the escape hatch a YAML-only caller does not have: point the tool at
+    your own regions without curating a panel first. What
     it cannot carry is calibration, so the warnings are not decoration — for a
     marker STRNaming has no range for, the number is an uncalibrated repeat
     count rather than a kit allele, and the run says so per locus as well.

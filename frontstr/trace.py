@@ -385,7 +385,7 @@ def render_locus(t: LocusTrace) -> str:
             if t.binned_on_core
             else "raw window length (no motif configured)"
         )
-        add(_row("Step 1 — grouped by length", f"{_plural(len(t.bins), 'bin')}, using {basis}"))
+        add(_row("Step 1: grouped by length", f"{_plural(len(t.bins), 'bin')}, using {basis}"))
         fallbacks = sum(b.n_reads for b in t.bins if not b.from_core)
         for b in sorted(t.bins, key=lambda b: -b.n_reads):
             note = "" if b.from_core else "   (core not locatable, window length used)"
@@ -403,12 +403,12 @@ def render_locus(t: LocusTrace) -> str:
         )
         add(
             _row(
-                "Step 2 — split by sequence",
+                "Step 2: split by sequence",
                 f"{outcome} (identity below {t.identity_threshold:.2f} separates)",
             )
         )
         if t.consensus_backend:
-            add(_row("Step 3 — consensus per cluster", t.consensus_backend))
+            add(_row("Step 3: consensus per cluster", t.consensus_backend))
         add("")
 
         # 4. Per-cluster detail ---------------------------------------------

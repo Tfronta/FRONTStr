@@ -9,13 +9,13 @@ practice.
 
 That is the point of the project. A long read spans an entire STR locus and its
 flanks at once, which makes it possible to report the **sequence** of each
-allele rather than only its length — iso-alleles, microvariants and interrupted
+allele rather than only its length: iso-alleles, microvariants and interrupted
 repeat structures that CE cannot resolve. But a nanopore read's error profile
 is nothing like a capillary trace's, and a caller that inherits CE-era
 constants is confidently wrong in ways that are hard to see. Where FRONTStr had
 inherited such constants, they have been replaced with values fitted to real
-ONT data, and the measurements are in [`docs/`](docs/) — including the ones
-that changed the answer.
+ONT data, and the measurements are in [`docs/`](docs/), including the ones that
+changed the answer.
 
 ---
 
@@ -65,20 +65,13 @@ Coverage is counted, not divided out of a caller's `BPDIFFS` field, and the ISFG
 bracket string is computed from the cluster consensus rather than from a VCF
 `ALT`.
 
-> **LongTR is not part of the pipeline.** It used to be wired in as an optional
-> cross-check; that is gone. `frontstr.caller` still ships — the runner, the VCF
-> parser and the BED writer are intact and importable — but nothing in the
-> pipeline calls it, and no command exposes it. Benchmarking FRONTStr against
-> another caller is a separate exercise from running FRONTStr, and mixing the
-> two made it hard to say which tool produced a number.
-
 Four choices drive most of what the tool reports, each measured rather than
 asserted:
 
 - **POA consensus is required, not optional.** Without it the consensus is a
   single unpolished read, which on the test set manufactured four false
   microvariants in 202 called alleles.
-- **Reads are binned by repeat-core length**, not window length — panel windows
+- **Reads are binned by repeat-core length**, not window length. Panel windows
   are ~80% flank. Binning by repeat *unit count* was evaluated and rejected: it
   would merge TH01 9 with 9.3.
 - **Stutter is log-linear in LUS** (R² 0.965), because the measured rate spans
@@ -110,8 +103,7 @@ Windows**. The same is true of `cyvcf2` (VCF), `edlib` (alignment) and `pyspoa`
 dependencies, **zero** ship a `win_amd64` wheel.
 
 This is upstream of FRONTStr and cannot be worked around by packaging. Every
-htslib-based tool in the field is in the same position, including HipSTR,
-LongTR and samtools itself.
+htslib-based tool is in the same position, samtools included.
 
 **WSL2 is the supported path and it is a full Linux environment**, so
 performance and behaviour match native Linux:
@@ -127,10 +119,10 @@ without copying.
 ### Software
 
 - **Python ≥ 3.11** (3.11, 3.12 and 3.13 are tested)
-- **A POA backend** — required, not optional. See [Installation](#installation).
-- **samtools** — not needed by FRONTStr itself, but needed to index a BAM and to
+- **A POA backend.** Required, not optional. See [Installation](#installation).
+- **samtools.** Not needed by FRONTStr itself, but needed to index a BAM and to
   cut region slices. Almost every workflow uses it.
-- **minimap2** — only if you are starting from FASTQ. FRONTStr takes aligned
+- **minimap2.** Only if you are starting from FASTQ. FRONTStr takes aligned
   reads; the alignment step is not wired in.
 
 ---
@@ -322,11 +314,11 @@ discarded:
       ...
   Spanning the whole window               38   (total locus coverage)
 
-  Step 1 — grouped by length              7 bins, using repeat-core length
+  Step 1: grouped by length              7 bins, using repeat-core length
       56 bp core                          17 reads
       72 bp core                          16 reads
-  Step 2 — split by sequence              7 clusters
-  Step 3 — consensus per cluster          poa_spoa
+  Step 2: split by sequence              7 clusters
+  Step 3: consensus per cluster          poa_spoa
 
   Candidates, strongest first
     * #0    17 reads  44.7%   261 bp  HP1 0 / HP2 17 / untagged 0  [block 4552958]
@@ -373,7 +365,7 @@ frontstr batch --manifest samples.tsv --panel examples/panels/codis_20_grch38.ya
 ```
 
 This writes a per-sample directory, `batch_summary.csv`, a tidy cohort dataset,
-and — for more than one sample — **`cohort.html`**: every sample at every marker,
+and, for more than one sample, **`cohort.html`**: every sample at every marker,
 one marker per tab, with a Download Excel button and a link from each sample to
 its own report. See [Cohort analysis](#cohort-analysis).
 
@@ -407,7 +399,7 @@ because the values that decide a genotype are usually the ones nobody typed.
 |---|---|---|---|
 | `--min-mapq` | 20 | chosen | Reads below this MAPQ are dropped. Also what excludes X/Y paralogue mismappings at the sex markers |
 | `--flank-anchor` | 20 | chosen | bp of cleanly aligned flank required each side. Keeps partially spanning reads, whose repeat tract is truncated, out of the pileup |
-| `--identity` | 0.97 | chosen ⚠️ | Pairwise identity to join a cluster. **Known miscalibrated** — see the docs |
+| `--identity` | 0.97 | chosen ⚠️ | Pairwise identity to join a cluster. **Known miscalibrated**, see the docs |
 | `--len-tolerance` | 0 | **derived** | Merges adjacent length bins. **Must stay 0**: any tolerance merges TH01 9 with 9.3 |
 | `--analytical-thresh` | 0.02 | chosen | Below this fraction of locus coverage, a cluster is noise and is not shown |
 | `--calling-thresh` | 0.10 | chosen | Below this fraction, a cluster is an artefact and is shown but not called |
@@ -453,13 +445,13 @@ as it happens.
 
 | `--formats` | Output |
 |---|---|
-| `profile` | CSV, one row per marker — the genotype table |
+| `profile` | CSV, one row per marker. The genotype table |
 | `evidence` | CSV, one row per cluster, including the uncalled ones |
 | `seqs` | CSV, one row per called allele with ISFG and consensus |
 | `json` / `json-compact` | The canonical record: everything, plus the audit block |
 | `html` | Self-contained offline report |
 | `xlsx` | Five-sheet review workbook (Profile, Sequences, Evidence, QC, Audit) |
-| `vcf` | Native sequence-resolved VCF — **needs `--reference`** |
+| `vcf` | Native sequence-resolved VCF. **Needs `--reference`** |
 
 The VCF is native, not an annotation of another caller's output. `ALT` carries
 the allele's sequence so iso-alleles stay distinct; the repeat count rides in
@@ -477,7 +469,7 @@ and a SHA-256 over the record itself.
 | Column | Meaning |
 |---|---|
 | `Allele 1` / `Allele 2` | The called allele numbers |
-| `AD` | Allelic depth — reads supporting that allele |
+| `AD` | Allelic depth: reads supporting that allele |
 | `DP` | Depth behind the call: the AD columns added together. **Not** every spanning read; reads supporting no called allele were discarded by the caller |
 | `AB` | Allele balance: the strongest called allele over the called pair. 0.50 is even, 1.0 is everything on one allele. Only defined for a heterozygote |
 | `QC` | Abbreviated flag codes, expanded in the legend under the table |
@@ -503,7 +495,7 @@ their depths, allele balance, QC and both ISFG strings.
 - **Each sample name links to its own report**, and that report links back.
 
 For analysis rather than review, `frontstr tidy` flattens run JSONs into one long
-table — one row per **sample × marker × allele** — as CSV and Parquet:
+table, one row per **sample × marker × allele**, as CSV and Parquet:
 
 ```bash
 frontstr tidy --from-dir out/ -o analysis/
@@ -513,7 +505,7 @@ frontstr tidy --from-dir out/ -o analysis/
 built from the canonical JSONs, a dataset can be rebuilt at any time without
 re-running, and runs from different batches combined. Markers that dropped out
 appear as `called = false` rows rather than vanishing, and each row carries the
-panel version, POA backend and stutter model that produced it — so a cohort
+panel version, POA backend and stutter model that produced it, so a cohort
 collected across two calibrations can still be analysed honestly.
 
 ---
@@ -536,7 +528,7 @@ collected across two calibrations can still be analysed honestly.
 
 ### The panel
 
-`examples/panels/codis_20_grch38.yaml` — the CODIS 20 core loci plus AMEL and
+`examples/panels/codis_20_grch38.yaml` holds the CODIS 20 core loci plus AMEL and
 four sex-validation STRs, 25 systems in total, with GRCh38 coordinates, motifs
 and calibrated `corr_value` per marker.
 
@@ -566,8 +558,8 @@ Part of the documentation, not a disclaimer.
   wired; `ingest.align` raises. Align externally and start from a BAM.
 - **Not laboratory-validated.** No forensic partner has signed off. No mixture
   series, no dropout study, no NIST control. The reference profile it is tested
-  against comes from HipSTR on matched Illumina data — caller-vs-caller
-  concordance, not validation against a reference method.
+  against comes from another caller on matched Illumina data. That is
+  caller-vs-caller concordance, not validation against a reference method.
 - **The stutter model is PCR-free.** Fitted on WGS, so it has no PCR slippage
   component and will under-predict stutter on an amplicon panel. The model
   records its own protocol so this cannot be lost.
@@ -618,39 +610,28 @@ The integration tests run the whole pipeline against a real ONT R10 BAM and
 assert the genotype of every marker. **They run on a fresh clone**, against the
 bundled [demo sample](demodata/README.md), so the end-to-end assertions are
 exercised in CI rather than only on one laptop. The tests that need the other
-four samples skip cleanly until those ~200 MB slices are rebuilt — see
+four samples skip cleanly until those ~200 MB slices are rebuilt. See
 [Data requirements](#data-requirements).
 
 ---
 
 ## License and citation
 
-MIT — see [`LICENSE`](LICENSE).
+MIT. See [`LICENSE`](LICENSE).
 
 If you use FRONTStr in research, please cite:
 
-> [TBD — pending preprint]
+> [TBD, pending preprint]
 
 ### Prior art
 
 FRONTStr is an independent implementation. It uses and draws on:
 
-- **HipSTR** — Willems et al. Referenced for its per-region log, which is the
-  model for FRONTStr's `--trace`, and for the multi-sample layout the cohort view
-  follows.
-- **LongTR** — Tang et al. A wrapper ships in `frontstr.caller`, unused by the
-  pipeline.
-- **STRNaming** — used directly, as the ISFG DNA Commission (Gettings et al.
-  2024, Recommendation 2) names it as the program that produces bracketed repeat
-  formatting. FRONTStr takes both the allele number and the bracket string from
-  it.
-- **ISFG sequence nomenclature** — the bracketed-repeat convention FRONTStr
-  emits follows the ISFG recommendations and the counting rules described by
-  Phillips (2018).
-- **toaSTR** — Ganschow S, Silvery J, Kalinowski J, Tiemann C (2018), *toaSTR: A
-  web application for forensic STR genotyping by massively parallel sequencing*,
-  Forensic Sci Int Genet 37:21–28. Cited as a methodological reference for
-  sequence-based STR genotyping, in particular the LUS/SLUS framing of stutter.
-  **FRONTStr is not a successor to, port of, or derivative of toaSTR, and
-  contains none of its code.**
-- **STRspy** — Hall, Kesharwani et al. Referenced for allele-database design.
+- **LongTR** [10.1186/s13059-024-03319-2](https://doi.org/10.1186/s13059-024-03319-2)
+- **ISFG sequence nomenclature.** The bracketed-repeat convention FRONTStr emits
+  follows the ISFG recommendations and the counting rules described by Gettings
+  et al. (2024) [10.1016/j.fsigen.2023.102946](https://doi.org/10.1016/j.fsigen.2023.102946)
+- **toaSTR.** Ganschow S, Silvery J, Kalinowski J, Tiemann C (2018)
+  [10.1016/j.fsigen.2018.07.006](https://doi.org/10.1016/j.fsigen.2018.07.006)
+- **STRspy.** Hall, Kesharwani et al.
+  [10.3390/ijms27041889](https://doi.org/10.3390/ijms27041889)
