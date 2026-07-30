@@ -774,7 +774,9 @@ window scan is still available as `isfg_window` in the JSON.
 
 ### Parameters, and what changing one costs
 
-**Module:** `frontstr/params.py`
+**Module:** `frontstr/params.py` — and see **[parameters.md](parameters.md)**,
+which documents all ten one by one: the line of code that applies each, how
+its default was arrived at, and what changing it costs in either direction.
 
 Every knob a run can turn lives in one table with its default and where that
 default came from. A run prints the whole table before it starts — not only what

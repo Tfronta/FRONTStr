@@ -185,6 +185,7 @@ Part of the documentation, not a disclaimer.
 | Document | Contents |
 |---|---|
 | [`docs/how_it_works.md`](docs/how_it_works.md) | Every stage step by step, with examples and measurements; full current state |
+| [`docs/parameters.md`](docs/parameters.md) | The ten parameters: what each one does, the line that applies it, where its default came from, and what changing it costs |
 | [`docs/stutter_calibration.md`](docs/stutter_calibration.md) | How the stutter model was measured, and its caveats |
 | [`docs/architecture.md`](docs/architecture.md) | Module layout |
 | [`ROADMAP.md`](ROADMAP.md) | Delivery plan |
