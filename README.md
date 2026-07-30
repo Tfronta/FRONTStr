@@ -415,9 +415,10 @@ the profile still says six months later which numbers were changed and which had
 measured backing. `chosen` means defensible but picked. `convention` means
 inherited from forensic practice rather than from this data.
 
-**→ [`docs/parameters.md`](docs/parameters.md) documents all ten in full**: the
-exact line of code that applies each one, how its default was arrived at, and
-what changing it costs in both directions.
+Each default's derivation is documented where the value lives, next to the
+constant it justifies: `frontstr/params.py` for the table, and
+`frontstr/interp/qc.py` for the coverage floor and the balance band. That is
+deliberate, so a number and its reasoning cannot drift apart.
 
 ---
 
@@ -685,7 +686,6 @@ Part of the documentation, not a disclaimer.
 | Document | Contents |
 |---|---|
 | [`docs/how_it_works.md`](docs/how_it_works.md) | Every stage step by step, with examples and measurements; full current state |
-| [`docs/parameters.md`](docs/parameters.md) | The ten parameters: what each does, the line that applies it, where its default came from, what changing it costs |
 | [`docs/stutter_calibration.md`](docs/stutter_calibration.md) | How the stutter model was measured, and its caveats |
 | [`docs/architecture.md`](docs/architecture.md) | Module layout |
 | [`demodata/README.md`](demodata/README.md) | The bundled demo sample: provenance, how it was cut, and its expected profile |

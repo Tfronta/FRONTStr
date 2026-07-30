@@ -91,8 +91,8 @@ marker:
 
 Five markers raise QC flags, all of them `low_coverage` or phasing notes, and
 all of them expected at this depth: TH01, DYS391, DYS393, DXS7132, DXS8378.
-A quarter of loci flagged at ~30× ONT is the designed rate, not a symptom —
-see [`docs/parameters.md`](../docs/parameters.md#low_coverage_reads--20--derived).
+A quarter of loci flagged at ~30× ONT is the designed rate, not a symptom. The
+derivation of the coverage floor is in `frontstr/interp/qc.py`.
 
 ## What this sample is not
 
