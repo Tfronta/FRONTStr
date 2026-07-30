@@ -13,6 +13,8 @@ import pytest
 from frontstr.interp.haplotype import (
     DEFAULT_MAX_PHANTOM_BP,
     dominant_hp,
+    on_opposite_haplotypes,
+    same_phase_block,
     suppress_hp_phantoms,
 )
 from frontstr.interp.models import Allele, AlleleStatus
@@ -39,6 +41,8 @@ def _allele(
     hp2: int = 0,
     untagged: int = 0,
     status: AlleleStatus = AlleleStatus.ALLELE,
+    phase_set: int | None = None,
+    n_phase_sets: int = 0,
 ) -> Allele:
     n = hp1 + hp2 + untagged
     return Allele(
@@ -57,6 +61,8 @@ def _allele(
         bp_diff=0,
         is_deletion=False,
         status=status,
+        phase_set=phase_set,
+        n_phase_sets=n_phase_sets,
     )
 
 
@@ -202,3 +208,102 @@ def test_weak_real_allele_survives_when_the_strong_pair_are_both_phantoms() -> N
     assert [a.length_bp for a in survivors] == [289, 301]
     assert hp1_owner.n_reads_absorbed == 6
     assert hp2_real.n_reads_absorbed == 4
+
+
+# ---------------------------------------------------------------------------
+# on_opposite_haplotypes — the same invariant, read backwards
+# ---------------------------------------------------------------------------
+
+
+def test_opposite_haplotypes_detected() -> None:
+    assert on_opposite_haplotypes(_allele(0, 100, hp1=17), _allele(1, 104, hp2=5)) is True
+
+
+def test_same_haplotype_is_not_opposite() -> None:
+    assert on_opposite_haplotypes(_allele(0, 100, hp1=17), _allele(1, 104, hp2=0, hp1=5)) is False
+
+
+def test_unphased_pair_is_not_opposite() -> None:
+    """No tags at all — the whole mechanism must be a no-op."""
+    assert (
+        on_opposite_haplotypes(_allele(0, 100, untagged=17), _allele(1, 104, untagged=5)) is False
+    )
+
+
+def test_one_side_below_the_tagged_floor_is_not_opposite() -> None:
+    assert on_opposite_haplotypes(_allele(0, 100, hp1=17), _allele(1, 104, hp2=2)) is False
+
+
+def test_impure_side_is_not_opposite() -> None:
+    """A cluster straddling both haplotypes cannot anchor the invariant."""
+    assert on_opposite_haplotypes(_allele(0, 100, hp1=11, hp2=7), _allele(1, 104, hp2=5)) is False
+
+
+def test_untagged_reads_do_not_block_the_call() -> None:
+    """Missing phasing evidence is not evidence against, as in dominant_hp."""
+    a = _allele(0, 100, hp1=9, untagged=8)
+    b = _allele(1, 104, hp2=4, untagged=3)
+    assert on_opposite_haplotypes(a, b) is True
+
+
+# ---------------------------------------------------------------------------
+# Phase blocks — HP is only meaningful inside its own PS
+# ---------------------------------------------------------------------------
+
+
+def test_a_cluster_spanning_two_blocks_gets_no_haplotype() -> None:
+    """Measured on HG00097 D13S317: a 14-read cluster looked 100% HP2 while
+    drawing 4 reads from one block and 3 from another. Pure labels, two
+    different chromosomes' worth of meaning."""
+    assert dominant_hp(_allele(0, 100, hp2=7, n_phase_sets=2)) is None
+    assert dominant_hp(_allele(0, 100, hp2=7, phase_set=77087994, n_phase_sets=1)) == 2
+
+
+def test_same_block_is_comparable() -> None:
+    a = _allele(0, 100, hp1=5, phase_set=42, n_phase_sets=1)
+    b = _allele(1, 104, hp2=5, phase_set=42, n_phase_sets=1)
+    assert same_phase_block(a, b) is True
+    assert on_opposite_haplotypes(a, b) is True
+
+
+def test_different_blocks_are_not_comparable() -> None:
+    """HP1 in one block and HP2 in another say nothing about being opposite."""
+    a = _allele(0, 100, hp1=5, phase_set=42, n_phase_sets=1)
+    b = _allele(1, 104, hp2=5, phase_set=99, n_phase_sets=1)
+    assert same_phase_block(a, b) is False
+    assert on_opposite_haplotypes(a, b) is False
+
+
+def test_untagged_ps_keeps_the_pre_ps_behaviour() -> None:
+    """A phasing tool that emits HP but no PS must not lose haplotype support."""
+    a = _allele(0, 100, hp1=5)
+    b = _allele(1, 104, hp2=5)
+    assert same_phase_block(a, b) is True
+    assert on_opposite_haplotypes(a, b) is True
+
+
+def test_one_block_known_and_one_unknown_is_refused() -> None:
+    a = _allele(0, 100, hp1=5, phase_set=42, n_phase_sets=1)
+    b = _allele(1, 104, hp2=5)
+    assert same_phase_block(a, b) is False
+    assert on_opposite_haplotypes(a, b) is False
+
+
+def test_phantom_suppression_never_crosses_a_block() -> None:
+    """Two HP1 clusters in different blocks are not the same haplotype.
+
+    Collapsing one into the other would delete a real allele and emit a
+    confidently wrong homozygote — the exact failure the suppression exists to
+    avoid, arrived at from the other direction.
+    """
+    a = _allele(0, 100, hp1=9, phase_set=42, n_phase_sets=1)
+    b = _allele(1, 101, hp1=5, phase_set=99, n_phase_sets=1)
+    assert suppress_hp_phantoms([a, b], _system()) == 0
+    assert _statuses([a, b]) == ["allele", "allele"]
+
+
+def test_phantom_suppression_still_fires_inside_one_block() -> None:
+    a = _allele(0, 100, hp1=9, phase_set=42, n_phase_sets=1)
+    b = _allele(1, 101, hp1=5, phase_set=42, n_phase_sets=1)
+    assert suppress_hp_phantoms([a, b], _system()) == 1
+    assert _statuses([a, b]) == ["allele", "hp_phantom"]

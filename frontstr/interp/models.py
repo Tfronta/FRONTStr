@@ -3,7 +3,6 @@
 The Interpretation layer is forensically opinionated. It takes:
 
 - :class:`frontstr.evidence.cluster.Cluster` — what the reads actually say
-- Optionally :class:`frontstr.caller.vcf.LongTRResult` — what LongTR called
 
 …and emits :class:`Allele` (per cluster, with classification) + a
 :class:`MarkerResult` summarising the called genotype.
@@ -16,9 +15,8 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, Field, computed_field
 
-from frontstr.caller.vcf import LongTRResult
 from frontstr.evidence.consensus import ConsensusMethod
 from frontstr.panel.models import System
 
@@ -35,6 +33,8 @@ class AlleleStatus(StrEnum):
     #: Same allele as a stronger cluster on the same haplotype, split apart by
     #: sequencing error. See :mod:`frontstr.interp.haplotype`.
     HP_PHANTOM = "hp_phantom"
+    #: Retired with LongTR: it marked clusters the caller could only
+    #: reconstruct. Nothing sets it now; kept so historical records parse.
     INEXACT_ALLELE = "inexact_allele"
     ALLELE = "allele"
 
@@ -87,12 +87,54 @@ class FlagCode(StrEnum):
     STRAND_BIAS = "strand_bias"
     TRIALLELIC = "triallelic"
     MIXTURE_SUSPECTED = "mixture_suspected"
+    #: Retired: LongTR is no longer wired into the pipeline (see
+    #: :mod:`frontstr.caller`). Kept so historical records still parse; nothing
+    #: produces it.
     LONGTR_DISCORDANT = "longtr_discordant"
+    #: Retired with LongTR — see :class:`AlleleStatus.INEXACT_ALLELE`.
     INEXACT_ALLELE = "inexact_allele"
     ISOALLELE = "isoallele"
     CE_NOMENCLATURE_OFFSET = "ce_nomenclature_offset"
     CONSENSUS_FALLBACK = "consensus_fallback"
     HP_PHANTOM_COLLAPSED = "hp_phantom_collapsed"
+    HP_RESCUED_HET = "hp_rescued_het"
+    PHASE_BLOCK_SPLIT = "phase_block_split"
+    ALLELE_IMBALANCE = "allele_imbalance"
+    NON_DEFAULT_THRESHOLD = "non_default_threshold"
+
+    @property
+    def short(self) -> str:
+        """Two or three letter abbreviation, for a dense table cell.
+
+        Spelled out per code rather than derived from the name, because
+        initials collide (``dropout`` and ``dxs`` would both be D) and because
+        the abbreviation is shown to a reader: it has to be guessable, not
+        merely unique. Every view that abbreviates uses this one, so the legend
+        under a table can never drift from the chips above it.
+        """
+        return _SHORT_CODES[self]
+
+
+#: See :attr:`FlagCode.short`. Kept beside the enum so a new code without an
+#: abbreviation fails the test in tests/test_interp_flags.py rather than
+#: rendering a blank chip.
+_SHORT_CODES: dict[FlagCode, str] = {
+    FlagCode.LOW_COVERAGE: "LC",
+    FlagCode.DROPOUT: "DO",
+    FlagCode.STRAND_BIAS: "SB",
+    FlagCode.TRIALLELIC: "TRI",
+    FlagCode.MIXTURE_SUSPECTED: "MIX",
+    FlagCode.LONGTR_DISCORDANT: "LTD",
+    FlagCode.INEXACT_ALLELE: "IA",
+    FlagCode.ISOALLELE: "ISO",
+    FlagCode.CE_NOMENCLATURE_OFFSET: "CNO",
+    FlagCode.CONSENSUS_FALLBACK: "CF",
+    FlagCode.HP_PHANTOM_COLLAPSED: "HPC",
+    FlagCode.HP_RESCUED_HET: "HPR",
+    FlagCode.PHASE_BLOCK_SPLIT: "PBS",
+    FlagCode.ALLELE_IMBALANCE: "AI",
+    FlagCode.NON_DEFAULT_THRESHOLD: "NDT",
+}
 
 
 _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
@@ -113,6 +155,23 @@ _DEFAULT_SEVERITY: dict[FlagCode, FlagSeverity] = {
     # INFO: the collapse is the *correct* call, but it must stay visible so a
     # reviewer can see that a candidate was suppressed and why.
     FlagCode.HP_PHANTOM_COLLAPSED: FlagSeverity.INFO,
+    # INFO, same reasoning as above: the heterozygous call is the correct one,
+    # but a reviewer must be able to see that it rests on phasing rather than on
+    # peak balance, because the read ratio alone would read as homozygous.
+    FlagCode.HP_RESCUED_HET: FlagSeverity.INFO,
+    # WARN: haplotype evidence is weaker than it looks at this locus. Every
+    # haplotype rule declines rather than guessing, so the call is safe — but a
+    # reviewer comparing HP counts by eye would draw a conclusion the caller
+    # deliberately refused to draw.
+    FlagCode.PHASE_BLOCK_SPLIT: FlagSeverity.WARN,
+    # WARN: an imbalanced heterozygote is the visible half of a locus that may
+    # be dropping the other allele elsewhere in the run — degradation, a primer
+    # variant under a flank, or simply thin coverage.
+    FlagCode.ALLELE_IMBALANCE: FlagSeverity.WARN,
+    # WARN: the run overrode a threshold whose default was derived from measured
+    # data. The call may be perfectly good — the point is that it is not
+    # comparable with a default run, and six months later nobody will remember.
+    FlagCode.NON_DEFAULT_THRESHOLD: FlagSeverity.WARN,
 }
 
 
@@ -173,14 +232,25 @@ class Allele(BaseModel):
     mean_qual: float
     ce: float | None
     isfg: str
+    #: STRNaming's full allele name over the marker's standard reporting range,
+    #: e.g. ``CE29_TCTA[4]TCTG[6]...``. Empty when STRNaming defines no range for
+    #: the marker or the range could not be located in the consensus.
+    strnaming_name: str = ""
+    #: CE parsed from :attr:`strnaming_name`. This is the canonical allele number
+    #: whenever it is present — see :meth:`_number_and_method`.
+    strnaming_ce: float | None = None
+    #: Why STRNaming did or did not name this allele
+    #: (:class:`frontstr.interp.naming.NameStatus`). Kept for audit: a reviewer
+    #: must be able to see that a number came from the legacy path and why.
+    strnaming_status: str = ""
     bp_diff: int
     is_deletion: bool
     #: How ``consensus`` was derived (``poa_spoa`` | ``poa_abpoa`` | ``single``
     #: | ``mode`` | ``empty``). ``mode`` means no POA backend was available and
     #: the sequence is a single unpolished read — see ``CONSENSUS_FALLBACK``.
     consensus_method: str = ConsensusMethod.SINGLE.value
-    #: Primary numeric allele for reports: CE when period is defined, else
-    #: LongTR-style offset from REF anchor (see :mod:`frontstr.interp.allele_numeric`).
+    #: Primary numeric allele for reports: CE when period is defined, else an
+    #: offset from the REF anchor (see :mod:`frontstr.interp.allele_numeric`).
     allele_numeric: float | None = None
     #: ``period_ce`` | ``reference_offset`` | ``delta_only`` | ``deletion`` | ``unavailable``
     allele_numeric_source: str = ""
@@ -189,10 +259,19 @@ class Allele(BaseModel):
     #: (see :mod:`frontstr.interp.haplotype`). Reported so coverage is not
     #: understated; ``n_reads_total`` deliberately stays as observed.
     n_reads_absorbed: int = 0
+    #: Phase block (BAM ``PS`` tag) this allele's haplotype-tagged reads came
+    #: from, or ``None`` when they carry no ``PS`` or span more than one.
+    phase_set: int | None = None
+    #: How many distinct phase blocks those reads came from. Anything above 1
+    #: means the ``HP`` labels within this cluster are not comparable, so
+    #: :func:`frontstr.interp.haplotype.dominant_hp` refuses to assign it a
+    #: haplotype at all.
+    n_phase_sets: int = 0
+    #: Set when this allele was called only because phasing put it on the
+    #: opposite haplotype from the major allele — the peak-height ratio alone
+    #: would have collapsed the locus to homozygous. Raises ``HP_RESCUED_HET``.
+    hp_rescued: bool = False
     status: AlleleStatus = AlleleStatus.PENDING
-    longtr_match: bool = False
-    longtr_inexact: bool = False
-    longtr_bp_diff: int | None = None
     #: ISFG iso-allele annotation (catalog match + same-number sibling). Folds
     #: the former flat ``catalog_suffix``/``catalog_distance``/``catalog_source``.
     iso: IsoAllele = Field(default_factory=IsoAllele)
@@ -204,6 +283,13 @@ class Allele(BaseModel):
 
         Precedence (decided once here, not in the report layer):
 
+        - ``strnaming`` — the ISFG-recommended designation, computed by
+          STRNaming over the marker's standard reporting range. Outranks
+          everything else because it is the only method that is right on the
+          compound markers: the bracket count is off by an allele-structure
+          dependent amount at vWA, D21S11, D2S1338, D1S1656 and D2S441, and the
+          panel ``corr_value`` is off at DXS7132. See
+          :mod:`frontstr.interp.naming`.
         - ``period_ce`` / ``reference_offset`` — calibrated absolute CE number.
         - ``bracket_count`` — sequence-derived repeat count (``ce_from_brackets``)
           for compound markers; the cross-comparable default when there is no
@@ -213,6 +299,8 @@ class Allele(BaseModel):
         - ``bp_sizing`` — raw tandem-repeat span when no allele number exists.
         - ``none`` — deletion / no data.
         """
+        if self.strnaming_ce is not None:
+            return float(self.strnaming_ce), "strnaming"
         src = self.allele_numeric_source
         if self.allele_numeric is not None and src in {"period_ce", "reference_offset"}:
             return float(self.allele_numeric), src
@@ -246,7 +334,44 @@ class Allele(BaseModel):
         False for the relative and fallback methods (``delta``, ``bp_sizing``,
         ``none``), which must not be read as a kit CE designation.
         """
-        return self.number_method in ("period_ce", "reference_offset", "bracket_count")
+        return self.number_method in (
+            "strnaming",
+            "period_ce",
+            "reference_offset",
+            "bracket_count",
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def repeat_label(self) -> str:
+        """The single bracketed-repeat string every view renders.
+
+        Same reasoning as :attr:`number_label`, which exists because the CLI and
+        the report used to format allele numbers independently and could show
+        ``Δ-2`` and ``14`` for one allele. The strings had drifted the same way:
+        ``--trace`` printed STRNaming's ``CE9.3_TGAA[6]TGA[1]TGAA[3]`` while the
+        HTML, CSV and XLSX printed :attr:`isfg`, which is
+        :func:`~frontstr.interp.isfg.compress_isfg` over the **whole panel
+        window** — a hundred lowercase flank bases before the brackets even
+        start. Two strings for one allele, in a forensic report.
+
+        STRNaming's name wins when present: it is the ISFG DNA Commission's
+        prescribed format (Gettings et al. 2024, Recommendation 2), it is scoped
+        to the marker's standard reporting range instead of our extraction
+        window, and it carries flanking variants explicitly. The legacy string
+        remains the fallback for markers STRNaming has no range for (DYS393,
+        AMEL) and is still available as :attr:`isfg` for anything that needs the
+        raw window view.
+        """
+        return self.strnaming_name or self.isfg
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def repeat_label_source(self) -> str:
+        """``strnaming`` | ``bracket_scan`` | ``none`` — how :attr:`repeat_label` was made."""
+        if self.strnaming_name:
+            return "strnaming"
+        return "bracket_scan" if self.isfg else "none"
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -280,13 +405,12 @@ class Allele(BaseModel):
 class MarkerResult(BaseModel):
     """All the forensic decisions for one marker, ready for export/report."""
 
-    # LongTRResult is a stdlib dataclass; treat it as an opaque nested object
-    # rather than letting Pydantic re-validate/copy the caller's internals.
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     #: Version of this serialized record's shape. Bump on breaking changes to
     #: the canonical schema so downstream consumers can branch defensively.
-    schema_version: str = "1.0"
+    #: 2.0 removed the ``longtr_*`` allele fields, ``longtr_result`` and
+    #: ``discordant`` when LongTR was unwired, and added the ``strnaming_*``
+    #: fields.
+    schema_version: str = "2.0"
 
     marker_name: str
     system: System
@@ -298,8 +422,63 @@ class MarkerResult(BaseModel):
     expected_stutter: dict[str, float] = Field(default_factory=dict)
     analytical_thresh: float = 0.02
     calling_thresh: float = 0.10
-    longtr_result: LongTRResult | None = None
-    discordant: bool = False
     #: Structured, auditable marker-level conditions. Replaces free-text
     #: warnings so the run is filterable/aggregatable for batch + audit.
     flags: list[Flag] = Field(default_factory=list)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def called_reads(self) -> int:
+        """Reads supporting the reported genotype — the coverage worth quoting.
+
+        :attr:`total_reads` is every read spanning the window, including those
+        that ended up in clusters the caller rejected. It stays, because it is
+        the denominator every fraction threshold is measured against and
+        changing it would move what counts as noise. But it is the wrong number
+        to *report*: a locus showing 38 when 33 reads support alleles reads as
+        better evidenced than it is, and the arithmetic invites the reader to
+        look for a mistake that is not there.
+        """
+        return sum(a.n_reads_total for a in self.alleles_called)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def discarded_reads(self) -> int:
+        """Spanning reads that supported no called allele."""
+        return self.total_reads - self.called_reads
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def allele_balance(self) -> float | None:
+        """Coverage share of the strongest called allele. ``None`` unless het.
+
+        **Convention: strongest allele over the sum of called alleles**, so the
+        value runs from 0.50 (perfectly balanced) to 1.0 (all reads on one
+        allele). Stating that matters — with the *strongest* allele on top the
+        scale is one-sided, and a band written as if it were symmetric around
+        0.5 would have half of itself unreachable.
+
+        This replaces the peak-height ratio in reported output rather than
+        joining it. AB and PHR are the same measurement (``AB = 1/(1+PHR)``),
+        and shipping both would put two numbers for one quantity in front of a
+        reviewer — the mistake that once had the same allele reading ``Δ-2`` in
+        the CLI and ``14`` in the report.
+
+        Where the landmarks fall:
+
+            AB 0.500   perfectly balanced
+            AB 0.650   edge of the balanced band (``QcThresholds``)
+            AB 0.714   ``min_phr_for_het`` = 0.4; below this no het is called
+                       on read counts alone
+            AB 0.773   HG00113 D2S1338, called het on phasing alone
+
+        Only defined for a two-allele call: a homozygote has nothing to
+        balance, and for a triallelic locus a single ratio would be a fiction.
+        """
+        if len(self.alleles_called) != 2:
+            return None
+        counts = sorted((a.n_reads_total for a in self.alleles_called), reverse=True)
+        total = counts[0] + counts[1]
+        if total <= 0:
+            return None
+        return round(counts[0] / total, 3)

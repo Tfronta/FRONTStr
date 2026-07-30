@@ -88,23 +88,33 @@ code, pre, .mono {
   padding: 28px 32px 64px;
 }
 
-/* ---------- header (STRhub teal) ---------- */
+/* ---------- header ----------
+ * Deliberately plain. This used to be a saturated teal gradient with white
+ * text at 85% opacity, which cost contrast exactly where the identifying
+ * facts are: sample name, panel version, reference build, timestamp. Those
+ * are the fields a reader checks first and quotes later, so they are set in
+ * body text on the body surface, at the same contrast as everything else.
+ * The accent survives as a rule, which identifies the report without
+ * competing with it.
+ */
 header.cover {
-  background: linear-gradient(135deg, #0f766e 0%, var(--accent) 45%, #14b8a6 100%);
-  color: white;
-  padding: 28px 32px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  padding: 24px 28px;
   border-radius: var(--radius-lg);
   margin-bottom: 24px;
   box-shadow: var(--shadow);
 }
 header.cover h1 {
   margin: 0 0 4px;
-  font-size: 28px;
+  font-size: 26px;
   letter-spacing: -0.02em;
 }
 header.cover .subtitle {
   font-size: 13px;
-  opacity: 0.85;
+  color: var(--text-soft);
 }
 header.cover .meta {
   margin-top: 14px;
@@ -112,7 +122,7 @@ header.cover .meta {
   flex-wrap: wrap;
   gap: 8px 16px;
   font-size: 12px;
-  opacity: 0.9;
+  color: var(--text-faint);
 }
 header.cover .meta span::before { content: "·"; margin-right: 4px; opacity: 0.5; }
 header.cover .meta span:first-child::before { content: ""; }
@@ -148,19 +158,30 @@ nav.page-tabs a:hover {
   gap: 12px;
   margin-top: 18px;
 }
+/* Translucent white on a gradient made these unreadable in dark mode and
+ * washed out in light. They now sit on the muted surface with a real border,
+ * and the warn/danger colours are the same tokens the QC chips use, so one
+ * severity reads the same everywhere in the report. */
 .kpi {
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(6px);
+  background: var(--muted);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px 14px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  opacity: 0.9;
+  color: var(--text-faint);
 }
-.kpi b { display: block; font-size: 26px; font-weight: 600; text-transform: none; letter-spacing: 0; }
-.kpi.warn b { color: #ffcc80; }
-.kpi.danger b { color: #ffab91; }
+.kpi b {
+  display: block;
+  font-size: 26px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+}
+.kpi.warn b { color: var(--warn); }
+.kpi.danger b { color: var(--danger); }
 
 /* ---------- sections ---------- */
 section { margin: 28px 0; }
@@ -211,7 +232,13 @@ table.profile tbody td {
   vertical-align: top;
 }
 table.profile tbody tr:hover { background: var(--accent-soft); }
-table.profile td.num { text-align: right; font-variant-numeric: tabular-nums; }
+/* Centred, not right-aligned. These columns are short forensic values, not
+   currency: an allele number, a depth, a balance. Ragged-right numbers pull the
+   eye to the wrong edge when the neighbouring column is a label. Tabular
+   figures keep the digits in a column regardless. */
+table.profile td.num,
+table.profile th.num,
+table.profile thead th[data-sortable="num"] { text-align: center; font-variant-numeric: tabular-nums; }
 table.profile td.mono {
   font-family: var(--mono);
   font-size: 12px;
@@ -234,6 +261,95 @@ table.profile td.mono.seq-cell {
   white-space: normal;
   letter-spacing: 0.2px;
 }
+/* The wide profile table carries two full consensus sequences per row, so it
+   is allowed to outgrow the page and scroll as a unit. Without this the
+   sequence columns squeeze every other column into unreadable slivers. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+table.profile.profile-wide { min-width: 1280px; }
+/* Nothing in this table should break mid-word: "heterozygous" split across
+   three lines as "hete / rozy / gous" is unreadable and triples the row
+   height. The table scrolls instead. */
+table.profile.profile-wide thead th,
+table.profile.profile-wide td.mono,
+table.profile.profile-wide td.marker,
+table.profile.profile-wide td.num,
+table.profile.profile-wide td.dim { white-space: nowrap; }
+table.profile.profile-wide td.mono { max-width: none; word-break: normal; }
+
+/* One sequence, one line, its own sideways scrollbar. A ~250 bp consensus
+   wrapped over ten lines makes every row a paragraph and destroys the table;
+   truncating it would hide the very thing a sequence-resolved caller exists to
+   show. So: fixed box, nowrap, scroll. */
+table.profile td.seq-col { white-space: nowrap; }
+table.profile .seq-scroll {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  color: var(--text-soft);
+  width: 240px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  padding-bottom: 3px;
+}
+table.profile .seq-scroll::-webkit-scrollbar { height: 6px; }
+table.profile .seq-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+table.profile .seq-copy {
+  font-family: var(--mono);
+  font-size: 9px;
+  margin-top: 2px;
+  padding: 1px 5px;
+  cursor: pointer;
+  color: var(--text-faint);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+table.profile .seq-copy:hover { color: var(--text); border-color: var(--text-faint); }
+
+table.profile td.qc-cell { white-space: normal; }
+table.profile td.qc-cell .chip { margin: 0 3px 3px 0; }
+table.profile td.ab-uneven { color: var(--warn); font-weight: 600; }
+
+/* Row tint by worst flag severity — the XLSX has done this from the start and
+   the HTML did not, which is why a flagged locus was invisible in this table. */
+table.profile tr.row-sev-error td { background: rgba(198, 40, 40, 0.07); }
+table.profile tr.row-sev-warn td { background: rgba(239, 108, 0, 0.06); }
+table.profile tr.row-sev-info td { background: rgba(2, 119, 189, 0.04); }
+
+.chip.sev-error { background: rgba(198, 40, 40, 0.12); color: var(--danger, #c62828); }
+.chip.sev-warn { background: rgba(239, 108, 0, 0.12); color: var(--warn); }
+.chip.sev-info { background: rgba(2, 119, 189, 0.10); color: var(--accent, #0277bd); }
+
+table.profile.params-table td.param-note {
+  font-size: 11px;
+  color: var(--text-soft);
+  white-space: normal;
+  max-width: 460px;
+  line-height: 1.5;
+}
+table.profile.params-table td.mono { white-space: nowrap; }
+
+.pane-note {
+  font-size: 11px;
+  color: var(--text-soft);
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+pre.argv.bed-block {
+  max-height: 320px;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.5;
+  tab-size: 12;
+}
+
 table.profile td.marker { font-weight: 600; }
 table.profile td.dim { color: var(--text-faint); }
 table.profile tr.row-discordant td { background: rgba(239, 108, 0, 0.06); }
@@ -250,16 +366,18 @@ table.profile thead th .th-hint {
   text-transform: none;
 }
 
+/* This is where the columns are defined, so it has to be readable rather
+   than merely present. 11px was fine print. */
 .profile-note {
-  margin: 12px 0 0;
+  margin: 14px 0 0;
   padding: 0 2px;
-  font-size: 11px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.6;
   color: var(--text-soft);
 }
 
 .profile-note strong { font-weight: 600; color: var(--text); }
-.profile-note code { font-size: 10px; font-family: var(--mono); }
+.profile-note code { font-size: 12px; font-family: var(--mono); }
 
 /* ---------- chips ---------- */
 .chip {
@@ -661,3 +779,151 @@ table.profile thead th[data-sortable] { cursor: pointer; user-select: none; }
 table.profile thead th[data-sortable]:hover { color: var(--primary); }
 table.profile thead th[data-sort-dir="asc"]::after { content: " ▲"; font-size: 10px; }
 table.profile thead th[data-sort-dir="desc"]::after { content: " ▼"; font-size: 10px; }
+
+/* ---------- QC legend ----------
+ * The chips in the QC column are two or three letters so the table fits on a
+ * screen without horizontal scrolling: the full codes (LOW_COVERAGE,
+ * PHASE_BLOCK_SPLIT) pushed Allele 2 and its read count off the right edge,
+ * which hid a called allele behind a scrollbar. The expansion lives here and
+ * in each chip's tooltip.
+ */
+.qc-legend .legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 14px 4px 0;
+  white-space: nowrap;
+}
+.qc-legend code { font-size: 11px; color: var(--text-soft); }
+
+/* Narrower now that the chips are abbreviated; the space goes to the allele
+ * columns, which are what the table is for. */
+table.profile td.qc-cell { max-width: 96px; }
+
+/* ---------- cohort view ----------
+ * One block per marker, one row per sample. The single-sample report answers
+ * "is this profile right"; across a hundred samples that is the wrong question
+ * to ask a hundred times, so this view is laid out to answer "which locus, and
+ * which sample" instead.
+ */
+.marker-block { margin: 0 0 26px; }
+.marker-block:last-child { margin-bottom: 0; }
+.marker-block-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 0 6px;
+  border-bottom: 2px solid var(--border-strong);
+  margin-bottom: 4px;
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 2;
+}
+.marker-block-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+.marker-block-head .dim { font-size: 12px; }
+
+/* Narrower than the single-sample table: no Call column, no Marker column, and
+   the sample name replaces both. It fits without sideways scrolling, which is
+   the point of a table you read down. */
+table.profile.cohort-table { min-width: 940px; }
+table.profile.cohort-table thead th { position: static; font-size: 12px; }
+table.profile.cohort-table td { white-space: nowrap; }
+table.profile.cohort-table .seq-scroll { width: 200px; }
+
+.cohort-attention { display: flex; gap: 40px; flex-wrap: wrap; }
+.cohort-attention h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.attention-list { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+.attention-list li { margin-bottom: 3px; }
+.attention-list .dim { font-size: 12px; margin-left: 6px; }
+
+.toolbar-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+.report-footer { margin-top: 28px; }
+
+/* ---------- cohort marker tabs ----------
+ * One marker visible at a time. Stacked, 108 samples across 25 markers is
+ * 2,700 rows of continuous scroll and nothing can be found in it. The strip
+ * itself carries each marker's state, so it doubles as the overview: a tab
+ * with a badge is a locus that needs opening.
+ */
+.marker-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.marker-tab {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-soft);
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.marker-tab:hover { border-color: var(--border-strong); color: var(--text); }
+.marker-tab.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--surface);
+}
+/* A badge means "this locus has something": either it did not call in every
+   sample, or some calls are flagged. On the active tab it has to invert. */
+.tab-badge {
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--warn);
+  color: var(--surface);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+.marker-tab.is-active .tab-badge { background: var(--surface); color: var(--accent); }
+.marker-block.is-hidden { display: none; }
+
+.btn-download {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--surface);
+  background: var(--accent);
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  white-space: nowrap;
+}
+.btn-download:hover { background: var(--primary-hover); text-decoration: none; color: var(--surface); }
+
+/* Back to the cohort. Set apart from the in-page anchors beside it: those
+   scroll, this one leaves the document, and they should not look alike. */
+nav.page-tabs a.nav-back {
+  font-weight: 600;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  margin-right: 8px;
+}
+nav.page-tabs a.nav-back:hover { background: var(--accent-soft); text-decoration: none; }

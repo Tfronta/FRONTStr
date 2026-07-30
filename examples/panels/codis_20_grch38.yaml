@@ -2,9 +2,9 @@
 #
 # Allele numbers on compound markers (motif lists, period: -1) need a panel
 # field ``reference_ce``: the kit/str allele associated with the genome REF in
-# this interval — see STRBase / your ladder calibration. Δbp vs the REF-window
+# this interval. See STRBase or your ladder calibration. Δbp vs the REF-window
 # length is then scaled by ``allele_bp_step`` (default 4) and added for each
-# called consensus (LongTR-style). Simple tetramers continue to use ``period``.
+# called consensus. Simple tetramers continue to use ``period``.
 #
 # Coordinates and motifs follow the consensus from the STRBase project and
 # the published forensic literature.
@@ -21,9 +21,9 @@
 #                a pre-repeat AAGG immediately before a 4-bp imperfect spacer
 #                (aaag), which marks the boundary of the structured repeat array.
 #
-# Coordinate expansion (2026-05): windows widened to LongTR repeat
-# boundaries ± 100 bp flanking on each side. This ensures longer alleles
-# are never truncated on ONT long reads.
+# Coordinate expansion (2026-05): windows widened to the repeat boundary
+# ± 100 bp of flank on each side. This ensures longer alleles are never
+# truncated on ONT long reads.
 #
 # strand = "-" for markers whose published ISFG motif reads on the minus
 # strand; the consensus is RC'd before bracket compression (P2).
@@ -37,7 +37,7 @@ reference_build: GRCh38
 description: |
   Core CODIS 20 autosomal markers + Amelogenin + sex-validation STRs
   (DYS391, DYS393 on chrY; DXS7132, DXS8378 on chrX). ONT R10-friendly
-  defaults. Windows cover LongTR repeat boundaries ± 100 bp for long-read
+  defaults. Windows cover the repeat boundary ± 100 bp for long-read
   safety. corr_values calibrated against GRCh38 reference (May 2026 for
   CODIS 20, June 2026 for the four sex STRs).
 
@@ -242,11 +242,16 @@ systems:
 
   - name: D22S1045
     chromosome: chr22
-    ref_start: 37140187
+    ref_start: 37140141
     ref_end: 37140438
     motif: ATT
     period: 3
-    corr_value: 201
+    # 298 bp window − 17 × ATT = 247 bp flanking. Was 201 for the old 252 bp
+    # window; ref_start moved 46 bp left so the STRNaming reporting range
+    # (37140181-37140357) and its 30 bp left anchor both fall inside the window.
+    # Without that the range cannot be located and the marker loses its ISFG
+    # designation. See frontstr/interp/naming.py.
+    corr_value: 247
     category: autosomal
 
   - name: AMEL

@@ -3,7 +3,6 @@
 A *panel* is an ordered collection of *markers* (TR loci) with forensic
 metadata: motif(s), corr_value, CODIS name, allow_triallelic, etc.
 
-Phase 1.2 of ROADMAP.md.
 """
 
 from frontstr.panel.models import Panel, System

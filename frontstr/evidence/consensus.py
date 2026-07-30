@@ -28,7 +28,7 @@ supported forensic configuration.
 Backend chain
 -------------
 
-1. ``pyabpoa`` — the ROADMAP's declared backend. Does not build on macOS arm64
+1. ``pyabpoa``. Does not build on macOS arm64
    (hardcoded AVX2 x86 intrinsics), so it is tried but not required.
 2. ``pyspoa`` — ONT's SPOA bindings. Builds on arm64 and x86.
 3. mode — no compiled backend present. Emits
@@ -112,7 +112,7 @@ class _SpoaBackend:
         return str(cons)
 
 
-_BACKEND: _Backend | None | bool = False  # False = resolution not yet attempted
+_BACKEND: _Backend | bool | None = False  # False = resolution not yet attempted
 
 
 def _resolve_backend() -> _Backend | None:

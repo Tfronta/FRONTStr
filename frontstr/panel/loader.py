@@ -1,7 +1,4 @@
-"""Load panels from YAML files.
-
-Phase 1.2 of ROADMAP.md.
-"""
+"""Load panels from YAML files."""
 
 from __future__ import annotations
 

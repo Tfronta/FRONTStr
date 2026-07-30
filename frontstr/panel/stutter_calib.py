@@ -160,6 +160,22 @@ class StutterModel(BaseModel):
         base = math.exp(self.log_intercept + self.log_slope * lus_eff)
         return base * self.step_factors.get(str(step), 0.0)
 
+    def describe(self) -> str:
+        """One line naming this model, for a run header or a log.
+
+        Carries ``protocol`` because that is the field that invalidates a run:
+        this model has no PCR slippage component, so applying it to amplicon
+        casework under-predicts stutter. A trace that does not say which model
+        decided which candidates were artefacts cannot be reproduced.
+        """
+        parts = [self.version, self.protocol]
+        if self.r_squared is not None:
+            parts.append(f"R² {self.r_squared:.3f}")
+        if self.n_observations:
+            parts.append(f"n={self.n_observations} over {self.n_loci} loci")
+        parts.append(f"LUS {self.lus_min}–{self.lus_max}, clamped outside")
+        return ", ".join(parts)
+
 
 #: First-pass model, fitted on the 5 ONT R10/Dorado 1000G slices.
 #: See docs/stutter_calibration.md. PCR-free WGS — NOT valid for amplicon.

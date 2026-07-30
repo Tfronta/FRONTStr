@@ -6,7 +6,6 @@ everywhere. The output is a plain JSON-ready ``dict`` (no Pydantic, no
 dataclasses) so it can also be inlined into the HTML report as
 ``<script type="application/json">``.
 
-The shape follows plan-longtr-improved.md §17.4.
 """
 
 from __future__ import annotations
@@ -49,19 +48,32 @@ class RunContext:
     panel_sha256: str | None = None
     bam_path: Path | None = None
     bam_sha256: str | None = None
-    longtr_vcf_path: Path | None = None
-    longtr_vcf_sha256: str | None = None
-    longtr_version: str | None = None
     reference_build: str = "GRCh38"
     platform: str = "ont"
     operator: str | None = None
     run_id: str | None = None
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    #: The exact command line, for the report's provenance section. Populated
+    #: by the CLI from ``sys.argv``; empty for library callers.
     pipeline_argv: list[str] = field(default_factory=list)
+    #: Every parameter actually in force, defaults included — ``pipeline_argv``
+    #: alone is misleading, because the values that decide a call are usually
+    #: the ones nobody typed. Rows from
+    #: :meth:`frontstr.params.RunParameters.as_audit_rows`, so each carries its
+    #: default, whether it was changed, and where the default came from.
+    effective_params: list[dict[str, Any]] = field(default_factory=list)
+    #: The panel's extraction windows as BED lines. See
+    #: :func:`frontstr.panel.bed.panel_bed_lines`.
+    panel_bed: list[str] = field(default_factory=list)
     dropout_floor: int = DEFAULT_DROPOUT_FLOOR
     #: QC policy applied during interpretation, carried through so the audit
     #: record states the thresholds the calls were actually made under.
     qc_thresholds: QcThresholds = field(default_factory=QcThresholds)
+    #: Relative href back to the cohort view, when this sample was one of many.
+    #: Empty for a standalone run, where there is nothing to go back to and a
+    #: dead link would be worse than no link. Set by the batch, which is the
+    #: only layer that knows whether a cohort view will exist.
+    cohort_href: str = ""
 
 
 def serialize_run(
@@ -82,8 +94,6 @@ def serialize_run(
     """
     if context.bam_path is not None and context.bam_sha256 is None:
         context.bam_sha256 = _file_sha256(context.bam_path)
-    if context.longtr_vcf_path is not None and context.longtr_vcf_sha256 is None:
-        context.longtr_vcf_sha256 = _file_sha256(context.longtr_vcf_path)
 
     serialized_results = [_serialize_marker(r) for r in results]
     summary = _compute_summary(results, context.dropout_floor)
@@ -104,16 +114,16 @@ def serialize_run(
             "panel_sha256": context.panel_sha256,
             "bam_path": str(context.bam_path) if context.bam_path else None,
             "bam_sha256": context.bam_sha256,
-            "longtr_vcf_path": (str(context.longtr_vcf_path) if context.longtr_vcf_path else None),
-            "longtr_vcf_sha256": context.longtr_vcf_sha256,
-            "longtr_version": context.longtr_version,
             "pipeline_argv": context.pipeline_argv,
+            "effective_params": context.effective_params,
+            "panel_bed": context.panel_bed,
             "dropout_floor": context.dropout_floor,
+            "cohort_href": context.cohort_href,
         },
         "summary": summary,
         "qc": qc,
         "audit": _build_audit(results, context),
-        "profile_rows": [_profile_row(r) for r in results],
+        "profile_rows": [_profile_row(r, context.sample_name) for r in results],
         "seq_rows": _seq_rows(results),
         "results": serialized_results,
     }
@@ -132,7 +142,6 @@ def _build_audit(results: list[MarkerResult], context: RunContext) -> dict[str, 
         for role, path, sha in (
             ("bam", context.bam_path, context.bam_sha256),
             ("panel", None, context.panel_sha256),
-            ("longtr_vcf", context.longtr_vcf_path, context.longtr_vcf_sha256),
         )
         if path is not None or sha is not None
     ]
@@ -171,7 +180,6 @@ def _serialize_marker(r: MarkerResult) -> dict[str, Any]:
         "total_reads": r.total_reads,
         "analytical_thresh": r.analytical_thresh,
         "calling_thresh": r.calling_thresh,
-        "discordant": r.discordant,
         "flags": [f.model_dump(mode="json") for f in r.flags],
         "alleles": [
             _serialize_allele(a, r.total_reads, r.system.motif, r.system.strand) for a in r.alleles
@@ -180,7 +188,6 @@ def _serialize_marker(r: MarkerResult) -> dict[str, Any]:
             _serialize_allele(a, r.total_reads, r.system.motif, r.system.strand)
             for a in r.alleles_called
         ],
-        "longtr": _serialize_longtr(r),
     }
     marker_dict["ngs_panel"] = build_ngs_panel(marker_dict)
     return marker_dict
@@ -198,7 +205,14 @@ def _serialize_allele(a: Allele, total_reads: int, motif: str, strand: str = "+"
         "number_is_absolute": a.number_is_absolute,
         "allele_numeric": a.allele_numeric,
         "allele_numeric_source": a.allele_numeric_source,
-        "isfg": a.isfg,
+        # The canonical bracketed string: STRNaming's when it has a range for
+        # this marker, the legacy full-window scan otherwise. One string per
+        # allele across every view — see Allele.repeat_label.
+        "isfg": a.repeat_label,
+        "isfg_source": a.repeat_label_source,
+        # The raw window scan, kept so nothing is lost: it spans the whole
+        # extraction window rather than the standard reporting range.
+        "isfg_window": a.isfg,
         "motif_repeat_summary": motif_repeat_summary(a.consensus, motif, strand=strand),
         "bp_diff": a.bp_diff,
         "is_deletion": a.is_deletion,
@@ -213,46 +227,9 @@ def _serialize_allele(a: Allele, total_reads: int, motif: str, strand: str = "+"
         "n_reads_absorbed": a.n_reads_absorbed,
         "expected_stutter": round(a.expected_stutter, 3),
         "status": a.status.value,
-        "longtr_match": a.longtr_match,
-        "longtr_inexact": a.longtr_inexact,
-        "longtr_bp_diff": a.longtr_bp_diff,
         "fraction": round(a.fraction(total_reads), 4),
         "iso": a.iso.model_dump(mode="json"),
         "flags": [f.model_dump(mode="json") for f in a.flags],
-    }
-
-
-def _serialize_longtr(r: MarkerResult) -> dict[str, Any] | None:
-    if r.longtr_result is None:
-        return None
-    lt = r.longtr_result
-    sample_call = next(iter(lt.samples.values()), None)
-    return {
-        "marker_name": lt.marker_name,
-        "chrom": lt.chrom,
-        "pos": lt.pos,
-        "motif": lt.motif,
-        "period": lt.period,
-        "alleles": [
-            {
-                "sequence": a.sequence,
-                "bp_diff": a.bp_diff,
-                "inexact": a.inexact,
-                "is_deletion": a.is_deletion,
-            }
-            for a in lt.alleles
-        ],
-        "gt_indices": list(sample_call.gt_indices)
-        if sample_call and sample_call.gt_indices
-        else None,
-        "posterior": (
-            round(sample_call.posterior, 4)
-            if sample_call and sample_call.posterior is not None
-            else None
-        ),
-        "depth": sample_call.depth if sample_call else 0,
-        "pdp_hp1": sample_call.pdp_hp1 if sample_call else 0,
-        "pdp_hp2": sample_call.pdp_hp2 if sample_call else 0,
     }
 
 
@@ -274,21 +251,48 @@ def _format_allele_number(a: Allele) -> tuple[float | None, str | None, bool]:
     return (a.number, a.number_label or None, a.number_is_absolute)
 
 
-def _profile_row(r: MarkerResult) -> dict[str, Any]:
-    """Wide row for the profile table: 1 marker, up to 3 alleles."""
+def _profile_row(r: MarkerResult, sample_name: str = "") -> dict[str, Any]:
+    """Wide row for the profile table: 1 marker, up to 3 alleles.
+
+    Carries the **flags** as well as the coarse status chip. They used to live
+    only inside the expandable per-locus cards at the bottom of the report,
+    which meant a reviewer scanning the profile table could not see that a
+    locus was flagged at all — the XLSX export had been doing this correctly
+    (tinted rows plus a QC sheet) while the HTML did not.
+    """
     called = list(r.alleles_called)[:3]
     row: dict[str, Any] = {
+        "sample": sample_name,
         "marker": r.marker_name,
         "call_rule": r.call_rule.value,
         "tri_type": r.tri_type.value,
         "total_reads": r.total_reads,
-        "discordant": r.discordant,
+        # The two numbers the CLI already reports separately. `total_reads` is
+        # the denominator every fraction threshold is measured against, so it
+        # stays; but it is the wrong figure to *show* as the locus coverage —
+        # see MarkerResult.called_reads.
+        "called_reads": r.called_reads,
+        "discarded_reads": r.discarded_reads,
         "status_chip": _status_chip(r),
+        "allele_balance": r.allele_balance,
+        # `short` for the chip, `code` and `message` for its tooltip and for
+        # the legend under the table. All three from FlagCode, so the chips
+        # and the legend cannot describe different things.
+        "flags": [
+            {
+                "code": f.code.value,
+                "short": f.code.short,
+                "severity": f.severity.value,
+                "message": f.message,
+            }
+            for f in r.flags
+        ],
+        "worst_severity": _worst_severity(r),
     }
     for i in range(3):
         slot = called[i] if i < len(called) else None
         if slot is not None:
-            row[f"allele{i + 1}_isfg"] = slot.isfg
+            row[f"allele{i + 1}_isfg"] = slot.repeat_label
             row[f"allele{i + 1}_repeat_summary"] = motif_repeat_summary(
                 slot.consensus, r.system.motif, strand=r.system.strand
             )
@@ -323,6 +327,15 @@ def _profile_row(r: MarkerResult) -> dict[str, Any]:
     return row
 
 
+def _worst_severity(r: MarkerResult) -> str:
+    """``error`` | ``warn`` | ``info`` | ``""`` — drives the row tint."""
+    severities = {f.severity.value for f in r.flags}
+    for level in ("error", "warn", "info"):
+        if level in severities:
+            return level
+    return ""
+
+
 def _allele_number_label(a: Allele) -> str | None:
     """The allele-number cell for one allele (identical to the CE table's)."""
     return a.number_label or None
@@ -349,7 +362,8 @@ def _seq_rows(results: list[MarkerResult]) -> list[dict[str, Any]]:
                     "n_reads_total": a.n_reads_total,
                     "n_reads_hp1": a.n_reads_hp1,
                     "n_reads_hp2": a.n_reads_hp2,
-                    "isfg": a.isfg,
+                    "isfg": a.repeat_label,
+                    "isfg_source": a.repeat_label_source,
                     "motif_repeat_summary": motif_repeat_summary(
                         a.consensus, r.system.motif, strand=r.system.strand
                     ),
@@ -362,15 +376,13 @@ def _seq_rows(results: list[MarkerResult]) -> list[dict[str, Any]]:
 
 
 def _status_chip(r: MarkerResult) -> str:
-    """Top-level status badge: ok | low | tri | mixture | discordant | no_data."""
+    """Top-level status badge: ok | low | tri | mixture | no_data."""
     if r.call_rule == CallRule.NO_DATA:
         return "no_data"
     if r.tri_type == TriType.MIXTURE_SUSPECTED:
         return "mixture"
     if r.tri_type in (TriType.TYPE_I_UNBALANCED, TriType.TYPE_II_BALANCED):
         return "tri"
-    if r.discordant:
-        return "discordant"
     return "ok"
 
 
@@ -382,7 +394,6 @@ def _compute_summary(results: list[MarkerResult], dropout_floor: int) -> dict[st
         1 for r in results if r.tri_type in (TriType.TYPE_I_UNBALANCED, TriType.TYPE_II_BALANCED)
     )
     mixture_count = sum(1 for r in results if r.tri_type == TriType.MIXTURE_SUSPECTED)
-    discordant = sum(1 for r in results if r.discordant)
     dropouts = sum(
         1 for r in results if 0 < r.total_reads < dropout_floor or r.call_rule == CallRule.NO_DATA
     )
@@ -391,7 +402,6 @@ def _compute_summary(results: list[MarkerResult], dropout_floor: int) -> dict[st
         "loci_called": loci_called,
         "tri_count": tri_count,
         "mixture_count": mixture_count,
-        "discordant_count": discordant,
         "dropouts": dropouts,
     }
 

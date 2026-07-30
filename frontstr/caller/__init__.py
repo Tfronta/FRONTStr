@@ -9,7 +9,6 @@ Public surface:
 - :func:`write_panel_bed`, :func:`split_panel_by_chromosome`.
 """
 
-from frontstr.caller.bed import split_panel_by_chromosome, write_panel_bed
 from frontstr.caller.longtr import (
     LongTRInvocation,
     LongTRRun,
@@ -23,6 +22,7 @@ from frontstr.caller.vcf import (
     LongTRSampleCall,
     parse_longtr_vcf,
 )
+from frontstr.panel.bed import split_panel_by_chromosome, write_panel_bed
 
 __all__ = [
     "LongTRAlleleSpec",

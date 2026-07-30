@@ -1,10 +1,9 @@
 """Native, sequence-resolved VCF export.
 
 Not an annotation of someone else's VCF. FRONTStr's calls come from its own
-evidence layer, so this file exists whether or not LongTR was ever run — which
-is the point: it is the interchange format for benchmarking FRONTStr against
-other callers, and a format that only exists when a different caller was
-involved cannot serve that purpose.
+evidence layer, and this is the interchange format for benchmarking FRONTStr
+against other callers — so it must exist on its own terms, not only when some
+other caller was involved.
 
 What makes it *sequence-resolved*
 ---------------------------------
@@ -151,9 +150,11 @@ def _header(
         '##FORMAT=<ID=AL,Number=R,Type=Integer,Description="Allele length in bp, one per '
         'allele in REF-then-ALT order (the window, matching REF/ALT)">',
         '##FORMAT=<ID=MC,Number=R,Type=String,Description="Canonical allele number per '
-        'allele in REF-then-ALT order (CE or ISFG bracket count); . if not called">',
+        "allele in REF-then-ALT order (ISFG designation, CE, or bracket count); "
+        '. if not called">',
         '##FORMAT=<ID=MM,Number=R,Type=String,Description="How each MC value was '
-        'derived: period_ce | reference_offset | bracket_count | delta | bp_sizing">',
+        "derived: strnaming | period_ce | reference_offset | bracket_count | delta | "
+        'bp_sizing">',
         '##FORMAT=<ID=ISFG,Number=R,Type=String,Description="ISFG bracketed '
         'nomenclature per allele in REF-then-ALT order, percent-encoded">',
         '##FORMAT=<ID=ISO,Number=R,Type=String,Description="Iso-allele suffix per '
@@ -195,7 +196,6 @@ _FILTER_DESCRIPTIONS = {
     "dropout": "No allele called at this locus",
     "strand_bias": "A called allele's reads are strand-skewed beyond chance",
     "mixture_suspected": "More than two alleles at a locus without allow_triallelic",
-    "longtr_discordant": "The evidence layer and LongTR disagree on the called alleles",
     "consensus_fallback": "No POA backend: consensus is a single unpolished read",
     "ce_nomenclature_offset": (
         "The reported allele number is not the legacy CE-kit designation for this marker"

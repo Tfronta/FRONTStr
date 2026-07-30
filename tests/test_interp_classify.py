@@ -104,8 +104,12 @@ def test_classify_no_data() -> None:
     assert status == AlleleStatus.NO_DATA
 
 
-def test_classify_inexact_allele_via_longtr_flag() -> None:
-    """Sequences flagged INEXACT_ALLELE by LongTR get the matching status."""
+def test_classify_promotes_a_clean_candidate_to_allele() -> None:
+    """Above both thresholds and not stutter is the only route to ALLELE.
+
+    Used to have a sibling asserting the LongTR-driven INEXACT_ALLELE promotion;
+    that path went away with LongTR (the status is retired, not repurposed).
+    """
     a = _allele(n_reads=50)
     status = classify_allele(
         a,
@@ -113,6 +117,5 @@ def test_classify_inexact_allele_via_longtr_flag() -> None:
         expected_stutter={},
         analytical_thresh=0.02,
         calling_thresh=0.10,
-        longtr_inexact_seqs=frozenset({a.consensus}),
     )
-    assert status == AlleleStatus.INEXACT_ALLELE
+    assert status == AlleleStatus.ALLELE

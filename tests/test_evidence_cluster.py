@@ -12,11 +12,14 @@ from frontstr.evidence.pileup import Observation, pileup_locus
 from tests.conftest import SYNTH_CHROM, SYNTH_TR_END, SYNTH_TR_START
 
 
-def _obs(sequence: str, hp: int | None = None, name: str = "r") -> Observation:
+def _obs(
+    sequence: str, hp: int | None = None, name: str = "r", ps: int | None = None
+) -> Observation:
     return Observation(
         read_id=name,
         sequence=sequence,
         hp=hp,
+        ps=ps,
         mean_qual=40.0,
         strand="+",
         flank_left_ok=True,

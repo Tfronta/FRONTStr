@@ -24,6 +24,7 @@ def _cluster(consensus: str, n_reads: int) -> Cluster:
             read_id=f"r{i}",
             sequence=consensus,
             hp=None,
+            ps=None,
             mean_qual=30.0,
             strand="+",
             flank_left_ok=True,

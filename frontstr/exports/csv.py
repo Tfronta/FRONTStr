@@ -36,7 +36,6 @@ PROFILE_HEADERS: tuple[str, ...] = (
     "call_rule",
     "tri_type",
     "status_chip",
-    "discordant",
     "total_reads",
     "allele1_isfg",
     "allele1_repeat_summary",
@@ -62,8 +61,6 @@ PROFILE_HEADERS: tuple[str, ...] = (
     "allele3_hp1",
     "allele3_hp2",
     "allele3_seq",
-    "longtr_gt",
-    "longtr_q",
 )
 
 EVIDENCE_HEADERS: tuple[str, ...] = (
@@ -72,6 +69,7 @@ EVIDENCE_HEADERS: tuple[str, ...] = (
     "cluster_index",
     "status",
     "isfg",
+    "isfg_source",
     "motif_repeat_summary",
     "consensus",
     "length_bp",
@@ -89,9 +87,6 @@ EVIDENCE_HEADERS: tuple[str, ...] = (
     "mean_qual",
     "expected_stutter",
     "fraction",
-    "longtr_match",
-    "longtr_inexact",
-    "longtr_bp_diff",
 )
 
 SEQS_HEADERS: tuple[str, ...] = (
@@ -99,6 +94,7 @@ SEQS_HEADERS: tuple[str, ...] = (
     "marker",
     "allele_index",
     "isfg",
+    "isfg_source",
     "motif_repeat_summary",
     "ce",
     "allele_numeric",
@@ -123,8 +119,6 @@ def write_profile_csv(payload: dict[str, Any], out_path: Path) -> Path:
             (p for p in payload["profile_rows"] if p["marker"] == r["marker_name"]),
             {},
         )
-        longtr = r.get("longtr") or {}
-        gt = longtr.get("gt_indices")
         rows.append(
             {
                 "sample": sample,
@@ -136,7 +130,6 @@ def write_profile_csv(payload: dict[str, Any], out_path: Path) -> Path:
                 "call_rule": r["call_rule"],
                 "tri_type": r["tri_type"] or "",
                 "status_chip": prow.get("status_chip", ""),
-                "discordant": "true" if r["discordant"] else "false",
                 "total_reads": r["total_reads"],
                 "allele1_isfg": prow.get("allele1_isfg") or "",
                 "allele1_repeat_summary": prow.get("allele1_repeat_summary") or "",
@@ -162,8 +155,6 @@ def write_profile_csv(payload: dict[str, Any], out_path: Path) -> Path:
                 "allele3_hp1": _allele_hp(r, 2, "n_reads_hp1"),
                 "allele3_hp2": _allele_hp(r, 2, "n_reads_hp2"),
                 "allele3_seq": prow.get("allele3_seq") or "",
-                "longtr_gt": "|".join(str(x) for x in gt) if gt else "",
-                "longtr_q": _fmt_number(longtr.get("posterior")),
             }
         )
     return _write_csv(out_path, PROFILE_HEADERS, rows)
@@ -182,6 +173,7 @@ def write_evidence_csv(payload: dict[str, Any], out_path: Path) -> Path:
                     "cluster_index": a["cluster_index"],
                     "status": a["status"],
                     "isfg": a["isfg"],
+                    "isfg_source": a.get("isfg_source", ""),
                     "motif_repeat_summary": motif_repeat_summary(
                         a["consensus"], r["system"]["motif"]
                     ),
@@ -201,11 +193,6 @@ def write_evidence_csv(payload: dict[str, Any], out_path: Path) -> Path:
                     "mean_qual": a["mean_qual"],
                     "expected_stutter": a["expected_stutter"],
                     "fraction": a["fraction"],
-                    "longtr_match": "true" if a["longtr_match"] else "false",
-                    "longtr_inexact": "true" if a["longtr_inexact"] else "false",
-                    "longtr_bp_diff": (
-                        a["longtr_bp_diff"] if a["longtr_bp_diff"] is not None else ""
-                    ),
                 }
             )
     return _write_csv(out_path, EVIDENCE_HEADERS, rows)
@@ -223,6 +210,7 @@ def write_seqs_csv(payload: dict[str, Any], out_path: Path) -> Path:
                     "marker": r["marker_name"],
                     "allele_index": i + 1,
                     "isfg": a["isfg"],
+                    "isfg_source": a.get("isfg_source", ""),
                     "motif_repeat_summary": motif_repeat_summary(
                         a["consensus"], r["system"]["motif"]
                     ),

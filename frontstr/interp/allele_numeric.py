@@ -25,13 +25,10 @@ def resolve_ref_anchor_bp(
     system: System,
     *,
     explicit: int | None,
-    longtr_ref_len: int | None,
 ) -> int:
-    """Reference TR length (bp) for Δ math: explicit > LongTR REF > panel span."""
+    """Reference TR length (bp) for Δ math: explicit override, else panel span."""
     if explicit is not None:
         return explicit
-    if longtr_ref_len is not None:
-        return longtr_ref_len
     return system.span()
 
 

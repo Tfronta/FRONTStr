@@ -1,6 +1,6 @@
 """Per-cluster forensic classification.
 
-Implements the two-rule classifier from plan-longtr-improved.md §6.3:
+Implements the two-rule classifier:
 
 1. **Coverage fraction** vs analytical / calling thresholds (handles mixtures
    and low-input ONT data).
@@ -22,7 +22,6 @@ def classify_allele(
     expected_stutter: dict[str, float],
     analytical_thresh: float,
     calling_thresh: float,
-    longtr_inexact_seqs: frozenset[str] = frozenset(),
 ) -> AlleleStatus:
     """Classify a single :class:`Allele` candidate.
 
@@ -36,9 +35,6 @@ def classify_allele(
             ``noise`` (e.g. ``0.02`` = 2%).
         calling_thresh: Below this fraction, the cluster is ``artefact``
             (above analytical but below calling) — e.g. ``0.10``.
-        longtr_inexact_seqs: Consensus sequences that LongTR flagged as
-            ``INEXACT_ALLELE``; matching clusters are promoted to
-            ``inexact_allele``.
 
     Returns:
         The :class:`AlleleStatus` for this cluster.
@@ -58,6 +54,4 @@ def classify_allele(
     if frac < calling_thresh:
         return AlleleStatus.ARTEFACT
 
-    if allele.consensus in longtr_inexact_seqs:
-        return AlleleStatus.INEXACT_ALLELE
     return AlleleStatus.ALLELE

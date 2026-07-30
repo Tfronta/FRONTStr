@@ -7,6 +7,8 @@ files) and a stub ``run`` that orchestrates the full pipeline.
 
 from __future__ import annotations
 
+import platform
+import sys
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -37,6 +39,197 @@ def _interpret_allele_cell(a: Allele) -> str:
     is called.
     """
     return f"{a.number_label or '?'}({a.n_reads_total})"
+
+
+def _load_regions(
+    panel_path: Path | None, bed: Path | None, bed_coords: str
+) -> tuple[Any, list[str]]:
+    """Resolve ``--panel`` / ``--bed`` into a panel, plus warnings to print.
+
+    A BED is the escape hatch a YAML-only caller does not have: point the tool at
+    your own regions without curating a panel first. What
+    it cannot carry is calibration, so the warnings are not decoration — for a
+    marker STRNaming has no range for, the number is an uncalibrated repeat
+    count rather than a kit allele, and the run says so per locus as well.
+    """
+    from frontstr.panel.bed import load_panel_from_bed
+    from frontstr.panel.loader import load_panel
+
+    if bed is not None and panel_path is not None:
+        raise FrontstrError("give --panel or --bed, not both")
+    if bed is None and panel_path is None:
+        raise FrontstrError("need --panel <yaml> or --bed <file>")
+    if bed is None:
+        assert panel_path is not None
+        return load_panel(panel_path), []
+
+    if bed_coords not in ("bed0", "panel1"):
+        raise FrontstrError(f"--bed-coords must be bed0 or panel1, got {bed_coords!r}")
+    panel, uncalibrated = load_panel_from_bed(bed, coords=bed_coords)  # type: ignore[arg-type]
+    warnings = [
+        f"[dim]Regions from {bed} read as "
+        f"{'0-based half-open (standard BED)' if bed_coords == 'bed0' else '1-based inclusive'}"
+        f" — {len(panel.systems)} marker(s).[/dim]"
+    ]
+    if uncalibrated:
+        warnings.append(
+            f"[yellow]warning:[/yellow] {len(uncalibrated)} marker(s) have no STRNaming "
+            "reporting range and no calibration from the BED, so their allele number is "
+            "an uncalibrated repeat count, not a kit CE allele: "
+            f"{', '.join(uncalibrated[:8])}" + (" …" if len(uncalibrated) > 8 else "")
+        )
+    return panel, warnings
+
+
+def _environment_report() -> list[str]:
+    """Check the installation itself. Returns the problems found, if any.
+
+    The failure this exists for is quiet: without a POA backend FRONTStr still
+    emits a complete profile, built from unpolished single reads, and the damage
+    surfaces as microvariants that are not in the sample. Measured on the
+    reference slices, that fallback produced 4 false microvariants in 202 called
+    alleles. Nobody should have to discover it from a flag after the fact.
+    """
+    from frontstr.evidence.consensus import poa_backend_name
+    from frontstr.interp.naming import default_namer
+    from frontstr.version import __version__
+
+    problems: list[str] = []
+    t = Table(title="FRONTStr doctor — environment", show_header=False)
+    t.add_column("Check", style="bold")
+    t.add_column("Result")
+
+    t.add_row("FRONTStr", __version__)
+    t.add_row("Python", sys.version.split()[0])
+    t.add_row("Platform", f"{platform.system()} {platform.machine()}")
+
+    backend = poa_backend_name()
+    if backend:
+        t.add_row("POA backend", f"[green]{backend}[/green]")
+    else:
+        t.add_row("POA backend", "[red]none — consensus will be a single unpolished read[/red]")
+        problems.append("no POA backend: pip install 'frontstr[poa]'")
+
+    namer = default_namer()
+    if namer is None:
+        t.add_row(
+            "STRNaming", "[red]unavailable — allele numbers fall back to bracket counts[/red]"
+        )
+        problems.append("STRNaming unavailable: pip install 'strnaming>=1.2,<1.3'")
+    else:
+        n = sum(1 for _ in _cached_markers())
+        t.add_row("STRNaming", f"[green]ready[/green], {n} markers in the bundled slice cache")
+
+    for mod in ("pysam", "edlib", "cyvcf2"):
+        try:
+            m = __import__(mod)
+            t.add_row(mod, getattr(m, "__version__", "installed"))
+        except ImportError:
+            t.add_row(mod, "[red]missing[/red]")
+            problems.append(f"{mod} is not importable")
+
+    console.print(t)
+    for p in problems:
+        console.print(f"  [red]✗[/red] {p}")
+    if not problems:
+        console.print("  [green]✓[/green] installation looks complete")
+    return problems
+
+
+def _cached_markers() -> list[str]:
+    from frontstr.interp.naming import CACHE_PATH
+
+    try:
+        lines = CACHE_PATH.read_text(encoding="utf-8").splitlines()[1:]
+    except OSError:
+        return []
+    return [x.split("\t")[0] for x in lines if x.strip()]
+
+
+def _phasing_report(af: Any, panel: Any, reference: Path | None) -> None:
+    """Whether the BAM is phased, and whether its blocks survive a locus.
+
+    Haplotype evidence drives two calling rules, and both are silently disabled
+    on an unphased BAM. It is better to know that before reading a profile than
+    to wonder why a rescue never fired.
+    """
+    hp = ps = total = 0
+    blocks_per_locus: list[int] = []
+    for s in panel.systems[:8]:
+        seen: set[int] = set()
+        try:
+            reads = af.fetch(s.chromosome, max(0, s.ref_start - 1), s.ref_end)
+        except (ValueError, OSError):
+            continue
+        for r in reads:
+            total += 1
+            if r.has_tag("HP"):
+                hp += 1
+                if r.has_tag("PS"):
+                    ps += 1
+                    seen.add(int(r.get_tag("PS")))
+        if seen:
+            blocks_per_locus.append(len(seen))
+
+    if total == 0:
+        return
+    if hp == 0:
+        console.print(
+            "[yellow]Phasing:[/yellow] no HP tags — haplotype rules are disabled "
+            "(phantom suppression and the peak-ratio rescue both no-op)."
+        )
+        return
+    pct = 100 * hp / total
+    line = f"[green]Phasing:[/green] {pct:.0f}% of sampled reads carry HP"
+    if ps == 0:
+        line += "; [yellow]no PS tags[/yellow] — blocks cannot be verified"
+    else:
+        split = sum(1 for n in blocks_per_locus if n > 1)
+        line += f", {ps} with PS"
+        if split:
+            line += f"; [yellow]{split} sampled locus/loci span >1 phase block[/yellow]"
+    console.print(line)
+
+
+def _render_params(params: Any) -> str:
+    """The parameter block, with overridden values highlighted for a terminal."""
+    from rich.markup import escape
+
+    from frontstr.params import render_echo
+
+    out = []
+    for line in render_echo(params).splitlines():
+        if "CHANGED" in line:
+            out.append(f"[yellow]{escape(line)}[/yellow]")
+        elif line.startswith("Parameters in force"):
+            out.append(f"[bold]{escape(line)}[/bold]")
+        else:
+            out.append(f"[dim]{escape(line)}[/dim]")
+    return "\n".join(out)
+
+
+def _balance_cell(result: Any) -> str:
+    """Allele balance, dimmed while inside the balanced band."""
+    ab = result.allele_balance
+    if ab is None:
+        return "[dim]-[/dim]"
+    thr = QcThresholds().balanced_ab_max
+    return f"{ab:.2f}" if ab > thr else f"[dim]{ab:.2f}[/dim]"
+
+
+def _qc_cell(result: Any) -> str:
+    """The flags that actually fired, worst-coloured. Never an aggregated PASS.
+
+    A green PASS standing for several checks teaches a reviewer to stop reading
+    the individual ones, and one that shows on almost every locus stops carrying
+    information. A clean locus therefore says nothing at all.
+    """
+    if not result.flags:
+        return "[dim]-[/dim]"
+    colour = {"error": "red", "warn": "yellow", "info": "cyan"}
+    return " ".join(
+        f"[{colour.get(f.severity.value, 'white')}]{f.code.value}[/]" for f in result.flags
+    )
 
 
 def _version_callback(value: bool) -> None:
@@ -123,11 +316,11 @@ def run(
     """Run the full FRONTStr pipeline on a single sample.
 
     NOTE: not yet implemented end-to-end. Phase 1 of the roadmap wires the
-    layers (ingest → align/passthrough → LongTR → evidence → interp → report).
+    layers (ingest → align/passthrough → evidence → interp → report).
     """
     _ = _input, sample, panel, reference, out, platform
     console.print(
-        "[yellow]not implemented yet[/yellow] — see ROADMAP.md (Phase 1).\n"
+        "[yellow]not implemented yet[/yellow]. Align externally and start from a BAM.\n"
         "Use `frontstr inspect <path>` to validate inputs in the meantime."
     )
     raise typer.Exit(code=64)  # EX_USAGE
@@ -159,8 +352,39 @@ def batch(
     identity: Annotated[float, typer.Option("--identity")] = 0.97,
     analytical_thresh: Annotated[float, typer.Option("--analytical-thresh")] = 0.02,
     calling_thresh: Annotated[float, typer.Option("--calling-thresh")] = 0.10,
+    log: Annotated[
+        bool, typer.Option("--log", help="Watch the run: one line per marker, per sample.")
+    ] = False,
+    trace: Annotated[
+        bool,
+        typer.Option(
+            "--trace/--no-trace",
+            help="Per-locus narrative, one file per sample. On by default.",
+        ),
+    ] = True,
 ) -> None:
     """Run FRONTStr on a multi-sample batch from a manifest TSV.
+
+    Pass ``--log`` to follow the run rather than only its progress counter:
+    the per-marker process log on stderr, every line tagged with the sample it
+    came from, which is what makes it readable when ``-j`` runs several at once.
+
+    Every run writes the full account of every locus to
+    ``<out>/<sample>/<sample>.trace.txt`` — the read funnel with each rejection
+    reason, the bins, the clusters with their consensus, the aligned sequences,
+    the HP1/HP2 haplotype counts, how each allele was named, and the call.
+
+    This is on by default and should stay on. It is the only record that lets
+    someone ask *where* a call went wrong instead of only whether it did, and
+    it costs nothing measurable: 18.5 s against 19.0 s over five samples,
+    ~160 kB per sample. ``--no-trace`` exists for the case where the output
+    directory is genuinely constrained; a run without it cannot be questioned
+    later without being repeated.
+
+    **With ``-j 1`` the narrative also appears on screen as it happens.** With
+    more than one worker it does not — the loci of different samples would land
+    interleaved and become unreadable — so there ``--log`` is the live channel
+    and the trace is read afterwards.
 
     The manifest is a tab-separated file with columns ``sample_id``, ``bam``
     and optionally ``role`` (sample|positive_ctrl|negative_ctrl|reagent_blank).
@@ -221,6 +445,8 @@ def batch(
             run_id=run_id,
             workers=effective_workers,
             progress_callback=_tick,
+            log=log,
+            trace=trace,
         )
     except FrontstrError as exc:
         console.print(f"[red]batch error:[/red] {exc}")
@@ -245,110 +471,46 @@ def batch(
         raise typer.Exit(code=1)
 
 
-@app.command("call")
-def call(
-    bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM.")],
-    panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
-    reference: Annotated[
-        Path, typer.Option("--reference", "-r", help="Reference FASTA (indexed).")
-    ],
-    out_dir: Annotated[Path, typer.Option("--out", "-o", help="Output directory.")],
-    platform: Annotated[str, typer.Option("--platform", help="ont|hifi.")] = "ont",
-    chrom: Annotated[
-        str | None, typer.Option("--chrom", help="Restrict to a single chromosome.")
-    ] = None,
-    phased: Annotated[bool, typer.Option("--phased", help="Pass --phased-bam.")] = False,
-    binary: Annotated[
-        str | None, typer.Option("--longtr-bin", help="Path to LongTR binary.")
-    ] = None,
-    parse_only: Annotated[
-        Path | None,
-        typer.Option("--parse-only", help="Skip subprocess; just parse this VCF."),
-    ] = None,
-) -> None:
-    """Run LongTR on a sample and pretty-print the parsed results.
-
-    Use ``--parse-only PATH`` to skip the LongTR call entirely and just
-    inspect a pre-existing VCF (handy for offline development).
-    """
-    from frontstr.caller import LongTRRunner, parse_longtr_vcf
-    from frontstr.panel.loader import load_panel
-
-    if parse_only is not None:
-        try:
-            results = parse_longtr_vcf(parse_only)
-        except FrontstrError as exc:
-            console.print(f"[red]parse error:[/red] {exc}")
-            raise typer.Exit(code=2) from exc
-    else:
-        try:
-            panel = load_panel(panel_path)
-            runner = LongTRRunner(
-                panel=panel,
-                reference=reference,
-                platform=platform,
-                phased=phased,
-                binary=binary,
-            )
-            run = runner.run(bam=bam, out_dir=out_dir, chrom=chrom)
-            results = run.results
-            console.print(f"[green]LongTR finished[/green] → {run.vcf}")
-        except FrontstrError as exc:
-            console.print(f"[red]caller error:[/red] {exc}")
-            raise typer.Exit(code=2) from exc
-
-    t = Table(title=f"LongTR results ({len(results)} loci)")
-    t.add_column("Marker", style="bold")
-    t.add_column("Position")
-    t.add_column("Motif")
-    t.add_column("GT")
-    t.add_column("Q", justify="right")
-    t.add_column("DP", justify="right")
-    t.add_column("Alleles (bp_diff)")
-    for r in results:
-        sample = next(iter(r.samples.values()), None)
-        gt = "/".join(str(i) for i in sample.gt_indices) if sample and sample.gt_indices else "."
-        q = f"{sample.posterior:.2f}" if sample and sample.posterior is not None else "."
-        dp = str(sample.depth) if sample else "."
-        bp_diffs = ",".join(str(a.bp_diff) for a in r.alleles)
-        t.add_row(r.marker_name, f"{r.chrom}:{r.pos}", r.motif or "?", gt, q, dp, bp_diffs)
-    console.print(t)
-
-
 @app.command("doctor")
 def doctor(
-    bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM or CRAM.")],
-    panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
+    bam: Annotated[Path | None, typer.Option("--bam", help="Indexed sample BAM or CRAM.")] = None,
+    panel_path: Annotated[Path | None, typer.Option("--panel", "-p", help="Panel YAML.")] = None,
     min_mapq: Annotated[int, typer.Option("--min-mapq")] = 20,
     reference: Annotated[
         Path | None,
         typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
     ] = None,
 ) -> None:
-    """Pre-flight sanity check: BAM ↔ panel compatibility.
+    """Pre-flight check: the environment, then BAM ↔ panel compatibility.
 
-    Runs every marker through the pileup and prints:
-      - whether each chromosome exists in the BAM @SQ headers
-      - read counts at each locus (with and without MAPQ filter)
-      - a chromosome-naming hint if 'chr' prefix mismatches
+    With no arguments it checks the installation alone — the POA backend, the
+    STRNaming slice cache, the compiled dependencies. Worth running after any
+    install, because the failure mode is quiet: without a POA backend FRONTStr
+    still produces a full profile, from unpolished single reads, and the damage
+    shows up as microvariants that are not there.
 
-    Run this BEFORE ``frontstr report`` to debug "no data" results.
+    Given ``--bam`` and ``--panel`` it also runs every marker through the
+    pileup: whether each chromosome exists in the BAM headers, read counts with
+    and without the MAPQ filter, and whether the reads are phased.
+
+    Exits non-zero if anything is broken, so it can gate a batch.
     """
     import pysam
 
-    from frontstr.evidence.consensus import poa_backend_name
     from frontstr.evidence.pileup import pileup_locus
     from frontstr.panel.loader import load_panel
 
-    backend = poa_backend_name()
-    if backend:
-        console.print(f"[green]POA backend:[/green] {backend}")
-    else:
-        console.print(
-            "[red]POA backend: none[/red] — cluster consensus will fall back to a "
-            "single unpolished read, degrading ISFG strings and iso-allele calls.\n"
-            "  Fix: [bold]pip install 'frontstr[poa]'[/bold]"
-        )
+    problems = _environment_report()
+
+    if bam is None or panel_path is None:
+        if bam is not None or panel_path is not None:
+            console.print(
+                "[yellow]note:[/yellow] --bam and --panel are checked together; "
+                "give both for the per-marker table."
+            )
+        if problems:
+            raise typer.Exit(code=1)
+        return
 
     try:
         panel = load_panel(panel_path)
@@ -444,7 +606,10 @@ def doctor(
             status,
         )
     console.print(t)
+    _phasing_report(af, panel, reference)
     af.close()
+    if problems:
+        raise typer.Exit(code=1)
 
 
 @app.command("export")
@@ -465,9 +630,6 @@ def export_cmd(
     ] = "profile,evidence,seqs,json",
     sample_name: Annotated[
         str | None, typer.Option("--sample", help="Sample name (defaults to BAM stem).")
-    ] = None,
-    longtr_vcf: Annotated[
-        Path | None, typer.Option("--longtr-vcf", help="Optional LongTR VCF.")
     ] = None,
     operator: Annotated[str | None, typer.Option("--operator")] = None,
     run_id: Annotated[str | None, typer.Option("--run-id")] = None,
@@ -502,8 +664,8 @@ def export_cmd(
             --formats profile,evidence,seqs,json,html
     """
     import logging
+    import sys
 
-    from frontstr.caller import parse_longtr_vcf
     from frontstr.exports import (
         write_evidence_csv,
         write_profile_csv,
@@ -512,9 +674,11 @@ def export_cmd(
         write_run_xlsx,
         write_seqs_csv,
     )
-    from frontstr.interp import index_longtr_results, interpret_run
+    from frontstr.interp import interpret_run
     from frontstr.log import PROCESS_LOG_NAME, configure_logging
+    from frontstr.panel.bed import panel_bed_lines
     from frontstr.panel.loader import load_panel
+    from frontstr.params import RunParameters
     from frontstr.report import RunContext, build_report, serialize_run
 
     wanted = {f.strip().lower() for f in formats.split(",") if f.strip()}
@@ -546,11 +710,9 @@ def export_cmd(
 
     try:
         panel = load_panel(panel_path)
-        longtr_map = index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
         results = interpret_run(
             bam=bam,
             panel=panel,
-            longtr_results=longtr_map,
             min_mapq=min_mapq,
             identity_threshold=identity,
             analytical_thresh=analytical_thresh,
@@ -563,12 +725,21 @@ def export_cmd(
             panel_name=panel.name,
             panel_version=panel.version,
             bam_path=bam,
-            longtr_vcf_path=longtr_vcf,
             platform=platform,
             operator=operator,
             run_id=run_id,
             reference_build=panel.reference_build,
             qc_thresholds=qc_thresholds,
+            pipeline_argv=list(sys.argv),
+            effective_params=RunParameters.of(
+                min_mapq=min_mapq,
+                identity_threshold=identity,
+                analytical_thresh=analytical_thresh,
+                calling_thresh=calling_thresh,
+                low_coverage_reads=qc_thresholds.low_coverage_reads,
+                balanced_ab_max=qc_thresholds.balanced_ab_max,
+            ).as_audit_rows(),
+            panel_bed=panel_bed_lines(panel),
         )
         payload = serialize_run(results, context)
     except FrontstrError as exc:
@@ -620,9 +791,6 @@ def report(
     sample_name: Annotated[
         str | None, typer.Option("--sample", help="Sample name (defaults to BAM stem).")
     ] = None,
-    longtr_vcf: Annotated[
-        Path | None, typer.Option("--longtr-vcf", help="Optional LongTR VCF.")
-    ] = None,
     operator: Annotated[str | None, typer.Option("--operator")] = None,
     run_id: Annotated[str | None, typer.Option("--run-id")] = None,
     platform: Annotated[str, typer.Option("--platform")] = "ont",
@@ -639,20 +807,21 @@ def report(
 
     Usage::
 
-        frontstr report --bam s.bam --panel codis.yaml --out s.html [--longtr-vcf s.vcf]
+        frontstr report --bam s.bam --panel codis.yaml --out s.html
     """
-    from frontstr.caller import parse_longtr_vcf
-    from frontstr.interp import index_longtr_results, interpret_run
+    import sys
+
+    from frontstr.interp import interpret_run
+    from frontstr.panel.bed import panel_bed_lines
     from frontstr.panel.loader import load_panel
+    from frontstr.params import RunParameters
     from frontstr.report import RunContext, build_report
 
     try:
         panel = load_panel(panel_path)
-        longtr_map = index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
         results = interpret_run(
             bam=bam,
             panel=panel,
-            longtr_results=longtr_map,
             min_mapq=min_mapq,
             identity_threshold=identity,
             analytical_thresh=analytical_thresh,
@@ -664,11 +833,18 @@ def report(
             panel_name=panel.name,
             panel_version=panel.version,
             bam_path=bam,
-            longtr_vcf_path=longtr_vcf,
             platform=platform,
             operator=operator,
             run_id=run_id,
             reference_build=panel.reference_build,
+            pipeline_argv=list(sys.argv),
+            effective_params=RunParameters.of(
+                min_mapq=min_mapq,
+                identity_threshold=identity,
+                analytical_thresh=analytical_thresh,
+                calling_thresh=calling_thresh,
+            ).as_audit_rows(),
+            panel_bed=panel_bed_lines(panel),
         )
         out_path = build_report(results, context, out)
     except FrontstrError as exc:
@@ -849,10 +1025,18 @@ def calibrate_stutter(
 @app.command("interpret")
 def interpret(
     bam: Annotated[Path, typer.Option("--bam", help="Indexed sample BAM or CRAM.")],
-    panel_path: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
-    longtr_vcf: Annotated[
-        Path | None, typer.Option("--longtr-vcf", help="Optional LongTR VCF for concordance.")
+    panel_path: Annotated[Path | None, typer.Option("--panel", "-p", help="Panel YAML.")] = None,
+    bed: Annotated[
+        Path | None,
+        typer.Option("--bed", help="Regions as BED instead of a panel. See --bed-coords."),
     ] = None,
+    bed_coords: Annotated[
+        str,
+        typer.Option(
+            "--bed-coords",
+            help="How to read --bed: bed0 (standard 0-based half-open) or panel1 (1-based inclusive).",
+        ),
+    ] = "bed0",
     min_mapq: Annotated[int, typer.Option("--min-mapq")] = 20,
     identity: Annotated[float, typer.Option("--identity")] = 0.97,
     len_tolerance: Annotated[int, typer.Option("--len-tolerance")] = 0,
@@ -872,59 +1056,202 @@ def interpret(
             "--catalog", help="Optional allele catalog JSON for ISFG/iso-allele annotation."
         ),
     ] = None,
+    flank_anchor: Annotated[
+        int, typer.Option("--flank-anchor", help="bp of clean flank required each side.")
+    ] = 20,
+    min_phr_for_het: Annotated[
+        float,
+        typer.Option("--min-phr", help="Minor/major read ratio to call a heterozygote."),
+    ] = 0.4,
+    min_reads_third: Annotated[
+        int | None,
+        typer.Option(
+            "--min-reads-third", help="Read floor for a 3rd allele. DERIVED — see --help."
+        ),
+    ] = None,
+    low_coverage_reads: Annotated[
+        int,
+        typer.Option("--low-coverage-reads", help="Flag a call below this coverage. DERIVED."),
+    ] = 20,
+    balanced_ab_max: Annotated[
+        float, typer.Option("--balanced-ab-max", help="Largest balanced allele-balance value.")
+    ] = 0.65,
+    log: Annotated[
+        bool,
+        typer.Option("--log", "-l", help="Print the per-marker process log to stderr."),
+    ] = False,
+    show_params: Annotated[
+        bool,
+        typer.Option(
+            "--show-params/--no-show-params",
+            help="Print every parameter in force before the run.",
+        ),
+    ] = True,
+    trace: Annotated[
+        bool,
+        typer.Option("--trace", help="Narrate every pipeline step, per locus, to stderr."),
+    ] = False,
+    trace_out: Annotated[
+        Path | None,
+        typer.Option("--trace-out", help="Write the narrative trace to a file instead."),
+    ] = None,
 ) -> None:
     """End-to-end forensic call: pileup → cluster → ISFG → classify → call.
 
     This is the canonical FRONTStr command. It runs the evidence layer for
-    every marker in ``--panel`` and prints one line per called allele plus
-    LongTR concordance flags when ``--longtr-vcf`` is supplied.
+    every marker in ``--panel`` and prints one line per called allele.
+
+    Pass ``--log`` to watch what it does rather than only what it concluded:
+    the run configuration, then one line per marker with the call rule, the
+    coverage, the cluster count and how each allele number was derived.
+
+    Pass ``--trace`` for the full account of every locus: the read funnel with
+    each rejection reason, the repeat-core bins, the clusters and their
+    consensus, how each candidate was named and classified, and the call. This
+    is the transparent-validation view — a genotype can be followed all the way
+    back to the reads.
+
+    Both go to stderr, so ``frontstr interpret ... --trace > table.txt`` still
+    separates cleanly. ``--trace-out FILE`` writes the narrative to a file.
     """
-    from frontstr.caller import parse_longtr_vcf
-    from frontstr.interp import index_longtr_results, interpret_run
+    import logging
+    import sys
+
+    from frontstr.interp import interpret_run
+    from frontstr.log import configure_logging
     from frontstr.panel.catalog import load_catalog
-    from frontstr.panel.loader import load_panel
+    from frontstr.params import RunParameters
+    from frontstr.trace import (
+        LocusTrace,
+        RunHeader,
+        render_header,
+        render_locus,
+        render_run_summary,
+    )
+
+    if log:
+        configure_logging(level=logging.DEBUG, console=True)
+
+    params = RunParameters.of(
+        min_mapq=min_mapq,
+        flank_anchor=flank_anchor,
+        identity_threshold=identity,
+        len_tolerance_bp=len_tolerance,
+        analytical_thresh=analytical_thresh,
+        calling_thresh=calling_thresh,
+        min_phr_for_het=min_phr_for_het,
+        min_reads_third=min_reads_third,
+        low_coverage_reads=low_coverage_reads,
+        balanced_ab_max=balanced_ab_max,
+    )
+    if show_params:
+        console.print(_render_params(params))
+
+    traces: list[LocusTrace] = []
+    trace_fh = trace_out.open("w", encoding="utf-8") if trace_out else None
+    want_trace = trace or trace_out is not None
+
+    def emit(locus: LocusTrace) -> None:
+        traces.append(locus)
+        text = render_locus(locus)
+        if trace_fh is not None:
+            trace_fh.write(text + "\n\n")
+        else:
+            print(text, file=sys.stderr)
+            print(file=sys.stderr)
 
     try:
-        panel = load_panel(panel_path)
+        panel, bed_warnings = _load_regions(panel_path, bed, bed_coords)
+        for warning in bed_warnings:
+            console.print(warning)
         catalog = load_catalog(catalog_path) if catalog_path else None
-        longtr_map = index_longtr_results(parse_longtr_vcf(longtr_vcf)) if longtr_vcf else None
+        if want_trace:
+            from frontstr.evidence.consensus import poa_backend_name
+            from frontstr.interp.naming import default_namer
+            from frontstr.panel.stutter_calib import DEFAULT_STUTTER_MODEL
+            from frontstr.version import __version__ as _v
+
+            namer = default_namer()
+            head = render_header(
+                RunHeader(
+                    inputs=[str(bam)],
+                    panel_name=panel.name,
+                    panel_version=panel.version or "",
+                    n_markers=len(panel.systems),
+                    min_mapq=min_mapq,
+                    identity_threshold=identity,
+                    analytical_thresh=analytical_thresh,
+                    calling_thresh=calling_thresh,
+                    consensus_backend=poa_backend_name(),
+                    naming_markers=sum(
+                        1 for s in panel.systems if namer and namer.has_range(s.name)
+                    ),
+                    stutter_model=DEFAULT_STUTTER_MODEL.describe(),
+                    tool_version=_v,
+                    overrides=[
+                        (spec.name, params[spec.name], spec.default, spec.provenance)
+                        for spec in params.overrides()
+                    ],
+                )
+            )
+            if trace_fh is not None:
+                trace_fh.write(head + "\n")
+            else:
+                print(head, file=sys.stderr)
         results = interpret_run(
             bam=bam,
             panel=panel,
-            longtr_results=longtr_map,
-            min_mapq=min_mapq,
-            identity_threshold=identity,
-            len_tolerance_bp=len_tolerance,
-            analytical_thresh=analytical_thresh,
-            calling_thresh=calling_thresh,
             reference_fasta=reference,
             catalog=catalog,
+            on_trace=emit if want_trace else None,
+            params=params,
+            qc_thresholds=QcThresholds(
+                low_coverage_reads=low_coverage_reads, balanced_ab_max=balanced_ab_max
+            ),
         )
     except FrontstrError as exc:
         console.print(f"[red]interpret error:[/red] {exc}")
         raise typer.Exit(code=2) from exc
+    finally:
+        if want_trace and traces:
+            summary = render_run_summary(traces)
+            if trace_fh is not None:
+                trace_fh.write(summary + "\n")
+            else:
+                print(summary, file=sys.stderr)
+        if trace_fh is not None:
+            trace_fh.close()
+            console.print(f"[dim]trace written to {trace_out}[/dim]")
 
     t = Table(title=f"FRONTStr — {len(results)} markers", show_lines=False)
     t.add_column("Marker", style="bold")
     t.add_column("Call")
     t.add_column("Tri", style="yellow")
-    t.add_column("Alleles called")
-    t.add_column("Cov", justify="right")
-    t.add_column("LongTR?")
+    # no_wrap: an allele list broken across two lines costs more room than the
+    # column saves, and makes the per-allele reads hard to pair with a number.
+    t.add_column("Alleles called", no_wrap=True)
+    t.add_column("AB", justify="right")
+    # fold, not truncate: a QC column that shows "allele_imbala…" is worse
+    # than one that wraps, because the reader cannot tell which flag fired.
+    t.add_column("QC", overflow="fold")
     for r in results:
         called = ", ".join(_interpret_allele_cell(a) for a in r.alleles_called)
-        longtr_flag = (
-            "[red]discordant[/red]" if r.discordant else ("ok" if r.longtr_result else "-")
-        )
         t.add_row(
             r.marker_name,
             r.call_rule.value,
             r.tri_type.value or "-",
             called or "-",
-            str(r.total_reads),
-            longtr_flag,
+            _balance_cell(r),
+            _qc_cell(r),
         )
     console.print(t)
+    console.print(
+        "[dim]Alleles called: allele number(AD), where AD is the reads supporting that "
+        "allele. Per-allele depth is reported because it is the evidence behind each "
+        "allele separately, which a length-based caller cannot give you. Reads that "
+        "supported no called allele were discarded; run --trace to see what they were "
+        "and which rule discarded each.[/dim]"
+    )
 
 
 @app.command("evidence")

@@ -31,7 +31,8 @@ thing a length-rounding scheme would destroy.
 
 from __future__ import annotations
 
-from collections import defaultdict
+import time
+from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -69,6 +70,17 @@ class Cluster:
         return sum(1 for o in self.members if o.hp is None)
 
     @property
+    def phase_sets(self) -> Counter[int]:
+        """Phase blocks the haplotype-tagged members came from, with counts.
+
+        More than one entry means this cluster's ``HP`` labels are not
+        comparable with each other: HP2 in one block and HP2 in the next are
+        unrelated labels. The interpretation layer treats such a cluster as
+        unphased rather than trusting the majority.
+        """
+        return Counter(o.ps for o in self.members if o.hp is not None and o.ps is not None)
+
+    @property
     def n_forward(self) -> int:
         return sum(1 for o in self.members if o.strand == "+")
 
@@ -97,6 +109,9 @@ def cluster_observations(
     identity_threshold: float = _DEFAULT_IDENTITY_THRESHOLD,
     motifs: Sequence[str] | None = None,
     strand: str = "+",
+    bin_sizes: dict[int, int] | None = None,
+    core_binned: dict[int, int] | None = None,
+    consensus_seconds: list[float] | None = None,
 ) -> list[Cluster]:
     """Cluster :class:`Observation` instances by length and sequence identity.
 
@@ -115,6 +130,15 @@ def cluster_observations(
         strand: ``"-"`` for markers whose canonical motif reads on the minus
             strand; the sequence is reverse-complemented before the core is
             located.
+        bin_sizes: Optional dict filled with ``{binning key: n reads}``, so a
+            trace can show why reads grouped as they did.
+        consensus_seconds: Optional list appended with the wall-clock seconds
+            each POA consensus took, so a trace can attribute clustering time
+            between binning and consensus. ``None`` skips the clock entirely.
+        core_binned: Optional dict filled with ``{binning key: n reads whose
+            repeat core was actually locatable}``. A key whose count is lower
+            than ``bin_sizes`` contains reads binned on raw window length, which
+            includes flank error — worth surfacing rather than hiding.
 
     Returns:
         Clusters sorted by ``n_reads`` descending. Each consensus string is in
@@ -131,30 +155,37 @@ def cluster_observations(
     motif_list = [m for m in (motifs or []) if m]
     bins: dict[int, list[Observation]] = defaultdict(list)
     for o in obs:
-        bins[_binning_key(o.sequence, motif_list, strand)].append(o)
+        key, from_core = _binning_key(o.sequence, motif_list, strand)
+        bins[key].append(o)
+        if core_binned is not None and from_core:
+            core_binned[key] = core_binned.get(key, 0) + 1
+    if bin_sizes is not None:
+        bin_sizes.update({k: len(v) for k, v in bins.items()})
 
     if len_tolerance_bp > 0:
         bins = _merge_close_length_bins(bins, len_tolerance_bp)
 
     clusters: list[Cluster] = []
     for members in bins.values():
-        clusters.extend(_cluster_by_identity(members, identity_threshold))
+        clusters.extend(_cluster_by_identity(members, identity_threshold, consensus_seconds))
 
     clusters.sort(key=lambda c: c.n_reads, reverse=True)
     return clusters
 
 
-def _binning_key(sequence: str, motifs: list[str], strand: str) -> int:
-    """Length used to bin a read: the repeat core when locatable, else the window.
+def _binning_key(sequence: str, motifs: list[str], strand: str) -> tuple[int, bool]:
+    """Length used to bin a read, and whether it came from the repeat core.
 
     A read whose core cannot be located (heavily corrupted array, or no motifs
     configured) falls back to raw window length rather than being dropped or
-    lumped together with unrelated reads.
+    lumped together with unrelated reads. The flag is returned so a trace can
+    distinguish the two — a window-length key carries flank error, a core key
+    does not.
     """
     if not motifs:
-        return len(sequence)
+        return len(sequence), False
     core = repeat_core_length(sequence, motifs, strand=strand)
-    return core if core is not None else len(sequence)
+    return (core, True) if core is not None else (len(sequence), False)
 
 
 def _merge_close_length_bins(
@@ -176,7 +207,11 @@ def _merge_close_length_bins(
     return merged
 
 
-def _cluster_by_identity(members: list[Observation], identity_threshold: float) -> list[Cluster]:
+def _cluster_by_identity(
+    members: list[Observation],
+    identity_threshold: float,
+    consensus_seconds: list[float] | None = None,
+) -> list[Cluster]:
     """Seed-and-grow clustering: each seed is the first uncovered observation."""
     clusters: list[Cluster] = []
     remaining = list(members)
@@ -190,7 +225,15 @@ def _cluster_by_identity(members: list[Observation], identity_threshold: float) 
             else:
                 leftover.append(m)
         remaining = leftover
-        consensus, method = build_consensus([m.sequence for m in cluster_members])
+        if consensus_seconds is None:
+            consensus, method = build_consensus([m.sequence for m in cluster_members])
+        else:
+            # Timed separately so a trace can tell "many divergent candidates
+            # to align" apart from "many reads to bin" — they look the same
+            # from outside clustering and mean very different things.
+            _started = time.perf_counter()
+            consensus, method = build_consensus([m.sequence for m in cluster_members])
+            consensus_seconds.append(time.perf_counter() - _started)
         clusters.append(
             Cluster(
                 consensus=consensus,

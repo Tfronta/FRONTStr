@@ -7,6 +7,18 @@ Deliberately free of any FRONTStr import. The interpretation layer logs, and
 the audit record describes the interpretation layer's output — putting both in
 one module makes the domain depend on the audit trail and the audit trail
 depend on the domain.
+
+Two sinks, two renderings
+-------------------------
+
+The file sink and the terminal sink want opposite things. The audit file wants
+JSONL with sorted keys, because that is what diffs cleanly between runs and
+what a downstream tool can parse. A person watching a run wants aligned
+key=value pairs they can read at a glance.
+
+Rather than pick one and make the other unpleasant, the shared processor chain
+stops short of rendering and hands off to :class:`structlog.stdlib.
+ProcessorFormatter`, so each handler renders the same event its own way.
 """
 
 from __future__ import annotations
@@ -23,25 +35,32 @@ from structlog.typing import Processor
 PROCESS_LOG_NAME = "frontstr.log.jsonl"
 
 
-#: ``sort_keys`` matters beyond tidiness: a JSONL log with a stable key order
-#: diffs cleanly between runs, which is how you find what changed.
-_JSONL_PROCESSORS: list[Processor] = [
+#: Everything both sinks share. Rendering is deliberately *not* here — it is
+#: per-handler, see the module docstring.
+_SHARED_PROCESSORS: list[Processor] = [
     structlog.contextvars.merge_contextvars,
     structlog.processors.add_log_level,
     structlog.processors.TimeStamper(fmt="iso", utc=True),
     structlog.processors.StackInfoRenderer(),
     structlog.processors.format_exc_info,
-    structlog.processors.JSONRenderer(sort_keys=True),
 ]
+
+#: ``sort_keys`` matters beyond tidiness: a JSONL log with a stable key order
+#: diffs cleanly between runs, which is how you find what changed.
+_JSON_RENDERER: Processor = structlog.processors.JSONRenderer(sort_keys=True)
 
 
 def _apply(level: int) -> None:
     structlog.configure(
-        processors=_JSONL_PROCESSORS,
+        processors=[*_SHARED_PROCESSORS, structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
         wrapper_class=structlog.make_filtering_bound_logger(level),
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=False,
     )
+
+
+def _formatter(renderer: Processor) -> logging.Formatter:
+    return structlog.stdlib.ProcessorFormatter(processor=renderer, foreign_pre_chain=[])
 
 
 def configure_logging(
@@ -53,18 +72,30 @@ def configure_logging(
         log_path: JSONL destination. ``None`` leaves the log without a file
             sink, which is what library consumers and tests want.
         level: Standard library level; ``DEBUG`` adds per-marker events.
-        console: Also emit lines on stderr. Off by default so the CLI's own
-            Rich output stays the primary channel and log lines do not
-            interleave with progress tables.
+        console: Also emit lines on stderr, rendered for reading rather than
+            for parsing. Off by default so the CLI's own Rich output stays the
+            primary channel and log lines do not interleave with result tables.
+            **stderr, not stdout** — piping the table somewhere must not pick
+            up the log.
 
     Safe to call more than once; the last call wins.
     """
     handlers: list[logging.Handler] = []
     if log_path is not None:
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        handlers.append(logging.FileHandler(log_path, mode="w", encoding="utf-8"))
+        file_handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+        file_handler.setFormatter(_formatter(_JSON_RENDERER))
+        handlers.append(file_handler)
     if console or not handlers:
-        handlers.append(logging.StreamHandler(sys.stderr))
+        stream = logging.StreamHandler(sys.stderr)
+        # Colour only when stderr is a terminal: a redirected log full of ANSI
+        # escapes is worse than no colour at all.
+        stream.setFormatter(
+            _formatter(structlog.dev.ConsoleRenderer(colors=sys.stderr.isatty()))
+            if console
+            else _formatter(_JSON_RENDERER)
+        )
+        handlers.append(stream)
 
     logging.basicConfig(level=level, format="%(message)s", handlers=handlers, force=True)
     _apply(level)

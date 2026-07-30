@@ -41,7 +41,7 @@ mask a genuine second contributor or a genuine triallelic pattern:
 - both clusters carry at least ``min_tagged_reads`` phased reads and have a
   *confident* dominant haplotype (``hp_purity``) — on an unphased BAM no
   cluster qualifies and the whole step is a no-op;
-- they share that haplotype;
+- they share that haplotype **in the same phase block** (see below);
 - they differ by at most ``max_phantom_bp`` — well under one repeat unit. A
   second contributor or a true third allele differs by a whole repeat unit.
 - the marker does not set ``allow_triallelic`` (a duplication genuinely puts
@@ -51,6 +51,34 @@ Suppressed clusters are demoted to :class:`AlleleStatus.HP_PHANTOM` rather
 than deleted: they stay in the record, the owning allele records how many
 reads were absorbed, and the marker carries a ``HP_PHANTOM_COLLAPSED`` flag so
 the decision is auditable.
+
+Haplotype labels are local to a phase block
+-------------------------------------------
+
+``HP`` only means something inside its own ``PS``. HP1 in one block and HP1 in
+the next are unrelated labels, not the same chromosome — the phasing tool
+simply started numbering again. Every rule here therefore keys on
+``(phase_set, hp)``, and a cluster whose tagged reads span more than one block
+is treated as unphased rather than trusted.
+
+This is not hypothetical. Across the five ONT slices, 3 of 125 loci have
+spanning, phased reads from more than one block, and at HG00097 D13S317 a
+14-read cluster looked "100% HP2" while drawing 4 reads from one block and 3
+from another. No call changes today — that locus is balanced enough that no
+haplotype rule fires — but the evidence was contaminated and the next read
+distribution would not have been so forgiving.
+
+The same invariant, read backwards
+----------------------------------
+
+If two clusters on the *same* haplotype cannot both be real, then two clusters
+on *opposite* haplotypes cannot be the same allele — no matter how unbalanced
+their read counts are. :func:`on_opposite_haplotypes` exposes that reading, and
+:func:`frontstr.interp.triallelic.call_profile` uses it to stop the
+peak-height-ratio filter from collapsing a genuine heterozygote. Measured on
+HG00113 D2S1338: 17 reads (100% HP1) against 5 reads (100% HP2) is a PHR of
+0.29, under the 0.4 floor, so it was called homozygous 20 — against an Illumina,
+LongTR and STRspy consensus of 17/20.
 """
 
 from __future__ import annotations
@@ -89,7 +117,16 @@ def dominant_hp(
     fewer than ``min_tagged_reads`` tagged reads return ``None`` — too little
     evidence to claim a haplotype, which is also what makes this a no-op on
     unphased BAMs.
+
+    **A cluster whose tagged reads span more than one phase block gets no
+    haplotype**, however pure its ``HP`` labels look. See the module docstring:
+    HP2 in one block and HP2 in the next are unrelated labels, so a "100% HP2"
+    cluster drawn from two blocks is not evidence of one haplotype. Measured on
+    HG00097 D13S317: a 14-read cluster reported exactly that, 4 reads from one
+    block and 3 from another.
     """
+    if allele.n_phase_sets > 1:
+        return None
     tagged = allele.n_reads_hp1 + allele.n_reads_hp2
     if tagged < min_tagged_reads:
         return None
@@ -98,6 +135,49 @@ def dominant_hp(
     if allele.n_reads_hp2 / tagged >= hp_purity:
         return 2
     return None
+
+
+def same_phase_block(a: Allele, b: Allele) -> bool:
+    """True when two clusters' haplotype labels are comparable at all.
+
+    Both in the same block: comparable. Both without a ``PS`` tag: assume
+    comparable, because that is the pre-``PS`` behaviour and refusing would
+    silently disable haplotype reasoning on every BAM phased by a tool that
+    does not emit ``PS``. Anything else — different blocks, or one tagged and
+    one not — is unverifiable, so it is refused.
+    """
+    if a.phase_set is None and b.phase_set is None:
+        return True
+    return a.phase_set is not None and a.phase_set == b.phase_set
+
+
+def on_opposite_haplotypes(
+    a: Allele,
+    b: Allele,
+    *,
+    hp_purity: float = DEFAULT_HP_PURITY,
+    min_tagged_reads: int = DEFAULT_MIN_TAGGED_READS,
+) -> bool:
+    """True when ``a`` and ``b`` are each confidently on a *different* haplotype.
+
+    The same invariant as :func:`suppress_hp_phantoms`, read the other way
+    round. One allele per haplotype means that two clusters sharing a haplotype
+    cannot both be real — and that two clusters on *opposite* haplotypes cannot
+    be the same allele, however unbalanced their read counts are.
+
+    That second reading is what rescues an imbalanced heterozygote from the
+    peak-height-ratio filter: a read ratio is an indirect proxy for "these are
+    two alleles", and phasing is direct evidence of it. Returns ``False`` unless
+    both clusters clear ``min_tagged_reads`` at ``hp_purity``, so this is a
+    no-op on unphased BAMs.
+    """
+    if not same_phase_block(a, b):
+        return False
+    hp_a = dominant_hp(a, hp_purity=hp_purity, min_tagged_reads=min_tagged_reads)
+    if hp_a is None:
+        return False
+    hp_b = dominant_hp(b, hp_purity=hp_purity, min_tagged_reads=min_tagged_reads)
+    return hp_b is not None and hp_a != hp_b
 
 
 def suppress_hp_phantoms(
@@ -141,11 +221,14 @@ def suppress_hp_phantoms(
     if len(candidates) < 2:
         return 0
 
-    by_hp: dict[int, list[Allele]] = {}
+    # Keyed on (phase block, haplotype), not haplotype alone: two clusters
+    # labelled HP1 in *different* blocks are not on the same haplotype, and
+    # collapsing one into the other would delete a real allele.
+    by_hp: dict[tuple[int | None, int], list[Allele]] = {}
     for a in candidates:
         hp = dominant_hp(a, hp_purity=hp_purity, min_tagged_reads=min_tagged_reads)
         if hp is not None:
-            by_hp.setdefault(hp, []).append(a)
+            by_hp.setdefault((a.phase_set, hp), []).append(a)
 
     demoted = 0
     for group in by_hp.values():

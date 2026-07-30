@@ -5,7 +5,8 @@ Implements the call profile from plan-longtr-improved.md §6.4.
 Outcomes:
 
 - 0 candidates → ``no_data``
-- 1 candidate, or 2nd allele below ``min_phr`` of the 1st → ``homozygous``
+- 1 candidate, or 2nd allele below ``min_phr`` of the 1st → ``homozygous``,
+  **unless phasing puts the two on opposite haplotypes** — see below
 - 2 candidates (or 3rd below calling threshold, or 3rd below the absolute
   ``min_reads_third`` floor) → ``heterozygous``
 - 3+ candidates with ``allow_triallelic``:
@@ -17,10 +18,28 @@ Outcomes:
 
 Type-II thresholds: default ``tri_balanced_thr = 0.6``; TPOX panels typically
 configure 0.5 to capture balanced TPOX type-II patterns.
+
+The peak-height ratio is not the best evidence available
+--------------------------------------------------------
+
+``min_phr_for_het`` is inherited from capillary electrophoresis, where peak
+height is all there is. On phased long reads it is not: a diploid locus carries
+one allele per haplotype, so two candidates confidently on opposite haplotypes
+are two alleles regardless of their read ratio. At ONT depths a 5-vs-17 split
+(PHR 0.29) is ordinary sampling, and collapsing it to a homozygote is a
+false exclusion waiting to happen.
+
+So the PHR floor is now overridden by
+:func:`frontstr.interp.haplotype.on_opposite_haplotypes`, and the rescued
+allele carries ``hp_rescued`` so the marker can raise ``HP_RESCUED_HET``. This
+is the same invariant :func:`~frontstr.interp.haplotype.suppress_hp_phantoms`
+uses to *delete* alleles, applied in the opposite direction. Both are no-ops on
+unphased BAMs, where the ratio is again the only evidence there is.
 """
 
 from __future__ import annotations
 
+from frontstr.interp.haplotype import on_opposite_haplotypes
 from frontstr.interp.models import Allele, AlleleStatus, CallRule, TriType
 from frontstr.panel.models import System
 
@@ -79,7 +98,16 @@ def call_profile(
     a1, a2 = cands[0], cands[1]
     phr_12 = a2.n_reads_total / max(a1.n_reads_total, 1)
     if phr_12 < min_phr_for_het:
-        return [a1], CallRule.HOMOZYGOUS, TriType.NONE
+        # The peak-height ratio is an indirect proxy for "these are two
+        # alleles"; phasing is direct evidence of it. A diploid locus carries
+        # one allele per haplotype, so two candidates confidently on opposite
+        # haplotypes are two alleles no matter how unbalanced their coverage —
+        # and at ONT depths an unlucky 5-vs-17 split is ordinary sampling, not
+        # evidence of homozygosity. No-op on unphased BAMs, where the ratio
+        # remains the only evidence available.
+        if not on_opposite_haplotypes(a1, a2):
+            return [a1], CallRule.HOMOZYGOUS, TriType.NONE
+        a2.hp_rescued = True
 
     if len(cands) == 2:
         return [a1, a2], CallRule.HETEROZYGOUS, TriType.NONE

@@ -217,3 +217,54 @@ def test_cram_pileup_returns_same_observations(
     bam_lengths = sorted(len(o.sequence) for o in obs_bam)
     cram_lengths = sorted(len(o.sequence) for o in obs_cram)
     assert cram_lengths == bam_lengths
+
+
+# ---------------------------------------------------------------------------
+# Read accounting — the funnel behind `interpret --trace`
+# ---------------------------------------------------------------------------
+
+
+def test_counts_account_for_every_fetched_read(synth_bam_low_mapq: Path) -> None:
+    """kept + rejected == fetched, or the coverage number is not auditable."""
+    from frontstr.evidence.pileup import PileupCounts
+
+    counts = PileupCounts()
+    obs = pileup_locus(
+        synth_bam_low_mapq,
+        SYNTH_CHROM,
+        SYNTH_TR_START,
+        SYNTH_TR_END,
+        min_mapq=20,
+        counts=counts,
+    )
+    assert counts.fetched > 0
+    assert counts.kept == len(obs)
+    assert counts.kept + counts.n_rejected == counts.fetched
+
+
+def test_low_mapq_reads_are_reported_with_that_reason(synth_bam_low_mapq: Path) -> None:
+    from frontstr.evidence.pileup import PileupCounts, RejectReason
+
+    counts = PileupCounts()
+    pileup_locus(
+        synth_bam_low_mapq,
+        SYNTH_CHROM,
+        SYNTH_TR_START,
+        SYNTH_TR_END,
+        min_mapq=20,
+        counts=counts,
+    )
+    assert counts.rejected[RejectReason.LOW_MAPQ] > 0
+
+
+def test_counts_are_optional(synth_bam_heterozygous: Path) -> None:
+    """The hot path must not pay for accounting nobody asked for."""
+    assert pileup_locus(synth_bam_heterozygous, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END)
+
+
+def test_phase_set_tag_is_captured(synth_bam_heterozygous: Path) -> None:
+    """PS must ride along with HP; without it the tag cannot be scoped."""
+    obs = pileup_locus(synth_bam_heterozygous, SYNTH_CHROM, SYNTH_TR_START, SYNTH_TR_END)
+    assert all(hasattr(o, "ps") for o in obs)
+    # Synthetic fixtures carry no PS; the field must be None, never invented.
+    assert all(o.ps is None for o in obs)

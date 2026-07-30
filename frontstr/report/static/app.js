@@ -11,6 +11,7 @@
   const profile = document.querySelector("table.profile");
   const searchInput = document.querySelector("#profile-search");
   const statusSelect = document.querySelector("#profile-status");
+  const flaggedSelect = document.querySelector("#profile-flagged");
   const countPill = document.querySelector("#profile-count");
 
   if (profile) {
@@ -25,17 +26,22 @@
     const applyFilters = () => {
       const q = (searchInput?.value || "").trim().toLowerCase();
       const status = statusSelect?.value || "";
+      const flagged = flaggedSelect?.value || "";
       for (const tr of allRows) {
         const text = tr.dataset.search || "";
         const chip = tr.dataset.chip || "";
         const matchesText = !q || text.includes(q);
         const matchesStatus = !status || chip === status;
-        tr.style.display = matchesText && matchesStatus ? "" : "none";
+        // The search box already matches flag codes via data-search, so typing
+        // "allele_imbalance" filters too; this select is the no-typing path.
+        const matchesFlagged = !flagged || (tr.dataset.flagged || "0") === flagged;
+        tr.style.display = matchesText && matchesStatus && matchesFlagged ? "" : "none";
       }
       updatePill();
     };
     searchInput?.addEventListener("input", applyFilters);
     statusSelect?.addEventListener("change", applyFilters);
+    flaggedSelect?.addEventListener("change", applyFilters);
 
     const headers = profile.tHead.querySelectorAll("th[data-sortable]");
     headers.forEach((th, idx) => {

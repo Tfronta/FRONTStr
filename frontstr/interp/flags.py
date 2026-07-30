@@ -65,6 +65,33 @@ def derive_marker_flags(result: MarkerResult) -> None:
             "are counted in the owning allele's n_reads_absorbed.",
         )
 
+    split_blocks = [a for a in result.alleles if a.n_phase_sets > 1]
+    if split_blocks:
+        detail = ", ".join(
+            f"cluster {a.cluster_index} ({a.n_phase_sets} blocks)" for a in split_blocks
+        )
+        add(
+            FlagCode.PHASE_BLOCK_SPLIT,
+            f"{result.marker_name}: haplotype-tagged reads span more than one phase "
+            f"block ({detail}). HP labels are local to a block, so those clusters "
+            "were treated as unphased — do not read their HP counts as haplotypes.",
+        )
+
+    rescued = [a for a in result.alleles_called if a.hp_rescued]
+    if rescued:
+        major = result.alleles_called[0]
+        detail = ", ".join(
+            f"{a.number_label or f'cluster {a.cluster_index}'} on "
+            f"{a.n_reads_total} reads vs {major.n_reads_total}"
+            for a in rescued
+        )
+        add(
+            FlagCode.HP_RESCUED_HET,
+            f"{result.marker_name} is called heterozygous on phasing rather than "
+            f"peak balance ({detail}): the allele(s) sit on the opposite haplotype "
+            "from the major one, so the read imbalance is coverage, not homozygosity.",
+        )
+
     unpolished = [a for a in result.alleles_called if a.consensus_method == ConsensusMethod.MODE]
     if unpolished:
         add(
