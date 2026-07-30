@@ -6,7 +6,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="generator" content="FRONTStr {{ payload.meta.app_version }}">
-<title>FRONTStr — {{ payload.meta.sample_name }} ({{ payload.meta.panel_name }})</title>
+<title>FRONTStr: {{ payload.meta.sample_name }} ({{ payload.meta.panel_name }})</title>
 <style>{{ css_bundle | safe }}</style>
 </head>
 <body>
@@ -86,8 +86,8 @@
           <th data-sortable="num">Cov <span class="th-hint">called +rest</span></th>
           <th data-sortable="num">AB <span class="th-hint">balance</span></th>
           <th data-sortable="text">QC</th>
-          <th>ISFG — allele 1</th>
-          <th>ISFG — allele 2</th>
+          <th>ISFG, allele 1</th>
+          <th>ISFG, allele 2</th>
         </tr>
       </thead>
       <tbody>
@@ -131,7 +131,7 @@
             {% if row.flags %}
               {% for f in row.flags %}<span class="chip sev-{{ f.severity }}" title="{{ f.code }}">{{ f.code }}</span>{% endfor %}
             {% else %}<span class="dim">–</span>{% endif %}
-            {% if row.has_iso %}<span class="chip iso" title="Isoalleles present — same allele number, different sequence.">iso</span>{% endif %}
+            {% if row.has_iso %}<span class="chip iso" title="Isoalleles present: same allele number, different sequence.">iso</span>{% endif %}
           </td>
           {# The bracketed ISFG string, not the raw consensus: this table is the
              profile a reader compares against another profile, and a wall of
@@ -141,7 +141,7 @@
           {% set isfg = row['allele' ~ i ~ '_isfg'] %}
           <td class="seq-col">
             {% if isfg %}
-            <div class="seq-scroll mono" title="ISFG bracketed repeat structure — scroll sideways">{{ isfg }}</div>
+            <div class="seq-scroll mono" title="ISFG bracketed repeat structure. Scroll sideways.">{{ isfg }}</div>
             <button class="seq-copy" type="button" data-copy="{{ isfg }}" title="Copy allele {{ i }} ISFG string">copy</button>
             {% else %}<span class="dim">–</span>{% endif %}
           </td>
@@ -151,7 +151,7 @@
       </tbody>
     </table>
     </div>
-    <p class="profile-note"><strong>CE-based genotype.</strong> Each row is one marker. <strong>Genotype</strong> is the called allele numbers; <strong>Allele N</strong> + <strong>Reads N</strong> give the per-allele number and its individual coverage. <strong>Cov</strong> is the coverage of the call — the sum of the <strong>Reads N</strong> beside it — followed by <span class="dim">+n</span>, the spanning reads that supported no called allele (stutter, noise, rejected candidates). They are shown apart because a single total reads as if every spanning read backed the genotype; a locus whose <span class="dim">+n</span> is large is a locus worth opening in the trace. Fraction thresholds are still measured against the two added together, which is what decides where the noise line falls. <strong>Allele number</strong> = repeat units counted from the called sequence: length-based CE for simple loci (<code>period ≥ 1</code>), ISFG bracket count for compound loci (<code>period: -1</code>: vWA, FGA, D21S11, D3S1358 …); cross-comparable with CE / Illumina / other callers. <strong>AB</strong> is allele balance — coverage share of the strongest called allele, 0.50 being perfectly even; it is only defined for a heterozygote. <strong>QC</strong> lists the flags that actually fired, coloured by severity, and tints the row; a clean locus shows nothing rather than a green PASS, because a label that appears on almost every row stops being read. <strong>ISFG</strong> is the bracketed repeat structure of each called allele — the form the ISFG DNA Commission prescribes, and the one that can be read against another laboratory's profile. The full consensus sequence is in <a href="#sequences">Sequences</a> below, one row per allele, where there is room for it. The <span class="chip iso">iso</span> chip flags isoalleles (same number, different sequence): click the marker to see them.</p>
+    <p class="profile-note"><strong>CE-based genotype.</strong> Each row is one marker. <strong>Genotype</strong> is the called allele numbers; <strong>Allele N</strong> + <strong>Reads N</strong> give the per-allele number and its individual coverage. <strong>Cov</strong> is the coverage of the call, the sum of the <strong>Reads N</strong> beside it, followed by <span class="dim">+n</span>, the spanning reads that supported no called allele (stutter, noise, rejected candidates). They are shown apart because a single total reads as if every spanning read backed the genotype; a locus whose <span class="dim">+n</span> is large is a locus worth opening in the trace. Fraction thresholds are still measured against the two added together, which is what decides where the noise line falls. <strong>Allele number</strong> = repeat units counted from the called sequence: length-based CE for simple loci (<code>period ≥ 1</code>), ISFG bracket count for compound loci (<code>period: -1</code>: vWA, FGA, D21S11, D3S1358 …); cross-comparable with CE / Illumina / other callers. <strong>AB</strong> is allele balance, the coverage share of the strongest called allele, 0.50 being perfectly even. It is only defined for a heterozygote. <strong>QC</strong> lists the flags that actually fired, coloured by severity, and tints the row; a clean locus shows nothing rather than a green PASS, because a label that appears on almost every row stops being read. <strong>ISFG</strong> is the bracketed repeat structure of each called allele. It is the form the ISFG DNA Commission prescribes, and the one that can be read against another laboratory's profile. The full consensus sequence is in <a href="#sequences">Sequences</a> below, one row per allele, where there is room for it. The <span class="chip iso">iso</span> chip flags isoalleles (same number, different sequence): click the marker to see them.</p>
   </div>
 </section>
 
@@ -202,7 +202,7 @@
       {% endfor %}
       </tbody>
     </table>
-    <p class="profile-note"><strong>Sequencing-based view — the FRONTStr differential.</strong> One row per called allele. <strong>ISFG (brackets)</strong> is the compact sequence form that distinguishes <em>iso-alleles</em>: two alleles with the same number but different motif structure (e.g. <code>15a</code> vs <code>15b</code>) — something CE electrophoresis cannot resolve. The full consensus is available per allele via <em>copy</em> or the expandable <em>bp</em> control, so it never bloats the table. Click a marker in the CE table above to filter this table to that locus.</p>
+    <p class="profile-note"><strong>Sequencing-based view, the FRONTStr differential.</strong> One row per called allele. <strong>ISFG (brackets)</strong> is the compact sequence form that distinguishes <em>iso-alleles</em>: two alleles with the same number but different motif structure (e.g. <code>15a</code> vs <code>15b</code>), something CE electrophoresis cannot resolve. The full consensus is available per allele via <em>copy</em> or the expandable <em>bp</em> control, so it never bloats the table. Click a marker in the CE table above to filter this table to that locus.</p>
   </div>
 </section>
 
@@ -293,14 +293,14 @@
           </div>
           {% if r.flags %}
           <div style="margin-top:10px;font-size:12px;">
-            {% for f in r.flags %}<div class="flag flag-{{ f.severity }}" title="{{ f.code }}">{% if f.severity == 'error' %}⛔{% elif f.severity == 'warn' %}⚠{% else %}ℹ{% endif %} <code>{{ f.code }}</code> — {{ f.message }}</div>{% endfor %}
+            {% for f in r.flags %}<div class="flag flag-{{ f.severity }}" title="{{ f.code }}">{% if f.severity == 'error' %}⛔{% elif f.severity == 'warn' %}⚠{% else %}ℹ{% endif %} <code>{{ f.code }}</code>: {{ f.message }}</div>{% endfor %}
           </div>
           {% endif %}
         </div>
         <div class="locus-split">
           <div class="locus-split-main">
           <details class="forensic-audit">
-            <summary><b>Forensic audit</b><span class="meta"> — all clusters</span></summary>
+            <summary><b>Forensic audit</b><span class="meta">, all clusters</span></summary>
             <table class="allele-table">
             <thead>
               <tr>
@@ -398,7 +398,7 @@
     <dl class="raw-grid">
       <dt>FRONTStr</dt><dd>{{ audit.tool_version }}</dd>
       <dt>POA backend</dt>
-      <dd>{% if audit.poa_backend == 'none' %}<b style="color:var(--warn,#b58900);">none — consensus unpolished</b>{% else %}{{ audit.poa_backend }}{% endif %}</dd>
+      <dd>{% if audit.poa_backend == 'none' %}<b style="color:var(--warn,#b58900);">none. Consensus unpolished.</b>{% else %}{{ audit.poa_backend }}{% endif %}</dd>
       <dt>Stutter model</dt>
       <dd>{{ audit.stutter_model_version }} <span class="meta">({{ audit.stutter_model_protocol }})</span></dd>
       <dt>Analytical / calling</dt><dd>{{ audit.analytical_thresh }} / {{ audit.calling_thresh }}</dd>
@@ -410,7 +410,7 @@
 
     <h3 style="font-size:13px;margin:16px 0 8px;color:var(--text-soft);">
       Conditions checked
-      <span class="meta">— every condition below was evaluated; those not listed as raised were checked and not found</span>
+      <span class="meta">Every condition below was evaluated; those not listed as raised were checked and not found</span>
     </h3>
     <ul class="raw-grid" style="list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:6px;">
       {% for code in audit.flags_checked %}

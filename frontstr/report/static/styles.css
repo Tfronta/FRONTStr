@@ -88,23 +88,33 @@ code, pre, .mono {
   padding: 28px 32px 64px;
 }
 
-/* ---------- header (STRhub teal) ---------- */
+/* ---------- header ----------
+ * Deliberately plain. This used to be a saturated teal gradient with white
+ * text at 85% opacity, which cost contrast exactly where the identifying
+ * facts are: sample name, panel version, reference build, timestamp. Those
+ * are the fields a reader checks first and quotes later, so they are set in
+ * body text on the body surface, at the same contrast as everything else.
+ * The accent survives as a rule, which identifies the report without
+ * competing with it.
+ */
 header.cover {
-  background: linear-gradient(135deg, #0f766e 0%, var(--accent) 45%, #14b8a6 100%);
-  color: white;
-  padding: 28px 32px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  padding: 24px 28px;
   border-radius: var(--radius-lg);
   margin-bottom: 24px;
   box-shadow: var(--shadow);
 }
 header.cover h1 {
   margin: 0 0 4px;
-  font-size: 28px;
+  font-size: 26px;
   letter-spacing: -0.02em;
 }
 header.cover .subtitle {
   font-size: 13px;
-  opacity: 0.85;
+  color: var(--text-soft);
 }
 header.cover .meta {
   margin-top: 14px;
@@ -112,7 +122,7 @@ header.cover .meta {
   flex-wrap: wrap;
   gap: 8px 16px;
   font-size: 12px;
-  opacity: 0.9;
+  color: var(--text-faint);
 }
 header.cover .meta span::before { content: "·"; margin-right: 4px; opacity: 0.5; }
 header.cover .meta span:first-child::before { content: ""; }
@@ -148,19 +158,30 @@ nav.page-tabs a:hover {
   gap: 12px;
   margin-top: 18px;
 }
+/* Translucent white on a gradient made these unreadable in dark mode and
+ * washed out in light. They now sit on the muted surface with a real border,
+ * and the warn/danger colours are the same tokens the QC chips use, so one
+ * severity reads the same everywhere in the report. */
 .kpi {
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(6px);
+  background: var(--muted);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px 14px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  opacity: 0.9;
+  color: var(--text-faint);
 }
-.kpi b { display: block; font-size: 26px; font-weight: 600; text-transform: none; letter-spacing: 0; }
-.kpi.warn b { color: #ffcc80; }
-.kpi.danger b { color: #ffab91; }
+.kpi b {
+  display: block;
+  font-size: 26px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+}
+.kpi.warn b { color: var(--warn); }
+.kpi.danger b { color: var(--danger); }
 
 /* ---------- sections ---------- */
 section { margin: 28px 0; }
