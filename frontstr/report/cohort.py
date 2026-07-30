@@ -193,14 +193,30 @@ def build_cohort_report(
     *,
     report_hrefs: dict[str, str] | None = None,
     panel_name: str = "",
+    write_xlsx: bool = True,
 ) -> Path:
-    """Render the cohort view to ``out_path`` and return it."""
+    """Render the cohort view to ``out_path`` and return it.
+
+    With ``write_xlsx`` the workbook is written alongside it and the page links
+    to it. A real file rather than a browser-side export: the download has to
+    work from a report opened off a disk with no server, and it carries the two
+    margin sheets the page cannot show at once.
+    """
     from frontstr.report.html import render_template
 
     cohort = build_cohort_payload(payloads, report_hrefs=report_hrefs)
+
+    xlsx_href = ""
+    if write_xlsx:
+        from frontstr.exports.xlsx import write_cohort_xlsx
+
+        xlsx_path = out_path.with_suffix(".xlsx")
+        write_cohort_xlsx(cohort, xlsx_path)
+        xlsx_href = xlsx_path.name
+
     rendered = render_template(
         "cohort_report.html.j2",
-        {"cohort": cohort, "panel_name": panel_name},
+        {"cohort": cohort, "panel_name": panel_name, "xlsx_href": xlsx_href},
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(rendered, encoding="utf-8")

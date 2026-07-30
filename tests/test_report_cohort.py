@@ -133,3 +133,70 @@ def test_empty_input_is_an_error_not_an_empty_page(tmp_path: Path) -> None:
     """A cohort report with no rows would look like a cohort with no problems."""
     with pytest.raises(FrontstrError, match="nothing to build"):
         build_cohort_payload([_payload("S1", [])])
+
+
+def test_one_marker_visible_at_a_time(tmp_path: Path) -> None:
+    """2,700 rows of continuous scroll is not a table anyone can use.
+
+    Stacking every marker meant 108 samples across 25 loci arrived as one
+    unbroken scroll. Only the first block renders visible; the rest carry
+    ``is-hidden`` until their tab is chosen.
+    """
+    out = tmp_path / "cohort.html"
+    build_cohort_report(
+        [
+            _payload("S1", [_row("S1", "vWA"), _row("S1", "TPOX")]),
+            _payload("S2", [_row("S2", "vWA"), _row("S2", "TPOX")]),
+        ],
+        out,
+        write_xlsx=False,
+    )
+    doc = lxml.html.fromstring(out.read_text(encoding="utf-8"))
+
+    tabs = doc.find_class("marker-tab")
+    assert [t.get("data-target") for t in tabs] == ["marker-vWA", "marker-TPOX"]
+    assert "is-active" in (tabs[0].get("class") or "")
+
+    blocks = doc.find_class("marker-block")
+    assert "is-hidden" not in (blocks[0].get("class") or ""), "the first marker must be visible"
+    assert "is-hidden" in (blocks[1].get("class") or ""), "the rest must start hidden"
+
+
+def test_a_tab_badges_a_marker_that_needs_opening(tmp_path: Path) -> None:
+    """The strip doubles as the overview, so a badge has to mean something."""
+    out = tmp_path / "cohort.html"
+    build_cohort_report(
+        [
+            _payload("S1", [_row("S1", "vWA"), _row("S1", "DYS391", a1=None, a2=None)]),
+            _payload("S2", [_row("S2", "vWA"), _row("S2", "DYS391", a1=None, a2=None)]),
+        ],
+        out,
+        write_xlsx=False,
+    )
+    doc = lxml.html.fromstring(out.read_text(encoding="utf-8"))
+
+    by_marker = {t.get("data-marker"): t for t in doc.find_class("marker-tab")}
+    assert "0/2" in by_marker["dys391"].text_content(), "an uncalled locus shows its call rate"
+    assert not by_marker["vwa"].find_class("tab-badge"), "a clean locus carries no badge"
+
+
+def test_workbook_is_written_and_linked(tmp_path: Path) -> None:
+    """The download has to work from a report opened off a disk, with no server."""
+    import openpyxl
+
+    out = tmp_path / "cohort.html"
+    build_cohort_report(
+        [_payload("S1", [_row("S1", "vWA", flags=_lc())]), _payload("S2", [_row("S2", "vWA")])],
+        out,
+    )
+
+    xlsx = tmp_path / "cohort.xlsx"
+    assert xlsx.exists(), "no workbook beside the report"
+    assert 'href="cohort.xlsx"' in out.read_text(encoding="utf-8")
+
+    wb = openpyxl.load_workbook(xlsx)
+    assert wb.sheetnames == ["Genotypes", "By marker", "By sample"]
+    genotypes = wb["Genotypes"]
+    assert genotypes.max_row == 3, "one header plus one row per (marker, sample)"
+    header = [c.value for c in genotypes[1]]
+    assert "ISFG allele 1" in header and "Cov" in header

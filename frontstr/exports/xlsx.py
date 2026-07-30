@@ -336,3 +336,106 @@ def write_run_xlsx(payload: dict[str, Any], out_path: Path) -> Path:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(out_path)
     return out_path
+
+
+def write_cohort_xlsx(cohort: dict[str, Any], out_path: Path) -> Path:
+    """Write the cohort workbook: one row per sample per marker, plus overviews.
+
+    Three sheets, in the order a reviewer wants them:
+
+    ``Genotypes``
+        The long form. One row per (marker, sample) with both alleles, their
+        read counts, the coverage of the call, allele balance, the QC codes and
+        both ISFG strings. Long rather than wide because that is the shape a
+        spreadsheet can filter, sort and pivot; a 25-marker-wide sheet cannot
+        be filtered by "show me the flagged calls".
+    ``By marker`` / ``By sample``
+        The two margins, so the question "which locus is failing" and "which
+        sample is failing" are each one glance rather than a pivot table.
+
+    Args:
+        cohort: Output of :func:`frontstr.report.cohort.build_cohort_payload`.
+        out_path: Destination ``.xlsx``.
+    """
+    wb = Workbook()
+    default = wb.active
+    if default is not None:
+        wb.remove(default)
+
+    headers = [
+        "Marker",
+        "Sample",
+        "Call",
+        "Allele 1",
+        "Reads 1",
+        "Allele 2",
+        "Reads 2",
+        "Cov",
+        "Discarded",
+        "AB",
+        "QC",
+        "ISFG allele 1",
+        "ISFG allele 2",
+    ]
+    rows: list[list[Any]] = []
+    fills: dict[int, PatternFill] = {}
+    for block in cohort["blocks"]:
+        for row in block.rows:
+            rows.append(
+                [
+                    block.marker,
+                    row.get("sample", ""),
+                    row.get("call_rule", ""),
+                    row.get("allele1_ce_label"),
+                    row.get("allele1_cov"),
+                    row.get("allele2_ce_label"),
+                    row.get("allele2_cov"),
+                    row.get("called_reads"),
+                    row.get("discarded_reads"),
+                    row.get("allele_balance"),
+                    ", ".join(f.get("code", "") for f in row.get("flags", [])),
+                    row.get("allele1_isfg"),
+                    row.get("allele2_isfg"),
+                ]
+            )
+            severity = row.get("worst_severity")
+            if severity in ("warn", "error"):
+                # +1 for the header row, and the row was just appended.
+                fills[len(rows) + 1] = _ERROR_FILL if severity == "error" else _WARN_FILL
+
+    _write_sheet(
+        wb.create_sheet("Genotypes"),
+        headers,
+        rows,
+        mono_columns={"ISFG allele 1", "ISFG allele 2"},
+        row_fills=fills,
+    )
+
+    _write_sheet(
+        wb.create_sheet("By marker"),
+        ["Marker", "Samples", "Called", "Call rate", "Flagged calls", "Flags raised"],
+        [
+            [
+                b.marker,
+                b.n_samples,
+                b.n_called,
+                round(b.call_rate, 4),
+                b.n_flagged,
+                ", ".join(f"{code} ×{n}" for _short, code, n in b.flag_counts),
+            ]
+            for b in cohort["blocks"]
+        ],
+    )
+
+    _write_sheet(
+        wb.create_sheet("By sample"),
+        ["Sample", "Markers", "Called", "Call rate", "Flagged calls"],
+        [
+            [s.sample_id, s.n_markers, s.n_called, round(s.call_rate, 4), s.n_flagged]
+            for s in cohort["samples"]
+        ],
+    )
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(out_path)
+    return out_path

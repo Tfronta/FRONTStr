@@ -849,3 +849,63 @@ table.profile.cohort-table .seq-scroll { width: 200px; }
   white-space: nowrap;
 }
 .report-footer { margin-top: 28px; }
+
+/* ---------- cohort marker tabs ----------
+ * One marker visible at a time. Stacked, 108 samples across 25 markers is
+ * 2,700 rows of continuous scroll and nothing can be found in it. The strip
+ * itself carries each marker's state, so it doubles as the overview: a tab
+ * with a badge is a locus that needs opening.
+ */
+.marker-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.marker-tab {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-soft);
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.marker-tab:hover { border-color: var(--border-strong); color: var(--text); }
+.marker-tab.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--surface);
+}
+/* A badge means "this locus has something": either it did not call in every
+   sample, or some calls are flagged. On the active tab it has to invert. */
+.tab-badge {
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--warn);
+  color: var(--surface);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+.marker-tab.is-active .tab-badge { background: var(--surface); color: var(--accent); }
+.marker-block.is-hidden { display: none; }
+
+.btn-download {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--surface);
+  background: var(--accent);
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  white-space: nowrap;
+}
+.btn-download:hover { background: var(--primary-hover); text-decoration: none; color: var(--surface); }
