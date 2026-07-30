@@ -541,3 +541,43 @@ def test_trace_does_not_stream_when_parallel(
     assert "Sequences" not in capfd.readouterr().err
     for sample_id in ("HET", "HOM"):
         assert (out / sample_id / f"{sample_id}.trace.txt").exists()
+
+
+def test_batch_writes_a_cohort_report_for_more_than_one_sample(
+    tmp_path: Path, two_sample_bams: tuple[Path, Path]
+) -> None:
+    """A hundred separate documents cannot answer a cohort's questions."""
+    bam_het, bam_hom = two_sample_bams
+    out = tmp_path / "batch_out"
+
+    run_batch(
+        entries=[ManifestEntry("HET", bam_het, "sample"), ManifestEntry("HOM", bam_hom, "sample")],
+        panel=_synth_panel(),
+        out_dir=out,
+        formats=frozenset({"json", "html"}),
+        workers=1,
+    )
+
+    cohort = out / "cohort.html"
+    assert cohort.exists(), "no cohort view for a two-sample batch"
+    html = cohort.read_text(encoding="utf-8")
+    assert "SYNTH_MARKER" in html
+    assert 'href="HET/HET.html"' in html, "sample names must link to their own report"
+
+
+def test_no_cohort_report_for_a_single_sample(
+    tmp_path: Path, two_sample_bams: tuple[Path, Path]
+) -> None:
+    """With one sample its own report says everything; a second file is upkeep."""
+    bam_het, _ = two_sample_bams
+    out = tmp_path / "batch_out"
+
+    run_batch(
+        entries=[ManifestEntry("HET", bam_het, "sample")],
+        panel=_synth_panel(),
+        out_dir=out,
+        formats=frozenset({"json", "html"}),
+        workers=1,
+    )
+
+    assert not (out / "cohort.html").exists()

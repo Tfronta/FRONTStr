@@ -791,3 +791,61 @@ table.profile thead th[data-sort-dir="desc"]::after { content: " ▼"; font-size
 /* Narrower now that the chips are abbreviated; the space goes to the allele
  * columns, which are what the table is for. */
 table.profile td.qc-cell { max-width: 96px; }
+
+/* ---------- cohort view ----------
+ * One block per marker, one row per sample. The single-sample report answers
+ * "is this profile right"; across a hundred samples that is the wrong question
+ * to ask a hundred times, so this view is laid out to answer "which locus, and
+ * which sample" instead.
+ */
+.marker-block { margin: 0 0 26px; }
+.marker-block:last-child { margin-bottom: 0; }
+.marker-block-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 0 6px;
+  border-bottom: 2px solid var(--border-strong);
+  margin-bottom: 4px;
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 2;
+}
+.marker-block-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+.marker-block-head .dim { font-size: 12px; }
+
+/* Narrower than the single-sample table: no Call column, no Marker column, and
+   the sample name replaces both. It fits without sideways scrolling, which is
+   the point of a table you read down. */
+table.profile.cohort-table { min-width: 940px; }
+table.profile.cohort-table thead th { position: static; font-size: 12px; }
+table.profile.cohort-table td { white-space: nowrap; }
+table.profile.cohort-table .seq-scroll { width: 200px; }
+
+.cohort-attention { display: flex; gap: 40px; flex-wrap: wrap; }
+.cohort-attention h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.attention-list { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+.attention-list li { margin-bottom: 3px; }
+.attention-list .dim { font-size: 12px; margin-left: 6px; }
+
+.toolbar-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+.report-footer { margin-top: 28px; }

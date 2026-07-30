@@ -58,6 +58,30 @@ def build_report(
     return out_path
 
 
+def render_template(name: str, context: dict[str, Any]) -> str:
+    """Render a report template with the CSS and JS bundles already attached.
+
+    Shared with the cohort view so both documents are styled by the same
+    stylesheet. A second report with its own copy of the CSS would drift, and
+    the two are meant to be read one after the other.
+    """
+    template_dir = _locate_template_dir()
+    env = Environment(
+        loader=FileSystemLoader(str(template_dir)),
+        autoescape=select_autoescape(("html",)),
+        keep_trailing_newline=True,
+    )
+    try:
+        template = env.get_template(name)
+    except Exception as exc:
+        raise FrontstrError(f"Failed to load report template {name}: {exc}") from exc
+    return template.render(
+        css_bundle=_load_static("styles.css"),
+        app_js_bundle=_load_static("app.js"),
+        **context,
+    )
+
+
 def _render(payload: dict[str, Any]) -> str:
     """Render the Jinja template against ``payload``."""
     template_dir = _locate_template_dir()

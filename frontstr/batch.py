@@ -258,6 +258,7 @@ def run_batch(
     results = [results_map[e.sample_id] for e in entries]
     _write_batch_summary(results, panel, out_dir)
     _write_batch_tidy(out_dir, formats)
+    _write_cohort_report(results, panel, out_dir, formats)
     return results
 
 
@@ -484,6 +485,52 @@ def _write_batch_tidy(out_dir: Path, formats: frozenset[str]) -> list[Path]:
     except FrontstrError:
         # A malformed run JSON must not sink a batch that otherwise succeeded.
         return []
+
+
+def _write_cohort_report(
+    results: list[BatchResult], panel: Panel, out_dir: Path, formats: frozenset[str]
+) -> Path | None:
+    """Write ``cohort.html``: every sample at every marker, in one document.
+
+    Only for a real cohort. With one sample the per-sample report already says
+    everything, and a second document that repeats it is a file to keep in
+    sync for no gain.
+
+    Reads the run JSONs back from disk, the same way the tidy export does, so
+    nothing has to travel back from the worker processes. Needs ``json`` for
+    the data and ``html`` to be worth linking to, so it is a no-op without
+    both.
+    """
+    if "json" not in formats or "html" not in formats:
+        return None
+    ok = [r for r in results if r.status == "ok"]
+    if len(ok) < 2:
+        return None
+
+    from frontstr.exports.tidy import load_payloads
+    from frontstr.report.cohort import build_cohort_report
+
+    paths = [out_dir / r.sample_id / f"{r.sample_id}.json" for r in ok]
+    existing = [p for p in paths if p.exists()]
+    if len(existing) < 2:
+        return None
+
+    hrefs = {
+        r.sample_id: f"{r.sample_id}/{r.sample_id}.html"
+        for r in ok
+        if (out_dir / r.sample_id / f"{r.sample_id}.html").exists()
+    }
+    try:
+        return build_cohort_report(
+            list(load_payloads(existing)),
+            out_dir / "cohort.html",
+            report_hrefs=hrefs,
+            panel_name=f"{panel.name} {panel.version or ''}".strip(),
+        )
+    except FrontstrError:
+        # A malformed run JSON must not sink a batch that otherwise succeeded,
+        # the same rule the tidy export follows.
+        return None
 
 
 def _write_batch_summary(results: list[BatchResult], panel: Panel, out_dir: Path) -> Path:

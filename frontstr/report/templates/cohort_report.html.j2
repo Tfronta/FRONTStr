@@ -1,0 +1,177 @@
+{# FRONTStr cohort report: one block per marker, one row per sample.
+   Self-contained; shares the single-sample stylesheet. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FRONTStr cohort: {{ cohort.summary.n_samples }} samples</title>
+<style>{{ css_bundle | safe }}</style>
+</head>
+<body>
+<div class="app">
+
+<header class="cover" id="cover">
+  <h1>Cohort</h1>
+  <div class="subtitle">
+    {{ cohort.summary.n_samples }} samples across {{ cohort.summary.n_markers }} markers
+    {%- if panel_name %} · {{ panel_name }}{% endif %}
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi"><b>{{ cohort.summary.n_samples }}</b>samples</div>
+    <div class="kpi"><b>{{ cohort.summary.n_markers }}</b>markers</div>
+    <div class="kpi"><b>{{ '%.1f'|format(100 * cohort.summary.call_rate) }}%</b>call rate</div>
+    <div class="kpi {% if cohort.summary.n_flagged %}warn{% endif %}"><b>{{ cohort.summary.n_flagged }}</b>flagged calls</div>
+    <div class="kpi"><b>{{ cohort.summary.n_called }}/{{ cohort.summary.n_calls }}</b>genotypes</div>
+  </div>
+</header>
+
+{# Named, not just counted. "12% flagged" tells nobody where to look, and
+   pointing somewhere is the entire reason this document exists. #}
+{% if cohort.summary.worst_markers or cohort.summary.worst_samples %}
+<section id="attention">
+  <h2>Where to look first</h2>
+  <div class="card cohort-attention">
+    {% if cohort.summary.worst_markers %}
+    <div>
+      <h3>Markers</h3>
+      <p class="profile-note">A locus that fails across the cohort is a statement about the panel or the assay, not about the samples.</p>
+      <ul class="attention-list">
+        {% for m in cohort.summary.worst_markers %}
+        <li><a href="#marker-{{ m.marker|e }}"><code>{{ m.marker }}</code></a>
+          <span class="dim">{{ '%.0f'|format(100 * m.call_rate) }}% called{% if m.n_flagged %}, {{ m.n_flagged }} flagged{% endif %}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    {% if cohort.summary.worst_samples %}
+    <div>
+      <h3>Samples</h3>
+      <p class="profile-note">These are the ones worth opening individually.</p>
+      <ul class="attention-list">
+        {% for s in cohort.summary.worst_samples %}
+        <li><code>{{ s.sample }}</code>
+          <span class="dim">{{ '%.0f'|format(100 * s.call_rate) }}% called{% if s.n_flagged %}, {{ s.n_flagged }} flagged{% endif %}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+<section id="markers">
+  <h2>Genotypes by marker <small>click a sample for its full report</small></h2>
+  <div class="card">
+    <div class="toolbar">
+      <input id="cohort-marker-filter" type="search" placeholder="filter markers (eg. TPOX)…" autocomplete="off">
+      <input id="cohort-sample-filter" type="search" placeholder="filter samples (eg. HG00113)…" autocomplete="off">
+      <label class="toolbar-check"><input type="checkbox" id="cohort-flagged-only"> flagged rows only</label>
+      <span class="pill" id="cohort-count"></span>
+    </div>
+
+    {% for block in cohort.blocks %}
+    <div class="marker-block" id="marker-{{ block.marker|e }}" data-marker="{{ block.marker|lower }}">
+      <div class="marker-block-head">
+        <h3>{{ block.marker }}</h3>
+        <span class="dim">{{ block.n_called }}/{{ block.n_samples }} called</span>
+        {% for short, code, n in block.flag_counts %}
+        <span class="chip sev-warn" title="{{ code }}, raised at this marker in {{ n }} sample(s)">{{ short }} ×{{ n }}</span>
+        {% endfor %}
+      </div>
+      <div class="table-scroll">
+      <table class="profile cohort-table">
+        <thead>
+          <tr>
+            <th>Sample</th>
+            <th class="num">Allele 1</th>
+            <th class="num">Reads 1</th>
+            <th class="num">Allele 2</th>
+            <th class="num">Reads 2</th>
+            <th class="num">Cov <span class="th-hint">A1+A2</span></th>
+            <th class="num">AB</th>
+            <th>QC</th>
+            <th>ISFG, allele 1</th>
+            <th>ISFG, allele 2</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for row in block.rows %}
+          <tr data-sample="{{ row.sample|lower }}"
+              data-flagged="{{ '1' if row.flags else '0' }}"
+              class="{% if row.worst_severity %}row-sev-{{ row.worst_severity }}{% elif not row.allele1_ce_label %}row-no-data{% endif %}">
+            <td class="marker">
+              {% if row.report_href %}<a href="{{ row.report_href }}">{{ row.sample }}</a>
+              {% else %}{{ row.sample }}{% endif %}
+            </td>
+            <td class="num">{{ row.allele1_ce_label or '–' }}</td>
+            <td class="num">{{ row.allele1_cov if row.allele1_cov is not none else '–' }}</td>
+            <td class="num">{{ row.allele2_ce_label or '–' }}</td>
+            <td class="num">{{ row.allele2_cov if row.allele2_cov is not none else '–' }}</td>
+            <td class="num" title="Reads supporting the reported genotype. {{ row.discarded_reads }} further read(s) spanned the window but supported no called allele.">{{ row.called_reads }}</td>
+            <td class="num">{{ '%.2f'|format(row.allele_balance) if row.allele_balance is not none else '–' }}</td>
+            <td class="qc-cell">
+              {% if row.flags %}{% for f in row.flags %}<span class="chip sev-{{ f.severity }}" title="{{ f.code }}: {{ f.message }}">{{ f.short }}</span>{% endfor %}
+              {% else %}<span class="dim">–</span>{% endif %}
+            </td>
+            <td class="seq-col">{% if row.allele1_isfg %}<div class="seq-scroll mono">{{ row.allele1_isfg }}</div>{% else %}<span class="dim">–</span>{% endif %}</td>
+            <td class="seq-col">{% if row.allele2_isfg %}<div class="seq-scroll mono">{{ row.allele2_isfg }}</div>{% else %}<span class="dim">–</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<footer class="report-footer">
+  <p class="profile-note">
+    Coverage is the reads supporting the reported genotype, the two Reads columns added together.
+    Reads that supported no called allele are in each cell's tooltip; they were discarded by the caller and are not coverage.
+    QC codes are abbreviated: hover a chip for the condition and the numbers behind it.
+    A sample name links to its individual report, where the per-locus evidence lives.
+  </p>
+</footer>
+
+</div>
+<script>
+(function () {
+  var markerBox = document.getElementById('cohort-marker-filter');
+  var sampleBox = document.getElementById('cohort-sample-filter');
+  var flaggedOnly = document.getElementById('cohort-flagged-only');
+  var count = document.getElementById('cohort-count');
+  var blocks = Array.prototype.slice.call(document.querySelectorAll('.marker-block'));
+
+  function apply() {
+    var m = (markerBox.value || '').trim().toLowerCase();
+    var s = (sampleBox.value || '').trim().toLowerCase();
+    var onlyFlagged = flaggedOnly.checked;
+    var shownRows = 0, shownBlocks = 0;
+
+    blocks.forEach(function (block) {
+      if (m && block.getAttribute('data-marker').indexOf(m) === -1) {
+        block.style.display = 'none';
+        return;
+      }
+      var visible = 0;
+      Array.prototype.slice.call(block.querySelectorAll('tbody tr')).forEach(function (tr) {
+        var ok = (!s || tr.getAttribute('data-sample').indexOf(s) !== -1) &&
+                 (!onlyFlagged || tr.getAttribute('data-flagged') === '1');
+        tr.style.display = ok ? '' : 'none';
+        if (ok) visible++;
+      });
+      block.style.display = visible ? '' : 'none';
+      if (visible) { shownBlocks++; shownRows += visible; }
+    });
+    count.textContent = shownRows + ' rows / ' + shownBlocks + ' markers';
+  }
+
+  [markerBox, sampleBox].forEach(function (el) { el.addEventListener('input', apply); });
+  flaggedOnly.addEventListener('change', apply);
+  apply();
+})();
+</script>
+</body>
+</html>
