@@ -6,6 +6,7 @@ from xml.etree import ElementTree as ET
 
 from frontstr.report.ngs_display import build_ngs_panel
 from frontstr.report.svg_charts import (
+    HP_SERIES,
     allele_coverage_svg,
     coverage_bar_svg,
     electropherogram_svg,
@@ -222,3 +223,61 @@ def test_chart_backgrounds_follow_the_stylesheet() -> None:
     assert rects, "empty-state chart drew no background"
     for r in rects:
         assert (r.get("fill") or "").startswith("var(--")
+
+
+def _hp_marker() -> dict:
+    """A phased heterozygote: one allele all HP1, the other all HP2."""
+    a0 = _allele(0, 9.3, 10)
+    a0["n_reads_hp1"] = 0
+    a0["n_reads_hp2"] = 10
+    a0["n_reads_hp_none"] = 0
+    a1 = _allele(1, 7.0, 7)
+    a1["n_reads_hp1"] = 7
+    a1["n_reads_hp2"] = 0
+    a1["n_reads_hp_none"] = 0
+    return {"marker_name": "TH01", "alleles_called": [a0, a1]}
+
+
+def _rects(svg: str) -> list:
+    return ET.fromstring(svg).findall(".//{http://www.w3.org/2000/svg}rect")
+
+
+def test_haplotype_legend_colours_match_the_bars() -> None:
+    """A legend that names a colour the chart never draws is a false statement.
+
+    HP1 was drawn blue in the bars and green in the legend, because the legend
+    reused STATUS_COLORS["allele"]. On a phased heterozygote the chart contained
+    no green at all while the key insisted HP1 was green.
+    """
+    svg = haplotype_stack_svg(_hp_marker())
+    fills = {r.get("fill") for r in _rects(svg)}
+    bar_fills = {colour for _key, colour, _label in HP_SERIES}
+    # Every fill in the drawing is a declared haplotype colour, legend included.
+    assert fills <= bar_fills, f"unexpected fill(s): {fills - bar_fills}"
+    # The two haplotypes actually present are both drawn and both keyed.
+    by_label = {label: colour for _k, colour, label in HP_SERIES}
+    assert by_label["HP1"] in fills
+    assert by_label["HP2"] in fills
+
+
+def test_haplotype_legend_fits_and_does_not_overlap() -> None:
+    """Swatch, label, swatch: each item has to clear the one before it."""
+    width = 320
+    svg = haplotype_stack_svg(_hp_marker(), width=width)
+    root = ET.fromstring(svg)
+    swatches = sorted(float(r.get("x") or 0) for r in _rects(svg) if r.get("y") == "2")
+    assert len(swatches) == len(HP_SERIES), "one swatch per haplotype series"
+    texts = sorted(
+        (float(t.get("x") or 0), (t.text or ""))
+        for t in root.findall(".//{http://www.w3.org/2000/svg}text")
+        if t.get("y") == "11"
+    )
+    assert len(texts) == len(HP_SERIES)
+    # Each label starts after its own swatch and ends before the next swatch.
+    for i, (tx, label) in enumerate(texts):
+        assert tx > swatches[i]
+        end = tx + len(label) * 5.6
+        if i + 1 < len(swatches):
+            assert end <= swatches[i + 1], f"{label!r} runs under the next swatch"
+        else:
+            assert end <= width, f"{label!r} falls off the right edge"

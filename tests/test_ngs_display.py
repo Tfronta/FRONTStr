@@ -98,3 +98,83 @@ def test_build_strhub_projection_roundtrip_keys() -> None:
     assert row0["allele"] == "9"
     assert row0["allele_iso"] is False
     assert row0["coverage_reads"] == 60
+
+
+def test_chart_group_is_labelled_with_the_allele_not_the_rounded_group() -> None:
+    """A 9.3 microvariant must not be ticked "9" on the chart.
+
+    ``repeat_group`` is round(CE). It exists so isoalleles stack on one bar and
+    is not an allele designation. Using it as the tick label put "9" under the
+    TH01 microvariant, contradicting the table directly above the chart and
+    erasing the very thing that makes the locus interesting.
+    """
+    marker = {
+        "marker_name": "TH01",
+        "total_reads": 17,
+        "system": {"motif": "AATG", "period": 4},
+        "alleles_called": [
+            {
+                "cluster_index": 0,
+                "ce": 9.3,
+                "consensus": "AAA" + "AATG" * 9 + "ATG" + "CCC",
+                "isfg": "[AATG]9 ATG",
+                "n_reads_total": 10,
+                "fraction": 10 / 17,
+                "status": "allele",
+                "length_bp": 39,
+            },
+            {
+                "cluster_index": 1,
+                "ce": 7.0,
+                "consensus": "AAA" + "AATG" * 7 + "CCC",
+                "isfg": "[AATG]7",
+                "n_reads_total": 7,
+                "fraction": 7 / 17,
+                "status": "allele",
+                "length_bp": 28,
+            },
+        ],
+    }
+    panel = build_ngs_panel(marker)
+    labels = {g["label"] for g in panel["chart_groups"]}
+    assert labels == {"9.3", "7"}
+    assert "9" not in labels  # the rounded group, which is what it used to show
+
+    # And the tick agrees with the table row for the same allele.
+    displays = {r["allele_display"] for r in panel["rows"]}
+    assert labels <= displays
+
+
+def test_chart_group_label_joins_distinct_designations() -> None:
+    """One bar may hold more than one designation; the tick names them all."""
+    marker = {
+        "marker_name": "D3S1358",
+        "total_reads": 30,
+        "system": {"motif": "TCTA", "period": 4},
+        "alleles_called": [
+            {
+                "cluster_index": 0,
+                "ce": 15.0,
+                "consensus": "AAA" + "TCTA" * 15 + "CCC",
+                "isfg": "[TCTA]15",
+                "n_reads_total": 18,
+                "fraction": 0.6,
+                "status": "allele",
+                "length_bp": 60,
+            },
+            {
+                "cluster_index": 1,
+                "ce": 15.0,
+                "consensus": "AAA" + "TCTA" * 14 + "TCTG" + "CCC",
+                "isfg": "[TCTA]14 TCTG",
+                "n_reads_total": 12,
+                "fraction": 0.4,
+                "status": "allele",
+                "length_bp": 60,
+            },
+        ],
+    }
+    groups = build_ngs_panel(marker)["chart_groups"]
+    assert len(groups) == 1, "same repeat group must stay one bar"
+    assert len(groups[0]["segments"]) == 2, "isoalleles stack on that bar"
+    assert groups[0]["label"] == "15", "one designation, stated once, not '15/15'"

@@ -190,7 +190,24 @@ def build_ngs_panel(marker: dict[str, Any]) -> dict[str, Any]:
                 }
             )
 
-        chart_groups.append({"repeat_group": rg, "segments": segments})
+        # The tick is labelled with the allele designations it actually holds,
+        # not with ``rg``. ``rg`` is round(CE), which exists to stack isoalleles
+        # on one bar and is not an allele name: it rendered TH01 9.3 as "9",
+        # contradicting the table directly above the chart and erasing the
+        # microvariant the whole locus is interesting for. Distinct designations
+        # are joined because a group may hold more than one.
+        seen: list[str] = []
+        for r in rows[len(rows) - len(segments) :]:
+            display = str(r["allele_display"])
+            if display not in seen:
+                seen.append(display)
+        chart_groups.append(
+            {
+                "repeat_group": rg,
+                "label": "/".join(seen) if seen else str(rg),
+                "segments": segments,
+            }
+        )
 
     return {
         "title": "Next-Generation Sequencing Analysis",

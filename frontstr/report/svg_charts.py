@@ -50,6 +50,16 @@ SURFACE_COLOR = "var(--muted, #f1f5f9)"
 TEAL_BAR = "#0d9488"
 TEAL_BAR_ISO = "#14b8a6"
 
+#: Haplotype fills, in the order they stack from the axis upward. One table, so
+#: the bars and the legend cannot disagree: the legend used to draw HP1 with
+#: ``STATUS_COLORS["allele"]``, an unrelated green, while the bars drew it blue,
+#: and the chart contained no green at all.
+HP_SERIES: tuple[tuple[str, str, str], ...] = (
+    ("n_reads_hp_none", "#cfd8dc", "no HP"),
+    ("n_reads_hp2", "#9c27b0", "HP2"),
+    ("n_reads_hp1", "#1976d2", "HP1"),
+)
+
 
 @dataclass(slots=True)
 class _ChartBox:
@@ -159,9 +169,10 @@ def allele_coverage_svg(
                     'stroke="#ffffff" stroke-width="1.2" opacity="0.85"/>'
                 )
 
+        tick = str(grp.get("label") or rg)
         parts.append(
             f'<text x="{cx:.1f}" y="{box.margin_top + box.inner_h + 26:.1f}" '
-            f'text-anchor="middle" font-size="11" fill="{TEXT_COLOR}">{rg}</text>'
+            f'text-anchor="middle" font-size="11" fill="{TEXT_COLOR}">{_xml(tick)}</text>'
         )
 
     parts.append("</svg>")
@@ -268,6 +279,41 @@ def coverage_bar_svg(
     return "".join(parts)
 
 
+#: Legend geometry, in px at font-size 10.
+_LEGEND_SWATCH = 10
+_LEGEND_SWATCH_GAP = 4
+_LEGEND_ITEM_GAP = 10
+_LEGEND_CHAR_W = 5.6
+
+
+def _hp_legend(width: int, margin_right: int) -> str:
+    """Right-aligned haplotype key, laid out from the measured label widths.
+
+    The previous version spaced items by a flat 24 px from ``width - 70``. At
+    font-size 10 "HP1" is wider than that, so every label ran under the next
+    swatch and "no HP" fell off the right edge. Sitting at ``margin_top + 4`` it
+    was also inside the plot area, free to land on top of a bar; it now sits in
+    the top margin, above the axis.
+    """
+    items = [(color, label) for _key, color, label in reversed(HP_SERIES)]
+    widths = [
+        _LEGEND_SWATCH + _LEGEND_SWATCH_GAP + len(label) * _LEGEND_CHAR_W for _c, label in items
+    ]
+    total = sum(widths) + _LEGEND_ITEM_GAP * (len(items) - 1)
+    x = max(2.0, width - margin_right - total)
+
+    parts: list[str] = []
+    for (color, label), item_w in zip(items, widths, strict=True):
+        parts.append(
+            f'<rect x="{x:.1f}" y="2" width="{_LEGEND_SWATCH}" height="{_LEGEND_SWATCH}" '
+            f'fill="{color}" rx="1"/>'
+            f'<text x="{x + _LEGEND_SWATCH + _LEGEND_SWATCH_GAP:.1f}" y="11" font-size="10" '
+            f'fill="{TEXT_COLOR}">{_xml(label)}</text>'
+        )
+        x += item_w + _LEGEND_ITEM_GAP
+    return "".join(parts)
+
+
 def haplotype_stack_svg(
     marker_result: dict[str, Any],
     *,
@@ -290,15 +336,9 @@ def haplotype_stack_svg(
     for idx, a in enumerate(called):
         cx = box.margin_left + slot * idx + slot / 2
         bar_x = cx - bar_w / 2
-        hp1 = int(a.get("n_reads_hp1", 0))
-        hp2 = int(a.get("n_reads_hp2", 0))
-        none = int(a.get("n_reads_hp_none", 0))
         y_floor = float(box.margin_top + box.inner_h)
-        for value, color, label in (
-            (none, "#cfd8dc", "no HP"),
-            (hp2, "#9c27b0", "HP2"),
-            (hp1, "#1976d2", "HP1"),
-        ):
+        for key, color, label in HP_SERIES:
+            value = int(a.get(key, 0))
             if value <= 0:
                 continue
             h = (value / y_max) * box.inner_h
@@ -314,16 +354,7 @@ def haplotype_stack_svg(
             f'<text x="{cx:.1f}" y="{box.margin_top + box.inner_h + 14:.1f}" '
             f'text-anchor="middle" font-size="11" fill="{TEXT_COLOR}">{_xml(label)}</text>'
         )
-    legend_y = box.margin_top + 4
-    for i, (color, label) in enumerate(
-        ((STATUS_COLORS["allele"], "HP1"), ("#9c27b0", "HP2"), ("#cfd8dc", "no HP")),
-    ):
-        cx = width - 70 + i * 24
-        parts.append(
-            f'<rect x="{cx}" y="{legend_y}" width="10" height="10" fill="{color}" rx="1"/>'
-            f'<text x="{cx + 14}" y="{legend_y + 9}" font-size="10" '
-            f'fill="{TEXT_COLOR}">{_xml(label)}</text>'
-        )
+    parts.append(_hp_legend(width, box.margin_right))
     parts.append("</svg>")
     return "".join(parts)
 

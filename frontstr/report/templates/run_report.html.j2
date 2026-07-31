@@ -307,7 +307,10 @@
         <div class="locus-split">
           <div class="locus-split-main">
           <details class="forensic-audit">
-            <summary><b>Forensic audit</b><span class="meta">, all clusters</span></summary>
+            {# The span is laid out at the far right of the summary row, so it has
+               to read on its own. It used to be ", all clusters", a fragment
+               whose sentence had drifted half a screen away. #}
+            <summary><b>Forensic audit</b><span class="meta">every cluster, called or not</span></summary>
             <table class="allele-table">
             <thead>
               <tr>
