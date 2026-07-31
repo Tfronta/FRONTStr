@@ -175,3 +175,50 @@ def test_haplotype_stack_renders() -> None:
     root = ET.fromstring(svg)
     rects = root.findall(".//{http://www.w3.org/2000/svg}rect")
     assert len(rects) >= 4
+
+
+def _every_chart_svg() -> dict[str, str]:
+    """One rendering of each chart, for invariants that hold across all of them."""
+    marker = {
+        "marker_name": "TPOX",
+        "alleles_called": [_allele(0, 9.0, 30), _allele(1, 8.0, 25)],
+    }
+    marker["ngs_panel"] = build_ngs_panel(marker)
+    return {
+        "allele_coverage": allele_coverage_svg(marker),
+        "haplotype_stack": haplotype_stack_svg(marker),
+        "coverage_bar": coverage_bar_svg(
+            [{"marker": "TPOX", "coverage": 40, "called": 18, "chip": "ok"}], floor=20
+        ),
+        "empty": allele_coverage_svg({"marker_name": "X"}),
+    }
+
+
+def test_chart_text_follows_the_stylesheet_not_a_literal() -> None:
+    """No chart may hardcode a text colour.
+
+    The report ships a light and a dark theme as custom properties, and these
+    SVGs are inlined into it. A literal is therefore only ever right in one of
+    the two: the axis and marker labels were ``#37474f``, a slate chosen for a
+    white background, which on the dark theme rendered dark text on a dark
+    panel and was unreadable. Every ``<text>`` fill has to defer to the
+    stylesheet so both themes stay legible.
+    """
+    for name, svg in _every_chart_svg().items():
+        texts = ET.fromstring(svg).findall(".//{http://www.w3.org/2000/svg}text")
+        assert texts, f"{name} rendered no text at all"
+        for t in texts:
+            fill = t.get("fill") or ""
+            assert fill.startswith("var(--"), (
+                f"{name}: <text> fill {fill!r} is a literal; use a var(--…) token "
+                f"so the dark theme stays readable"
+            )
+
+
+def test_chart_backgrounds_follow_the_stylesheet() -> None:
+    """The placeholder panel must not paint a white box onto a dark page."""
+    svg = allele_coverage_svg({"marker_name": "X"})
+    rects = ET.fromstring(svg).findall(".//{http://www.w3.org/2000/svg}rect")
+    assert rects, "empty-state chart drew no background"
+    for r in rects:
+        assert (r.get("fill") or "").startswith("var(--")

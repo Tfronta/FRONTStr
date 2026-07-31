@@ -33,9 +33,19 @@ STATUS_COLORS: dict[str, str] = {
     "no_data": "#cfd8dc",
     "pending": "#e0e0e0",
 }
-GRID_COLOR = "#e0e0e0"
-AXIS_COLOR = "#90a4ae"
-TEXT_COLOR = "#37474f"
+# Chrome colours follow the report's stylesheet rather than restating it. These
+# charts are inlined into a document that defines both a light and a dark theme
+# through custom properties, so a literal here is only ever right in one of
+# them: the axis labels were #37474f, a slate picked for a white background,
+# which on the dark theme was dark text on a dark panel and could not be read.
+# The fallback after the comma is what a viewer without the stylesheet would
+# use; inside the report the variable always wins.
+GRID_COLOR = "var(--border, #e2e8f0)"
+AXIS_COLOR = "var(--border-strong, #cbd5e1)"
+TEXT_COLOR = "var(--text, #0f172a)"
+MUTED_TEXT_COLOR = "var(--text-faint, #94a3b8)"
+DANGER_COLOR = "var(--danger, #dc2626)"
+SURFACE_COLOR = "var(--muted, #f1f5f9)"
 
 TEAL_BAR = "#0d9488"
 TEAL_BAR_ISO = "#14b8a6"
@@ -221,11 +231,11 @@ def coverage_bar_svg(
     floor_x = margin_left + (min(floor, max_cov) / max_cov) * inner_w
     parts.append(
         f'<line x1="{floor_x:.1f}" x2="{floor_x:.1f}" y1="20" y2="{height - 16}" '
-        f'stroke="#ef9a9a" stroke-width="1" stroke-dasharray="3 2"/>'
+        f'stroke="{DANGER_COLOR}" stroke-width="1" stroke-dasharray="3 2" opacity="0.7"/>'
     )
     parts.append(
         f'<text x="{floor_x:.1f}" y="14" text-anchor="middle" '
-        f'font-size="10" fill="#c62828">low coverage floor ({floor}x)</text>'
+        f'font-size="10" fill="{DANGER_COLOR}">low coverage floor ({floor}x)</text>'
     )
 
     for i, row in enumerate(coverage_table):
@@ -370,9 +380,9 @@ def _empty_chart_svg(width: int, height: int, message: str) -> str:
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
         f'width="100%" height="{height}">'
-        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#fafafa" rx="4"/>'
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="{SURFACE_COLOR}" rx="4"/>'
         f'<text x="{width / 2:.1f}" y="{height / 2:.1f}" text-anchor="middle" '
-        f'font-size="12" fill="#9e9e9e">{_xml(message)}</text>'
+        f'font-size="12" fill="{MUTED_TEXT_COLOR}">{_xml(message)}</text>'
         f"</svg>"
     )
 
