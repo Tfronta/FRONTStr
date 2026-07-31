@@ -10,10 +10,13 @@ from frontstr.interp.models import (
     Allele,
     AlleleStatus,
     CallRule,
+    Flag,
+    FlagCode,
     IsoAllele,
     MarkerResult,
     TriType,
 )
+from frontstr.interp.qc import QcThresholds
 from frontstr.panel.models import System
 from frontstr.report.payload import RunContext, serialize_run
 
@@ -320,17 +323,43 @@ def test_serialize_run_tri_and_mixture_flags() -> None:
     assert rows["VWA_MIX"]["status_chip"] == "mixture"
 
 
-def test_serialize_run_dropout_counted() -> None:
-    """Markers below the dropout floor must show up in summary.dropouts."""
-    small = _marker_result(
-        "LOW",
+def test_low_coverage_kpi_counts_flags_not_a_threshold_of_its_own() -> None:
+    """The cover page reports the flags the caller raised, and nothing else.
+
+    It used to re-derive the condition from a report-local floor of 30 against
+    the window's spanning depth, and label the result "drop-outs". On the
+    bundled sample that read 12 next to "25 called", none of the 12 having
+    dropped out. A marker is thin here only if it carries LOW_COVERAGE.
+    """
+    thin = _marker_result(
+        "THIN",
         [_allele(0, 8.0, 10, AlleleStatus.ALLELE)],
         [_allele(0, 8.0, 10, AlleleStatus.ALLELE)],
         rule=CallRule.HOMOZYGOUS,
     )
-    no_data = _marker_result("EMPTY", [], [], rule=CallRule.NO_DATA)
-    payload = serialize_run([small, no_data], RunContext(sample_name="S", panel_name="P"))
-    assert payload["summary"]["dropouts"] == 2  # both are dropouts
+    thin.flags.append(Flag.of(FlagCode.LOW_COVERAGE, "called on 10 reads"))
+
+    # Under the retired floor of 30 and unflagged: must not be counted.
+    unflagged = _marker_result(
+        "SHALLOW_BUT_FINE",
+        [_allele(0, 8.0, 25, AlleleStatus.ALLELE)],
+        [_allele(0, 8.0, 25, AlleleStatus.ALLELE)],
+        rule=CallRule.HOMOZYGOUS,
+    )
+
+    payload = serialize_run([thin, unflagged], RunContext(sample_name="S", panel_name="P"))
+    assert payload["summary"]["low_coverage"] == 1
+    assert "dropouts" not in payload["summary"]
+
+
+def test_low_coverage_floor_comes_from_the_qc_policy() -> None:
+    """The floor in the payload is the one the calls were made under."""
+    ctx = RunContext(
+        sample_name="S", panel_name="P", qc_thresholds=QcThresholds(low_coverage_reads=12)
+    )
+    payload = serialize_run([], ctx)
+    assert payload["meta"]["low_coverage_floor"] == 12
+    assert "dropout_floor" not in payload["meta"]
 
 
 def test_serialize_run_computes_bam_hash(tmp_path: Path) -> None:

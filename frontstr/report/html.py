@@ -24,6 +24,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from frontstr.errors import FrontstrError
 from frontstr.interp.models import MarkerResult
+from frontstr.interp.qc import QcThresholds
 from frontstr.report.payload import RunContext, serialize_run
 from frontstr.report.svg_charts import (
     allele_coverage_svg,
@@ -111,7 +112,7 @@ def _render(payload: dict[str, Any]) -> str:
 
     qc_coverage_svg = coverage_bar_svg(
         payload["qc"]["coverage_table"],
-        floor=context_dropout(payload),
+        floor=context_low_coverage_floor(payload),
     )
 
     run_data_json = json.dumps(payload, separators=(",", ":"), default=str)
@@ -127,9 +128,14 @@ def _render(payload: dict[str, Any]) -> str:
     )
 
 
-def context_dropout(payload: dict[str, Any]) -> int:
-    """Read the dropout floor from the serialized payload (defaults to 30)."""
-    return int(payload.get("meta", {}).get("dropout_floor", 30) or 30)
+def context_low_coverage_floor(payload: dict[str, Any]) -> int:
+    """Read the low-coverage floor from the serialized payload.
+
+    Falls back to the ``QcThresholds`` default rather than a number of its own,
+    so the chart's reference line and the flags cannot drift apart.
+    """
+    default = QcThresholds().low_coverage_reads
+    return int(payload.get("meta", {}).get("low_coverage_floor", default) or default)
 
 
 def _stamp_self_hash(out_path: Path) -> None:

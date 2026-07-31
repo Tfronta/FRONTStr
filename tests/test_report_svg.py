@@ -125,13 +125,13 @@ def test_allele_coverage_empty() -> None:
     assert "NGS panel" in (text.text or "")
 
 
-def test_coverage_bar_includes_dropout_line() -> None:
+def test_coverage_bar_includes_low_coverage_line() -> None:
     table = [
-        {"marker": "M1", "coverage": 120, "chip": "ok"},
-        {"marker": "M2", "coverage": 18, "chip": "ok"},
-        {"marker": "M3", "coverage": 0, "chip": "no_data"},
+        {"marker": "M1", "coverage": 140, "called": 120, "chip": "ok"},
+        {"marker": "M2", "coverage": 40, "called": 18, "chip": "ok"},
+        {"marker": "M3", "coverage": 0, "called": 0, "chip": "no_data"},
     ]
-    svg = coverage_bar_svg(table, floor=30)
+    svg = coverage_bar_svg(table, floor=20)
     root = ET.fromstring(svg)
     lines = root.findall(".//{http://www.w3.org/2000/svg}line")
     dashed = [
@@ -139,10 +139,32 @@ def test_coverage_bar_includes_dropout_line() -> None:
         for ln in lines
         if "dasharray" in (ln.get("stroke-dasharray") or "") or ln.get("stroke-dasharray") == "3 2"
     ]
-    assert dashed, "dropout floor reference line missing"
+    assert dashed, "low coverage floor reference line missing"
     text_blob = "".join((t.text or "") for t in root.findall(".//{http://www.w3.org/2000/svg}text"))
-    assert "dropout floor" in text_blob
+    assert "low coverage floor" in text_blob
+    assert "dropout" not in text_blob
     assert "M1" in text_blob and "M2" in text_blob
+
+
+def test_coverage_bar_plots_supporting_reads_not_spanning() -> None:
+    """The floor is measured on supporting reads, so the bar has to be too.
+
+    M2 spans 40 reads but only 18 support its genotype, which is under the
+    20-read floor. Plotting the spanning total would put its bar on the safe
+    side of a line that the marker is in fact under.
+    """
+    table = [{"marker": "M2", "coverage": 40, "called": 18, "chip": "ok"}]
+    root = ET.fromstring(coverage_bar_svg(table, floor=20))
+    labels = [(t.text or "") for t in root.findall(".//{http://www.w3.org/2000/svg}text")]
+    assert "18" in labels
+    assert "40" not in labels
+
+
+def test_coverage_bar_falls_back_for_payloads_without_called() -> None:
+    """A run JSON serialized before ``called`` existed still draws its bars."""
+    root = ET.fromstring(coverage_bar_svg([{"marker": "M1", "coverage": 33, "chip": "ok"}]))
+    labels = [(t.text or "") for t in root.findall(".//{http://www.w3.org/2000/svg}text")]
+    assert "33" in labels
 
 
 def test_haplotype_stack_renders() -> None:

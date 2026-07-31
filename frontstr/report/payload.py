@@ -31,7 +31,15 @@ from frontstr.interp.qc import QcThresholds
 from frontstr.report.ngs_display import build_ngs_panel, build_strhub_projection
 from frontstr.version import __version__
 
-DEFAULT_DROPOUT_FLOOR = 30
+# There is deliberately no report-local coverage floor. The cover page used to
+# carry DEFAULT_DROPOUT_FLOOR = 30 and count every locus under it as a drop-out,
+# which disagreed with the caller on all three counts: a drop-out is a locus
+# that produced no call, the floor is 20, and it is measured against the reads
+# supporting the genotype rather than every read spanning the window. On the
+# bundled sample that read "12 drop-outs" next to "25 called", none of the 12
+# having dropped out. The floor now comes from ``QcThresholds`` on the run
+# context, which is the same policy object the calls were made under and is
+# already serialized into the audit record.
 
 
 @dataclass(slots=True)
@@ -65,7 +73,6 @@ class RunContext:
     #: The panel's extraction windows as BED lines. See
     #: :func:`frontstr.panel.bed.panel_bed_lines`.
     panel_bed: list[str] = field(default_factory=list)
-    dropout_floor: int = DEFAULT_DROPOUT_FLOOR
     #: QC policy applied during interpretation, carried through so the audit
     #: record states the thresholds the calls were actually made under.
     qc_thresholds: QcThresholds = field(default_factory=QcThresholds)
@@ -96,7 +103,7 @@ def serialize_run(
         context.bam_sha256 = _file_sha256(context.bam_path)
 
     serialized_results = [_serialize_marker(r) for r in results]
-    summary = _compute_summary(results, context.dropout_floor)
+    summary = _compute_summary(results)
     qc = _compute_qc(results)
 
     payload: dict[str, Any] = {
@@ -117,7 +124,7 @@ def serialize_run(
             "pipeline_argv": context.pipeline_argv,
             "effective_params": context.effective_params,
             "panel_bed": context.panel_bed,
-            "dropout_floor": context.dropout_floor,
+            "low_coverage_floor": context.qc_thresholds.low_coverage_reads,
             "cohort_href": context.cohort_href,
         },
         "summary": summary,
@@ -386,23 +393,27 @@ def _status_chip(r: MarkerResult) -> str:
     return "ok"
 
 
-def _compute_summary(results: list[MarkerResult], dropout_floor: int) -> dict[str, Any]:
-    """KPI numbers shown on the cover page."""
+def _compute_summary(results: list[MarkerResult]) -> dict[str, Any]:
+    """KPI numbers shown on the cover page.
+
+    Every count is read off decisions the interpretation layer already made.
+    None of them re-derives a condition from a threshold of its own: a cover
+    page that disagrees with the flag text further down the same report is
+    worse than no cover page.
+    """
     loci_total = len(results)
     loci_called = sum(1 for r in results if r.call_rule != CallRule.NO_DATA)
     tri_count = sum(
         1 for r in results if r.tri_type in (TriType.TYPE_I_UNBALANCED, TriType.TYPE_II_BALANCED)
     )
     mixture_count = sum(1 for r in results if r.tri_type == TriType.MIXTURE_SUSPECTED)
-    dropouts = sum(
-        1 for r in results if 0 < r.total_reads < dropout_floor or r.call_rule == CallRule.NO_DATA
-    )
+    low_coverage = sum(1 for r in results if any(f.code == FlagCode.LOW_COVERAGE for f in r.flags))
     return {
         "loci_total": loci_total,
         "loci_called": loci_called,
         "tri_count": tri_count,
         "mixture_count": mixture_count,
-        "dropouts": dropouts,
+        "low_coverage": low_coverage,
     }
 
 
@@ -413,8 +424,18 @@ def _compute_qc(results: list[MarkerResult]) -> dict[str, Any]:
     for r in results:
         for a in r.alleles:
             statuses[a.status.value] += 1
+    # Both depths, because they answer different questions and the report needs
+    # each. ``coverage`` is every read spanning the window, which is what the
+    # mean/min/max headline is about. ``called`` is the reads supporting the
+    # genotype, which is what LOW_COVERAGE is measured against, so it is the one
+    # a floor line may be drawn across.
     coverage_table = [
-        {"marker": r.marker_name, "coverage": r.total_reads, "chip": _status_chip(r)}
+        {
+            "marker": r.marker_name,
+            "coverage": r.total_reads,
+            "called": r.called_reads,
+            "chip": _status_chip(r),
+        }
         for r in results
     ]
     return {
@@ -437,7 +458,6 @@ def _file_sha256(path: Path, chunk: int = 1 << 20) -> str:
 
 # Re-export for convenience
 __all__ = [
-    "DEFAULT_DROPOUT_FLOOR",
     "AlleleStatus",
     "RunContext",
     "serialize_run",

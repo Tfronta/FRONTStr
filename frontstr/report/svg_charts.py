@@ -178,15 +178,33 @@ def _nice_y_axis_max(raw: float) -> float:
     return float(math.ceil(headroom / nice_step) * nice_step)
 
 
+def _row_depth(row: dict[str, Any]) -> int:
+    """Reads supporting the genotype for one coverage-table row.
+
+    Falls back to ``coverage`` for payloads serialized before ``called`` was
+    added, so an older run JSON still renders rather than drawing every bar at
+    zero.
+    """
+    if "called" in row:
+        return int(row.get("called") or 0)
+    return int(row.get("coverage") or 0)
+
+
 def coverage_bar_svg(
     coverage_table: list[dict[str, Any]],
     *,
     width: int = 880,
     height_per_row: int = 22,
     margin_left: int = 110,
-    floor: int = 30,
+    floor: int = 20,
 ) -> str:
-    """Horizontal bar chart of per-marker coverage with a dropout reference line."""
+    """Per-marker bar chart of the reads supporting the genotype.
+
+    The bar is ``called``, not the window's spanning total, because ``floor`` is
+    the ``LOW_COVERAGE`` threshold and that is measured against the supporting
+    reads. Drawing the line across spanning depth compared two different
+    quantities and put the line in the wrong place on every marker.
+    """
     if not coverage_table:
         return _empty_chart_svg(width, 120, "no markers")
 
@@ -194,7 +212,7 @@ def coverage_bar_svg(
     height = 40 + n * height_per_row
     margin_right = 20
     inner_w = width - margin_left - margin_right
-    max_cov = max(int(r.get("coverage", 0)) for r in coverage_table) or 1
+    max_cov = max(_row_depth(r) for r in coverage_table) or 1
 
     parts: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
@@ -207,12 +225,12 @@ def coverage_bar_svg(
     )
     parts.append(
         f'<text x="{floor_x:.1f}" y="14" text-anchor="middle" '
-        f'font-size="10" fill="#c62828">dropout floor ({floor}x)</text>'
+        f'font-size="10" fill="#c62828">low coverage floor ({floor}x)</text>'
     )
 
     for i, row in enumerate(coverage_table):
         marker = str(row.get("marker", ""))
-        cov = int(row.get("coverage", 0))
+        cov = _row_depth(row)
         chip = str(row.get("chip", "ok"))
         y = 26 + i * height_per_row
         bar_w = (cov / max_cov) * inner_w if max_cov else 0
@@ -230,7 +248,7 @@ def coverage_bar_svg(
         parts.append(
             f'<rect x="{margin_left}" y="{y}" width="{bar_w:.1f}" '
             f'height="{height_per_row - 6}" fill="{color}" rx="2" ry="2">'
-            f"<title>{_xml(marker)}: {cov} reads ({chip})</title></rect>"
+            f"<title>{_xml(marker)}: {cov} read(s) supporting the genotype ({chip})</title></rect>"
         )
         parts.append(
             f'<text x="{margin_left + bar_w + 4:.1f}" y="{y + height_per_row / 2 + 3:.1f}" '

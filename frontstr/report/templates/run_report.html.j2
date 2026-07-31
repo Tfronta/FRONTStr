@@ -32,7 +32,7 @@
     <div class="kpi"><b>{{ payload.summary.loci_total }}</b>loci in panel</div>
     <div class="kpi"><b>{{ payload.summary.loci_called }}</b>called</div>
     <div class="kpi {% if payload.summary.tri_count %}warn{% endif %}"><b>{{ payload.summary.tri_count }}</b>tri-allelic</div>
-    <div class="kpi {% if payload.summary.dropouts %}warn{% endif %}"><b>{{ payload.summary.dropouts }}</b>drop-outs</div>
+    <div class="kpi {% if payload.summary.low_coverage %}warn{% endif %}"><b>{{ payload.summary.low_coverage }}</b>low coverage</div>
     <div class="kpi {% if payload.summary.mixture_count %}danger{% endif %}"><b>{{ payload.summary.mixture_count }}</b>mixture alert</div>
   </div>
 </header>
