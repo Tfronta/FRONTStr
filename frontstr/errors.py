@@ -18,10 +18,6 @@ class PanelError(FrontstrError):
     """Raised for malformed panel definitions."""
 
 
-class CallerError(FrontstrError):
-    """Raised when the external caller (LongTR, minimap2…) fails."""
-
-
 class EvidenceError(FrontstrError):
     """Raised in the sequence-pileup / clustering stages."""
 

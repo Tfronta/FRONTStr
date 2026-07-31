@@ -652,8 +652,9 @@ is how they were made.
 
 Part of the documentation, not a disclaimer.
 
-- **`frontstr run` is a stub.** The FASTQ → alignment → report path is not
-  wired; `ingest.align` raises. Align externally and start from a BAM.
+- **FRONTStr starts from an aligned BAM or CRAM.** The FASTQ → alignment path is
+  not wired; `ingest.align` raises. Align externally, with minimap2 `-ax
+  map-ont`, and start from the BAM.
 - **Not laboratory-validated.** No forensic partner has signed off. No mixture
   series, no dropout study, no NIST control. The reference profile it is tested
   against comes from another caller on matched Illumina data. That is
@@ -680,7 +681,7 @@ Part of the documentation, not a disclaimer.
 
 - Validation across the published 1000 Genomes ONT cohort, against Illumina
   genotypes for the same samples
-- FASTQ input, with the alignment step wired into `frontstr run`
+- FASTQ input, with the alignment step wired in behind a `run` command
 - A stutter model fitted on amplicon data, alongside the PCR-free one
 - A per-locus aligned-read view, to inspect the pileup a call was made from
 - CODIS `.cmf` export

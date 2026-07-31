@@ -3,9 +3,21 @@ name: CI
 on:
   push:
     branches: [main, develop]
-    paths: ["frontstr/**", "tests/**", "pyproject.toml", ".github/workflows/ci.yml"]
+    paths:
+      - "frontstr/**"
+      - "tests/**"
+      - "benchmark/**"
+      - "examples/**"
+      - "pyproject.toml"
+      - ".github/workflows/ci.yml"
   pull_request:
-    paths: ["frontstr/**", "tests/**", "pyproject.toml", ".github/workflows/ci.yml"]
+    paths:
+      - "frontstr/**"
+      - "tests/**"
+      - "benchmark/**"
+      - "examples/**"
+      - "pyproject.toml"
+      - ".github/workflows/ci.yml"
 
 # NOTE: no `defaults.run.working-directory` here. The root of this repo IS the
 # project root (pyproject.toml lives beside this file's .github/), and frontstr/
@@ -25,12 +37,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install ".[dev]"
+      # benchmark/ and examples/ are not shipped, but they are the two places a
+      # rename in frontstr/ breaks silently: benchmark/ decides whether a caller
+      # change helped, and examples/ is the first thing a new user runs. Four of
+      # the five demos had been calling a CLI option that no longer existed.
       - name: Ruff
-        run: ruff check frontstr tests
+        run: ruff check frontstr tests benchmark examples
       - name: Ruff format check
-        run: ruff format --check frontstr tests
+        run: ruff format --check frontstr tests benchmark
       - name: Mypy
-        run: mypy frontstr
+        run: mypy
 
   test:
     runs-on: ubuntu-latest

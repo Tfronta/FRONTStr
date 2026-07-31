@@ -87,8 +87,8 @@ class FlagCode(StrEnum):
     STRAND_BIAS = "strand_bias"
     TRIALLELIC = "triallelic"
     MIXTURE_SUSPECTED = "mixture_suspected"
-    #: Retired: LongTR is no longer wired into the pipeline (see
-    #: :mod:`frontstr.caller`). Kept so historical records still parse; nothing
+    #: Retired: LongTR is no longer wired into the pipeline, and the module that
+    #: ran it has been removed. Kept so historical records still parse; nothing
     #: produces it.
     LONGTR_DISCORDANT = "longtr_discordant"
     #: Retired with LongTR — see :class:`AlleleStatus.INEXACT_ALLELE`.

@@ -4,11 +4,10 @@ We build:
 - A synthetic BAM with TWO loci stitched in: a heterozygous TH01-like locus
   and a TPOX-like triallelic Type II locus on the same chr1.
 - A minimal panel YAML covering both loci.
-- A LongTR-style VCF asserting one of the calls.
 
 Then we run::
 
-    python -m frontstr interpret --bam ... --panel ... --longtr-vcf ...
+    python -m frontstr interpret --bam ... --panel ...
 
 …and print the table of forensic calls.
 
@@ -49,22 +48,6 @@ systems:
     tri_balanced_thr: 0.5
 """
 
-LONGTR_VCF = """##fileformat=VCFv4.2
-##INFO=<ID=MOTIF,Number=.,Type=String,Description="Motif">
-##INFO=<ID=PERIOD,Number=.,Type=String,Description="Period">
-##INFO=<ID=BPDIFFS,Number=A,Type=Integer,Description="bp diff per ALT">
-##INFO=<ID=INEXACT_ALLELE,Number=A,Type=Integer,Description="Inexact ALT">
-##FORMAT=<ID=GT,Number=1,Type=String,Description="GT">
-##FORMAT=<ID=Q,Number=1,Type=Float,Description="Q">
-##FORMAT=<ID=DP,Number=1,Type=Integer,Description="DP">
-##FORMAT=<ID=PDP,Number=1,Type=String,Description="PDP">
-##FORMAT=<ID=ALLREADS,Number=1,Type=String,Description="ALLREADS">
-##contig=<ID=chr1>
-#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tdemo
-chr1\t101\tTH01_LIKE\tAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT\tAGATAGATAGATAGATAGATAGATAGATAGATAGATAGATAGAT\t.\tPASS\tMOTIF=AGAT;PERIOD=4;BPDIFFS=-4;INEXACT_ALLELE=0\tGT:Q:DP:PDP:ALLREADS\t0/1:0.99:58:30|25:0|33;-4|25
-"""
-
-
 def _build_chr1_fasta(out_path: Path) -> None:
     """Build a 1 kb chr1 with two TR regions hand-placed at the right offsets."""
     flank_l = "A" * 100
@@ -88,10 +71,10 @@ def _add_read(bam: pysam.AlignmentFile, *, name: str, start: int, seq: str,
     a.reference_start = start
     a.mapping_quality = mapq
     a.flag = 16 if reverse else 0
-    # Construct CIGAR: flank-match, tr-match, deletion or insertion, flank-match
+    # CIGAR: flank-match, tr-match, then a deletion or insertion for the length
+    # difference against the reference array. Every read here is built as
+    # flank_l bp of flank + the repeat + flank_l bp of flank.
     flank_l = 100
-    flank_r = len(seq) - flank_l - (len(seq) - flank_l - flank_l)  # placeholder
-    # Simpler: assume seq = flank_l*A + TR + flank_l*T; len(TR)=read_tr_len, ref_tr_len=ref_len
     read_tr_len = len(seq) - 2 * flank_l
     diff = ref_len - read_tr_len
     if diff == 0:
@@ -156,8 +139,6 @@ def main() -> int:
     print(f"workdir: {workdir}")
     panel = workdir / "panel.yaml"
     panel.write_text(PANEL_YAML)
-    vcf = workdir / "longtr.vcf"
-    vcf.write_text(LONGTR_VCF)
     bam = _build_bam(workdir / "demo.bam")
     print(f"synthetic BAM: {bam}")
     return subprocess.call(
@@ -165,7 +146,6 @@ def main() -> int:
             sys.executable, "-m", "frontstr", "interpret",
             "--bam", str(bam),
             "--panel", str(panel),
-            "--longtr-vcf", str(vcf),
         ]
     )
 

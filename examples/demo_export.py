@@ -1,6 +1,6 @@
 """Demo: export all formats from a synthetic FRONTStr run.
 
-Builds the same demo BAM/panel/VCF as ``demo_interpret.py`` then calls::
+Builds the same demo BAM and panel as ``demo_interpret.py`` then calls::
 
     python -m frontstr export --formats profile,evidence,seqs,json,html
 
@@ -19,7 +19,6 @@ from tempfile import mkdtemp
 THIS = Path(__file__).resolve()
 sys.path.insert(0, str(THIS.parent))
 from demo_interpret import (  # noqa: E402
-    LONGTR_VCF,
     PANEL_YAML,
     _build_bam,
 )
@@ -30,8 +29,6 @@ def main() -> int:
     print(f"workdir: {workdir}")
     panel = workdir / "panel.yaml"
     panel.write_text(PANEL_YAML)
-    vcf = workdir / "longtr.vcf"
-    vcf.write_text(LONGTR_VCF)
     bam = _build_bam(workdir / "demo.bam")
     out_dir = workdir / "exports"
     return subprocess.call(
@@ -39,7 +36,6 @@ def main() -> int:
             sys.executable, "-m", "frontstr", "export",
             "--bam", str(bam),
             "--panel", str(panel),
-            "--longtr-vcf", str(vcf),
             "--sample", "FRONTStr-Demo",
             "--operator", "demo@frontstr",
             "--out-dir", str(out_dir),

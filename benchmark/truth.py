@@ -28,6 +28,7 @@ field) triple read out of the three header rows, never on a column offset.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -131,7 +132,7 @@ def _allele_sort_key(allele: str) -> tuple[float, str]:
         return (float("inf"), allele)
 
 
-def _header_map(rows: list[tuple[object, ...]]) -> dict[tuple[str, str, str], int]:
+def _header_map(rows: Sequence[tuple[object, ...]]) -> dict[tuple[str, str, str], int]:
     """Map (marker, technology, field) to its column index.
 
     Rows 0 and 1 are *both* merged: the marker name is written once per block

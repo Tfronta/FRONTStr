@@ -3,7 +3,6 @@
 Flags are the machine-readable, auditable replacement for free-text warnings.
 Producers append flags at the point a condition is decided:
 
-- :func:`frontstr.interp.concordance.cross_check` emits ``LONGTR_DISCORDANT``.
 - :func:`derive_marker_flags` (called at the end of ``interpret_marker``) emits
   the conditions that are intrinsic to the finished :class:`MarkerResult`
   (triallelic / mixture / iso-allele / unpolished consensus). Coverage /

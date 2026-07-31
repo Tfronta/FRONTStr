@@ -2,7 +2,7 @@
 
 Reuses the ``demo_interpret.py`` synthetic-BAM builder, then invokes::
 
-    python -m frontstr report --bam ... --panel ... --longtr-vcf ... --out report.html
+    python -m frontstr report --bam ... --panel ... --out report.html
 
 …and prints the path so you can open it in a browser.
 
@@ -19,7 +19,6 @@ from tempfile import mkdtemp
 THIS = Path(__file__).resolve()
 sys.path.insert(0, str(THIS.parent))
 from demo_interpret import (  # noqa: E402
-    LONGTR_VCF,
     PANEL_YAML,
     _build_bam,
 )
@@ -30,8 +29,6 @@ def main() -> int:
     print(f"workdir: {workdir}")
     panel = workdir / "panel.yaml"
     panel.write_text(PANEL_YAML)
-    vcf = workdir / "longtr.vcf"
-    vcf.write_text(LONGTR_VCF)
     bam = _build_bam(workdir / "demo.bam")
     out_html = workdir / "report.html"
     rc = subprocess.call(
@@ -39,7 +36,6 @@ def main() -> int:
             sys.executable, "-m", "frontstr", "report",
             "--bam", str(bam),
             "--panel", str(panel),
-            "--longtr-vcf", str(vcf),
             "--sample", "FRONTStr-Demo",
             "--operator", "demo@frontstr",
             "--run-id", "demo-001",

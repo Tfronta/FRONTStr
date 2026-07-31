@@ -12,7 +12,7 @@ dynamic = ["version"]
 authors = [
     { name = "FRONTStr contributors" },
 ]
-keywords = ["forensic", "str", "nanopore", "ont", "longtr", "isfg", "tandem-repeat"]
+keywords = ["forensic", "str", "nanopore", "ont", "isfg", "strnaming", "tandem-repeat"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Environment :: Console",
@@ -72,9 +72,9 @@ dev = [
 frontstr = "frontstr.cli:app"
 
 [project.urls]
-Documentation = "https://github.com/TBD/frontstr"
-Source = "https://github.com/TBD/frontstr"
-Issues = "https://github.com/TBD/frontstr/issues"
+Documentation = "https://github.com/Tfronta/FRONTStr#readme"
+Source = "https://github.com/Tfronta/FRONTStr"
+Issues = "https://github.com/Tfronta/FRONTStr/issues"
 
 [tool.hatch.version]
 path = "frontstr/version.py"
@@ -124,7 +124,11 @@ warn_unused_ignores = true
 warn_redundant_casts = true
 disallow_untyped_defs = true
 no_implicit_optional = true
-files = ["frontstr"]
+# benchmark/ is not shipped, but it is the code that decides whether a caller
+# change made the cohort better or worse. Untyped, it was free to silently
+# mis-join the truth workbook, which is exactly the failure that makes a
+# validation look clean when it is not.
+files = ["frontstr", "benchmark"]
 
 [[tool.mypy.overrides]]
 module = [

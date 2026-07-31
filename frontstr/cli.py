@@ -302,28 +302,11 @@ def inspect(
                 console.print(f"  • {w}")
 
 
-@app.command("run")
-def run(
-    _input: Annotated[Path, typer.Option("--input", "-i", help="FASTQ/BAM/CRAM input.")],
-    sample: Annotated[str, typer.Option("--sample", "-s", help="Sample identifier.")],
-    panel: Annotated[Path, typer.Option("--panel", "-p", help="Panel YAML.")],
-    reference: Annotated[Path, typer.Option("--reference", "-r", help="Reference FASTA.")],
-    out: Annotated[Path, typer.Option("--out", "-o", help="Output directory.")],
-    platform: Annotated[
-        str, typer.Option("--platform", help="Sequencing platform: ont|hifi.")
-    ] = "ont",
-) -> None:
-    """Run the full FRONTStr pipeline on a single sample.
-
-    NOTE: not yet implemented end-to-end. Phase 1 of the roadmap wires the
-    layers (ingest → align/passthrough → evidence → interp → report).
-    """
-    _ = _input, sample, panel, reference, out, platform
-    console.print(
-        "[yellow]not implemented yet[/yellow]. Align externally and start from a BAM.\n"
-        "Use `frontstr inspect <path>` to validate inputs in the meantime."
-    )
-    raise typer.Exit(code=64)  # EX_USAGE
+# There is deliberately no `run` command. It was advertised in `--help` as "run
+# the full pipeline on a single sample" while doing nothing but printing "not
+# implemented" and exiting 64, which is the first thing a new user tried. The
+# FASTQ → align → call path is listed under `Planned` in the README; when
+# `ingest.align` is wired, the command comes back here.
 
 
 @app.command("batch")
@@ -942,7 +925,7 @@ def calibrate_stutter(
         typer.Option("--reference", "-r", help="Reference FASTA (required for CRAM input)."),
     ] = None,
 ) -> None:
-    """Measure stutter rates from real data and fit a :class:`StutterModel`.
+    """Measure stutter rates from real data and fit a stutter model.
 
     This is a calibration pass, not a per-case step: the model is a property of
     the chemistry and the library protocol, not of the sample. Run it once per
