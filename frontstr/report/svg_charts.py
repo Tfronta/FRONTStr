@@ -54,8 +54,11 @@ TEAL_BAR_ISO = "#14b8a6"
 #: the bars and the legend cannot disagree: the legend used to draw HP1 with
 #: ``STATUS_COLORS["allele"]``, an unrelated green, while the bars drew it blue,
 #: and the chart contained no green at all.
+#: Untagged reads are the muted one on purpose: they are the absence of a
+#: haplotype, not a third one. #cfd8dc was near-white, which on the dark theme
+#: made the smallest series the loudest thing in the chart.
 HP_SERIES: tuple[tuple[str, str, str], ...] = (
-    ("n_reads_hp_none", "#cfd8dc", "no HP"),
+    ("n_reads_hp_none", "#94a3b8", "no HP"),
     ("n_reads_hp2", "#9c27b0", "HP2"),
     ("n_reads_hp1", "#1976d2", "HP1"),
 )
@@ -280,9 +283,9 @@ def coverage_bar_svg(
 
 
 #: Legend geometry, in px at font-size 10.
-_LEGEND_SWATCH = 10
-_LEGEND_SWATCH_GAP = 4
-_LEGEND_ITEM_GAP = 10
+_LEGEND_SWATCH = 8
+_LEGEND_SWATCH_GAP = 5
+_LEGEND_ITEM_GAP = 18
 _LEGEND_CHAR_W = 5.6
 
 
@@ -305,9 +308,9 @@ def _hp_legend(width: int, margin_right: int) -> str:
     parts: list[str] = []
     for (color, label), item_w in zip(items, widths, strict=True):
         parts.append(
-            f'<rect x="{x:.1f}" y="2" width="{_LEGEND_SWATCH}" height="{_LEGEND_SWATCH}" '
+            f'<rect x="{x:.1f}" y="3" width="{_LEGEND_SWATCH}" height="{_LEGEND_SWATCH}" '
             f'fill="{color}" rx="1"/>'
-            f'<text x="{x + _LEGEND_SWATCH + _LEGEND_SWATCH_GAP:.1f}" y="11" font-size="10" '
+            f'<text x="{x + _LEGEND_SWATCH + _LEGEND_SWATCH_GAP:.1f}" y="10" font-size="10" '
             f'fill="{TEXT_COLOR}">{_xml(label)}</text>'
         )
         x += item_w + _LEGEND_ITEM_GAP

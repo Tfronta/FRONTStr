@@ -456,16 +456,21 @@ details.locus summary {
   user-select: none;
   list-style: none;
 }
-details.locus summary::-webkit-details-marker { display: none; }
-details.locus summary::before {
+/* Direct child only. As a descendant selector this also styled the summary of
+ * every nested <details>, so the cluster table inside a locus inherited the
+ * locus's own triangle and, through the [open] rule below, rotated it open
+ * whenever the *locus* was open. Its disclosure arrow pointed down over a
+ * section that was shut. */
+details.locus > summary::-webkit-details-marker { display: none; }
+details.locus > summary::before {
   content: "▶";
   font-size: 10px;
   color: var(--text-faint);
   transition: transform 0.15s;
 }
-details.locus[open] summary::before { transform: rotate(90deg); }
-details.locus summary b { font-size: 14px; flex-grow: 1; }
-details.locus summary .meta { font-size: 11px; color: var(--text-faint); }
+details.locus[open] > summary::before { transform: rotate(90deg); }
+details.locus > summary b { font-size: 14px; flex-grow: 1; }
+details.locus > summary .meta { font-size: 11px; color: var(--text-faint); }
 /* Per-locus: full-width NGS stack, then forensic + haplotype row */
 details.locus .body.locus-body {
   padding: 0 18px 20px;
@@ -477,20 +482,54 @@ details.locus .body.locus-body {
 .locus-ngs-full {
   width: 100%;
 }
-.locus-split {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
-  gap: 24px;
-  align-items: start;
+/* The haplotype chart and the cluster table used to share a two-column grid.
+ * That reserved half the page for a disclosure that is one line tall while
+ * closed, and squeezed a twelve-column table with a full consensus sequence
+ * into the other half while open. They are stacked now, each at the width it
+ * needs: the chart is a 320x200 drawing and does not benefit from being
+ * stretched across the page. */
+.locus-haplotype {
+  margin: 16px 0 0;
+  max-width: 360px;
 }
-.locus-split-main {
+.locus-haplotype figcaption {
+  font-size: 11px;
+  color: var(--text-soft);
+  margin-bottom: 6px;
+}
+.locus-haplotype figcaption b {
+  color: var(--text);
+  font-weight: 600;
+}
+.locus-haplotype figcaption .meta {
+  display: block;
+}
+.locus-clusters {
+  margin-top: 16px;
   min-width: 0;
 }
-.locus-split-aside {
-  min-width: 0;
+.cluster-table-help {
+  font-size: 12px;
+  color: var(--text-soft);
+  margin: 8px 0 10px;
+  max-width: 78ch;
+  line-height: 1.5;
 }
-@media (max-width: 760px) {
-  .locus-split { grid-template-columns: 1fr; }
+/* The consensus used to be a break-all cell, which wrapped a 239 bp sequence
+ * into a column two characters wide and made every row ~450px tall. It scrolls
+ * on one line now, the same treatment the NGS table above already gives it. */
+details.cluster-table .sequence-scroll {
+  max-width: 260px;
+  font-size: 11px;
+  color: var(--text-soft);
+  line-height: 1.4;
+}
+/* "AATGx6 + AATGx3 + AATGx1 (TR 239 bp)" broke at every space and stacked into
+ * a ladder. It is one reading, so it stays on one line. */
+details.cluster-table td.runs-cell {
+  font-size: 11px;
+  color: var(--text-soft);
+  white-space: nowrap;
 }
 
 .locus-meta {
@@ -683,15 +722,25 @@ rect.ngs-segment.is-selected {
 @media (prefers-color-scheme: dark) {
   rect.ngs-segment.is-selected { stroke: var(--primary) !important; }
 }
-details.forensic-audit {
-  margin-top: 12px;
-}
-details.forensic-audit summary {
+details.cluster-table summary {
   cursor: pointer;
   font-size: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   list-style: none;
 }
-details.forensic-audit summary::-webkit-details-marker { display: none; }
+details.cluster-table summary::-webkit-details-marker { display: none; }
+/* The marker is drawn here rather than left to the browser, because the
+ * default one was suppressed above and nothing replaced it: the row carried a
+ * static triangle that pointed down whether the section was open or shut. */
+details.cluster-table summary::before {
+  content: "▸";
+  color: var(--text-faint);
+  font-size: 10px;
+}
+details.cluster-table[open] summary::before { content: "▾"; }
+details.cluster-table summary .meta { font-weight: 400; }
 
 /* ---------- raw page ---------- */
 .raw-grid {

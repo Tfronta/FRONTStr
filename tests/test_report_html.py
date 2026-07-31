@@ -187,8 +187,24 @@ def test_build_report_includes_ngs_panel(tmp_path: Path) -> None:
     assert "Next-Generation Sequencing Analysis" in html
     assert 'class="ngs-panel"' in html
     assert "(reads)" in html
-    assert "Forensic audit" in html
+    assert "Read clusters" in html
     assert "sequence-scroll" in html
+
+
+def test_report_does_not_claim_a_forensic_audit_was_performed(tmp_path: Path) -> None:
+    """The per-locus cluster table was headed "Forensic audit".
+
+    It is a table of read clusters. A forensic audit is a review carried out by
+    people against a standard, and the README states in as many words that the
+    caller is not laboratory-validated and that no forensic partner has signed
+    off. A heading asserting one had happened is the kind of claim that gets a
+    tool disqualified when someone reads it literally. "Raw / audit" stays: an
+    audit *record* is the trail that would let one be performed, which is what
+    the hashes and the parameter list are.
+    """
+    out = tmp_path / "report.html"
+    build_report(_make_results(), RunContext(sample_name="S", panel_name="P"), out)
+    assert "forensic audit" not in out.read_text(encoding="utf-8").lower()
 
 
 def test_profile_tri_columns_only_when_tri_chip(tmp_path: Path) -> None:

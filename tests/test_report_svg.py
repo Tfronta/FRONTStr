@@ -265,12 +265,12 @@ def test_haplotype_legend_fits_and_does_not_overlap() -> None:
     width = 320
     svg = haplotype_stack_svg(_hp_marker(), width=width)
     root = ET.fromstring(svg)
-    swatches = sorted(float(r.get("x") or 0) for r in _rects(svg) if r.get("y") == "2")
+    swatches = sorted(float(r.get("x") or 0) for r in _rects(svg) if r.get("y") == "3")
     assert len(swatches) == len(HP_SERIES), "one swatch per haplotype series"
     texts = sorted(
         (float(t.get("x") or 0), (t.text or ""))
         for t in root.findall(".//{http://www.w3.org/2000/svg}text")
-        if t.get("y") == "11"
+        if t.get("y") == "10"
     )
     assert len(texts) == len(HP_SERIES)
     # Each label starts after its own swatch and ends before the next swatch.

@@ -304,13 +304,33 @@
           </div>
           {% endif %}
         </div>
-        <div class="locus-split">
-          <div class="locus-split-main">
-          <details class="forensic-audit">
-            {# The span is laid out at the far right of the summary row, so it has
-               to read on its own. It used to be ", all clusters", a fragment
-               whose sentence had drifted half a screen away. #}
-            <summary><b>Forensic audit</b><span class="meta">every cluster, called or not</span></summary>
+        {# The haplotype chart sits at its own size in the flow. It used to share
+           a two-column grid with the cluster table below, which was wrong in
+           both states: collapsed, the table's column was half the page and one
+           line tall; expanded, a twelve-column table with a full consensus
+           sequence was squeezed into it. #}
+        <figure class="locus-haplotype">
+          <figcaption>
+            <b>Haplotype split</b>
+            <span class="meta">reads per called allele, by phased haplotype</span>
+          </figcaption>
+          {{ r.svg_haplotype | safe }}
+        </figure>
+        <div class="locus-clusters">
+          {# Named for what it is. This was headed "Forensic audit", which
+             asserts a formal review by people against a standard; no such
+             review happens, and the README states the caller is not
+             laboratory-validated. It is a table of read clusters. #}
+          <details class="cluster-table">
+            <summary><b>Read clusters</b><span class="meta">every cluster the locus produced, including the ones not called</span></summary>
+            <p class="cluster-table-help">
+              One row per read cluster at this locus, before and after the
+              calling rules. Rows marked <code>allele</code> are the genotype
+              above; the rest were set aside as stutter, artefact or noise, and
+              are shown so a call can be read against what competed with it.
+              <code>ES</code> is the stutter coverage the model expected at that
+              sequence.
+            </p>
             <table class="allele-table">
             <thead>
               <tr>
@@ -324,7 +344,7 @@
               <tr class="is-{{ a.status }}">
                 <td>{{ a.cluster_index }}</td>
                 <td class="mono">{{ a.isfg }}</td>
-                <td class="mono" style="font-size:11px;color:var(--text-soft);">{{ a.motif_repeat_summary }}</td>
+                <td class="mono runs-cell">{{ a.motif_repeat_summary }}</td>
                 <td class="num">{{ '%.1f'|format(a.ce) if a.ce is not none else '–' }}</td>
                 <td class="num">{{ a.length_bp }}</td>
                 <td class="num"><b>{{ a.n_reads_total }}</b></td>
@@ -334,17 +354,12 @@
                 <td class="num">{{ a.expected_stutter }}</td>
                 <td><span class="chip {{ 'ok' if a.status == 'allele' else 'no_data' }}">{{ a.status }}</span>
                 </td>
-                <td class="mono seq-cell" style="font-size:11px;color:var(--text-soft);word-break:break-all;">{{ a.consensus or '–' }}</td>
+                <td class="mono"><div class="sequence-scroll">{{ a.consensus or '–' }}</div></td>
               </tr>
             {% endfor %}
             </tbody>
           </table>
           </details>
-          </div>
-          <aside class="locus-split-aside">
-          <div style="font-size:11px;color:var(--text-soft);margin-bottom:6px;">Haplotype split</div>
-          {{ r.svg_haplotype | safe }}
-          </aside>
         </div>
       </div>
     </details>
