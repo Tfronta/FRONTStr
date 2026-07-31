@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import multiprocessing
 import sys
 import traceback
 from collections.abc import Callable, Iterator
@@ -59,6 +60,19 @@ VALID_ROLES: frozenset[str] = frozenset(
 )
 
 DEFAULT_FORMATS: frozenset[str] = frozenset({"profile", "evidence", "seqs", "json", "html"})
+
+#: How worker processes are started, pinned rather than inherited.
+#:
+#: The platform default differs: Linux forks, macOS has spawned since 3.8, and
+#: Python 3.14 moves Linux to forkserver. Three behaviours across two supported
+#: platforms and one interpreter upgrade is not something a caller that has to
+#: reproduce a run should be exposed to. Forking out of this process is also
+#: unsafe on its own terms, and says so: pysam and the POA backend hold threads,
+#: and Python 3.12 warns that forking a multi-threaded process risks deadlock in
+#: the child. Spawn is what macOS already exercises, and ``_process_one_sample``
+#: is written for it — module level, picklable arguments, logging configured
+#: inside the worker rather than inherited from the parent.
+_POOL_CONTEXT = multiprocessing.get_context("spawn")
 
 SUMMARY_BASE_HEADERS = ("sample_id", "role", "status", "error")
 
@@ -227,7 +241,7 @@ def run_batch(
             if progress_callback:
                 progress_callback(entry.sample_id)
     else:
-        with ProcessPoolExecutor(max_workers=workers) as pool:
+        with ProcessPoolExecutor(max_workers=workers, mp_context=_POOL_CONTEXT) as pool:
             for entry in entries:
                 fut = pool.submit(
                     _process_one_sample,

@@ -134,7 +134,37 @@ FRONTStr is installed **from a clone**, not from PyPI. The shipped panel and the
 example files live in `examples/`, which is not part of the Python package, so a
 wheel install would leave you without a panel to run against.
 
+### Check the interpreter first
+
+FRONTStr needs Python ≥ 3.11, and `python3` is frequently not the newest
+interpreter on the machine. Check before creating the environment, because the
+failure otherwise arrives as a `requires-python` error from pip, several
+commands later:
+
+```bash
+python3 -V
+```
+
+Two common reasons it reports something older:
+
+- **An active conda environment.** A `(base)` prefix on the shell prompt means
+  conda's interpreter comes first on `PATH`, and Anaconda still ships 3.9.
+  `conda deactivate` restores the system one. It reactivates in every new
+  shell, so either deactivate again or work in the same terminal throughout.
+- **macOS.** `/usr/bin/python3` is 3.9. Install a current one with
+  `brew install python@3.12` and name it explicitly when creating the
+  environment: `python3.12 -m venv .venv`.
+
 ### Linux
+
+Debian and Ubuntu split the `venv` module into its own package and do not
+install it by default:
+
+```bash
+sudo apt install python3-venv
+```
+
+Then:
 
 ```bash
 git clone https://github.com/Tfronta/FRONTStr.git
@@ -143,6 +173,10 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e '.[poa]'
 ```
 
+Every compiled dependency (`pysam`, `cyvcf2`, `edlib`, `lxml`, `pyspoa`) has a
+`manylinux` wheel, so nothing is built from source and no compiler or `-dev`
+package is needed. Verified on Ubuntu 24.04 with Python 3.12.
+
 ### macOS
 
 `pyspoa` publishes only Linux wheels, so pip builds it from source. That needs
@@ -150,15 +184,15 @@ CMake and the Apple command-line tools:
 
 ```bash
 xcode-select --install          # once per machine
-brew install cmake samtools
+brew install cmake samtools python@3.12
 ```
 
-then the same three commands as Linux:
+then, naming the interpreter explicitly because `python3` is 3.9 on macOS:
 
 ```bash
 git clone https://github.com/Tfronta/FRONTStr.git
 cd FRONTStr
-python3 -m venv .venv && source .venv/bin/activate
+python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e '.[poa]'
 ```
 
