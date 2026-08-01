@@ -11,6 +11,10 @@ Two-stage clustering (plan-longtr-improved.md §5.3):
 3. **Consensus** — partial-order alignment via
    :mod:`frontstr.evidence.consensus`, which records *how* the consensus was
    derived on each cluster (see :class:`ConsensusMethod`).
+4. **Merge on identical consensus** — stage 2 compares raw read to raw read, so
+   one allele can seed two clusters; once POA has polished both, an identical
+   consensus is proof they were one allele all along. See
+   :func:`_merge_identical_consensus`.
 
 Result objects carry per-haplotype tallies so the report can render HP-stacks
 without re-iterating the BAM.
@@ -112,6 +116,7 @@ def cluster_observations(
     bin_sizes: dict[int, int] | None = None,
     core_binned: dict[int, int] | None = None,
     consensus_seconds: list[float] | None = None,
+    merged_consensus: dict[str, int] | None = None,
 ) -> list[Cluster]:
     """Cluster :class:`Observation` instances by length and sequence identity.
 
@@ -139,6 +144,10 @@ def cluster_observations(
             repeat core was actually locatable}``. A key whose count is lower
             than ``bin_sizes`` contains reads binned on raw window length, which
             includes flank error — worth surfacing rather than hiding.
+        merged_consensus: Optional dict filled with ``{consensus: n clusters}``
+            for each set of fragments folded together by
+            :func:`_merge_identical_consensus`, so a trace can say a merge
+            happened instead of just reporting fewer clusters than bins.
 
     Returns:
         Clusters sorted by ``n_reads`` descending. Each consensus string is in
@@ -169,8 +178,63 @@ def cluster_observations(
     for members in bins.values():
         clusters.extend(_cluster_by_identity(members, identity_threshold, consensus_seconds))
 
+    clusters = _merge_identical_consensus(clusters, merged_consensus)
     clusters.sort(key=lambda c: c.n_reads, reverse=True)
     return clusters
+
+
+def _merge_identical_consensus(
+    clusters: list[Cluster], merged: dict[str, int] | None = None
+) -> list[Cluster]:
+    """Fold together clusters whose polished consensus is byte-identical.
+
+    Seed-and-grow compares a raw read to a raw read. Two ONT reads of the same
+    allele differ from each other by 2-4%, straddling ``identity_threshold``, so
+    one allele can start two clusters. POA then polishes each of them
+    separately and both converge on the same true sequence. What comes out is
+    two clusters with the same consensus, which is not a threshold question:
+    two clusters carrying byte-identical sequence are the same allele, by
+    definition of allele.
+
+    Measured across the 108-sample 1000G ONT cohort, three of the loci
+    FRONTStr got wrong were exactly this, and the symptom went both ways. When
+    both fragments were strong they were both called and the genotype carried
+    the same number twice: HG02187 TPOX ``10/12/12`` and HG03667 FGA
+    ``21/22/22``. When both were weak neither cleared the heterozygote ratio
+    and the locus was called homozygous: HG04161 FGA split one allele into two
+    3-read clusters that together are 6 of 13 reads, a ratio of 0.46 that
+    passes comfortably.
+
+    This does not close the ``identity_threshold`` question. It removes the
+    case that needs no threshold to decide; near-identical fragments still
+    want consensus-refined reassignment.
+
+    Args:
+        clusters: Clusters straight out of :func:`_cluster_by_identity`.
+        merged: Optional dict filled with ``{consensus: n clusters folded in}``
+            for the fragments that were absorbed, so a trace can report a merge
+            rather than silently showing fewer clusters than bins.
+
+    Returns:
+        One cluster per distinct consensus, members concatenated, in first-seen
+        order. Empty consensuses are left alone: they are deletions or failures
+        and carry no evidence that they are the same event.
+    """
+    by_consensus: dict[str, Cluster] = {}
+    out: list[Cluster] = []
+    for cluster in clusters:
+        if not cluster.consensus:
+            out.append(cluster)
+            continue
+        first = by_consensus.get(cluster.consensus)
+        if first is None:
+            by_consensus[cluster.consensus] = cluster
+            out.append(cluster)
+            continue
+        first.members.extend(cluster.members)
+        if merged is not None:
+            merged[cluster.consensus] = merged.get(cluster.consensus, 1) + 1
+    return out
 
 
 def _binning_key(sequence: str, motifs: list[str], strand: str) -> tuple[int, bool]:

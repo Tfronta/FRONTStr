@@ -7,7 +7,11 @@ from pathlib import Path
 import pytest
 
 from frontstr.errors import EvidenceError
-from frontstr.evidence.cluster import Cluster, cluster_observations
+from frontstr.evidence.cluster import (
+    Cluster,
+    _merge_identical_consensus,
+    cluster_observations,
+)
 from frontstr.evidence.pileup import Observation, pileup_locus
 from tests.conftest import SYNTH_CHROM, SYNTH_TR_END, SYNTH_TR_START
 
@@ -247,3 +251,89 @@ def test_reverse_strand_core_is_located_on_the_canonical_orientation() -> None:
     ]
     out = cluster_observations(rc_reads, motifs=["AATG"], strand="-")
     assert len(out) == 1
+
+
+def _obs_at(seq: str, n: int, *, start: int = 0, hp: int | None = None) -> list[Observation]:
+    return [
+        Observation(
+            read_id=f"r{start + i}",
+            sequence=seq,
+            hp=hp,
+            ps=1 if hp else None,
+            mean_qual=30.0,
+            strand="+",
+            flank_left_ok=True,
+            flank_right_ok=True,
+        )
+        for i in range(n)
+    ]
+
+
+def test_identical_consensus_clusters_are_folded_together() -> None:
+    """One allele that seeded two clusters is one allele again after POA.
+
+    Seed-and-grow compares raw read to raw read, and two ONT reads of the same
+    allele differ by 2-4%, so one allele can start two clusters. POA polishes
+    each separately and both land on the same sequence. Byte-identical
+    consensus is not a threshold question: it is the same allele.
+    """
+    seq = "A" * 60 + "AATG" * 12 + "T" * 60
+    clusters = cluster_observations(_obs_at(seq, 8), motifs=["AATG"])
+    assert len(clusters) == 1
+    assert clusters[0].n_reads == 8
+
+    # Force the split the identity stage would produce, then check the merge
+    # puts the reads back on one cluster rather than leaving two.
+    merged: dict[str, int] = {}
+    split = [
+        Cluster(consensus=seq, members=_obs_at(seq, 3)),
+        Cluster(consensus=seq, members=_obs_at(seq, 3, start=100)),
+        Cluster(consensus="A" * 60 + "AATG" * 10 + "T" * 60, members=_obs_at("x", 5)),
+    ]
+    out = _merge_identical_consensus(split, merged)
+    assert len(out) == 2
+    assert out[0].n_reads == 6, "the two fragments must add up"
+    assert merged == {seq: 2}
+
+
+def test_merge_keeps_genuinely_different_alleles_apart() -> None:
+    """A real heterozygote must survive the merge untouched."""
+    a = "A" * 60 + "AATG" * 12 + "T" * 60
+    b = "A" * 60 + "AATG" * 9 + "T" * 60
+    out = _merge_identical_consensus(
+        [Cluster(consensus=a, members=_obs_at(a, 10)), Cluster(consensus=b, members=_obs_at(b, 9))]
+    )
+    assert len(out) == 2
+    assert {c.consensus for c in out} == {a, b}
+
+
+def test_merge_leaves_empty_consensus_clusters_alone() -> None:
+    """Two empty consensuses are two failures, not one shared allele."""
+    out = _merge_identical_consensus(
+        [
+            Cluster(consensus="", members=_obs_at("x", 1)),
+            Cluster(consensus="", members=_obs_at("y", 1)),
+        ]
+    )
+    assert len(out) == 2
+
+
+def test_merged_fragments_carry_their_haplotype_reads_across() -> None:
+    """The point of the merge on the cohort was the haplotype tallies.
+
+    HG04161 FGA split one allele into two 3-read clusters. Apart, neither
+    cleared the heterozygote ratio against a 13-read major and the locus was
+    called homozygous; together they are 6 of 13, a ratio of 0.46. The merged
+    cluster has to carry both fragments' HP counts or the rescue still cannot
+    see them.
+    """
+    seq = "A" * 60 + "AAAG" * 24 + "T" * 60
+    out = _merge_identical_consensus(
+        [
+            Cluster(consensus=seq, members=_obs_at(seq, 3, hp=2)),
+            Cluster(consensus=seq, members=_obs_at(seq, 3, start=50, hp=2)),
+        ]
+    )
+    assert len(out) == 1
+    assert out[0].n_reads == 6
+    assert out[0].n_hp2 == 6

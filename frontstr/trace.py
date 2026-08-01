@@ -215,6 +215,9 @@ class LocusTrace:
     binned_on_core: bool = True
     bins: list[BinTrace] = field(default_factory=list)
     consensus_backend: str = ""
+    #: Fragments folded back together because POA gave them the same consensus.
+    #: Without this the reader sees fewer clusters than bins and no reason why.
+    merged_on_consensus: int = 0
     clusters: list[ClusterTrace] = field(default_factory=list)
 
     #: Set for markers that bypass the STR pipeline entirely (amelogenin).
@@ -409,6 +412,14 @@ def render_locus(t: LocusTrace) -> str:
         )
         if t.consensus_backend:
             add(_row("Step 3: consensus per cluster", t.consensus_backend))
+        if t.merged_on_consensus:
+            add(
+                _row(
+                    "Step 4: merged on consensus",
+                    f"{_plural(t.merged_on_consensus, 'fragment')} folded back in — "
+                    "same allele, split by read-to-read identity, reunited by POA",
+                )
+            )
         add("")
 
         # 4. Per-cluster detail ---------------------------------------------
