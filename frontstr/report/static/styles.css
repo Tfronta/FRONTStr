@@ -977,21 +977,12 @@ nav.page-tabs a.nav-back {
 }
 nav.page-tabs a.nav-back:hover { background: var(--accent-soft); text-decoration: none; }
 
-/* Strand split, printed under the per-allele depth. Deliberately quiet: it is
- * context for the number above it, not a verdict. HG02555 D18S51 called a
- * second allele on 8 reads split 1 forward and 7 reverse against an even
- * locus, and no flag fired, because the binomial has no power below
- * strand_bias_min_reads. The reader gets to see what the test cannot say. */
-.strand-split {
-  display: block;
-  font-size: 10px;
-  font-family: var(--mono);
-  font-weight: 400;
-  color: var(--text-faint);
-  letter-spacing: 0.02em;
-}
-.ngs-table td.strand-cell {
-  font-size: 11px;
+
+.strand-help {
+  font-size: 12px;
   color: var(--text-soft);
-  white-space: nowrap;
+  margin: 0 0 12px;
+  max-width: 84ch;
+  line-height: 1.55;
 }
+.strand-help strong { color: var(--text); font-weight: 600; }

@@ -117,12 +117,10 @@
                 {% else %}title="Sizing only: tandem-repeat span within the marker window (compound motif; not a CODIS ladder allele)."
                 {% endif %}
               {% endif %}>{{ ce_label if ce_label else '–' }}</td>
-          {# Strand split under the depth rather than in its own column: three
-             allele slots would mean three more columns on an already wide
-             table, and the number only means anything next to the depth. #}
-          <td class="num" data-sort-value="{{ cov or 0 }}">{{ cov if cov is not none else '–' }}
-            {% if cov is not none %}<span class="strand-split" title="Reads by mapped strand, forward/reverse. A real allele is drawn from both strands roughly in proportion to the locus. The STRAND_BIAS test needs {{ payload.audit.qc_thresholds.strand_bias_min_reads }} reads before it has any power, so on a thinner allele this split is the only evidence there is.">{{ fwd }}+/{{ rev }}-</span>{% endif %}
-          </td>
+          {# No strand split here. This table already carries allele number,
+             depth, balance, QC and ISFG; a sixth quantity per allele made it
+             unreadable. Strand lives in its own table under QC. #}
+          <td class="num" data-sort-value="{{ cov or 0 }}">{{ cov if cov is not none else '–' }}</td>
           {% endif %}
           {% endfor %}
           <td class="num{% if row.allele_balance and row.allele_balance > payload.audit.qc_thresholds.balanced_ab_max %} ab-uneven{% endif %}"
@@ -229,6 +227,53 @@
     <h3 style="font-size:13px;margin:0 0 8px;color:var(--text-soft);">Coverage per locus</h3>
     {{ qc_coverage_svg | safe }}
   </div>
+  {% if payload.qc.strand_table %}
+  <div class="card" style="margin-top:14px;">
+    <h3 style="font-size:13px;margin:0 0 4px;color:var(--text-soft);">Strand balance</h3>
+    <p class="strand-help">
+      One row per called allele: how its reads split between the forward and
+      reverse strands, beside the same split for the whole locus. Which strand
+      a fragment is read from is independent of its sequence, so a real allele
+      arrives from both in roughly the proportion its locus does. A
+      basecalling error is not independent of sequence, and a candidate it
+      manufactures is lopsided. <strong>Read each allele against its own
+      locus</strong>, not against 50%: a locus can be skewed for reasons that
+      have nothing to do with any one allele. The <code>strand_bias</code> flag
+      tests this formally, but its binomial needs
+      {{ payload.audit.qc_thresholds.strand_bias_min_reads }} reads before it
+      has any power, so on a thinner allele these numbers are the whole of the
+      evidence. Nothing here is a verdict; sort a column to find the outliers.
+    </p>
+    <div class="table-scroll">
+      <table class="profile" data-sortable-table>
+        <thead>
+          <tr>
+            <th data-sortable="text">Marker</th>
+            <th data-sortable="text">Allele</th>
+            <th data-sortable="num">Reads</th>
+            <th data-sortable="num">Fwd</th>
+            <th data-sortable="num">Rev</th>
+            <th data-sortable="num">% fwd <span class="th-hint">this allele</span></th>
+            <th data-sortable="num">% fwd <span class="th-hint">whole locus</span></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for s in payload.qc.strand_table %}
+          <tr>
+            <td class="marker">{{ s.marker }}</td>
+            <td class="mono">{{ s.allele or '–' }}</td>
+            <td class="num">{{ s.reads }}</td>
+            <td class="num">{{ s.forward }}</td>
+            <td class="num">{{ s.reverse }}</td>
+            <td class="num" data-sort-value="{{ s.pct_forward if s.pct_forward is not none else '' }}">{{ '%.0f%%'|format(s.pct_forward) if s.pct_forward is not none else '–' }}</td>
+            <td class="num dim" data-sort-value="{{ s.locus_pct_forward if s.locus_pct_forward is not none else '' }}">{{ '%.0f%%'|format(s.locus_pct_forward) if s.locus_pct_forward is not none else '–' }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
   <div class="card" style="margin-top:14px;">
     <h3 style="font-size:13px;margin:0 0 8px;color:var(--text-soft);">Cluster status distribution</h3>
     <table class="profile">
@@ -283,7 +328,6 @@
                 <tr>
                   <th>Allele</th>
                   <th class="num">Coverage <span class="th-hint">(reads)</span></th>
-                  <th class="num">Strand <span class="th-hint">fwd / rev</span></th>
                   <th>Repeat Sequence</th>
                   <th>Full Sequence</th>
                 </tr>
@@ -293,7 +337,6 @@
                 <tr class="ngs-row" data-row-id="{{ row.id|e }}" tabindex="0" role="button">
                   <td class="allele-cell">{{ row.allele_display }}{% if row.is_isoallele %}<sup class="allele-iso">iso{% if row.iso_ordinal > 1 %}{{ row.iso_ordinal }}{% endif %}</sup>{% endif %}</td>
                   <td class="num cov-cell" title="{{ '%.2f'|format(row.coverage_fraction_pct) }}% of locus reads"><b>{{ row.coverage_reads }}</b></td>
-                  <td class="num mono strand-cell" title="Reads by mapped strand. A real allele is drawn from both strands roughly in proportion to the locus; a strand-specific basecalling error is not.">{{ row.n_forward }} / {{ row.n_reverse }}</td>
                   <td class="mono">{{ row.repeat_sequence }}</td>
                   <td class="mono sequence-cell"><div class="sequence-scroll">{{ row.full_sequence_html | safe }}</div></td>
                 </tr>

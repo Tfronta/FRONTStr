@@ -38,17 +38,14 @@ def _interpret_allele_cell(a: Allele) -> str:
     CLI can never disagree with the report or the exports about what an allele
     is called.
 
-    The strand counts are shown for every called allele, unconditionally and
-    without a verdict attached. A real allele is drawn from both strands
-    roughly in proportion to the locus; a strand-specific basecalling artefact
-    is not. The ``STRAND_BIAS`` flag tests exactly that, but the binomial needs
-    ``strand_bias_min_reads`` before it has any power, and the candidates most
-    likely to be artefacts are the small ones the test cannot reach. Printing
-    the split lets a reader see what the test is not allowed to say: HG02555
-    D18S51 called a second allele on 8 reads split 1 forward and 7 reverse,
-    against a locus that was even, and nothing on the row said so.
+    Deliberately just the label and the depth. The strand split briefly lived
+    here too and made the cell unreadable: three unlabelled numbers per allele,
+    on all 25 rows, where ``9/8`` reads as a ratio rather than as a breakdown of
+    the 17 beside it. This table is the profile at a glance. The strand
+    evidence belongs in a view with a header that names it, which is what the
+    report's Strand balance table and the trace are for.
     """
-    return f"{a.number_label or '?'}({a.n_reads_total}; {a.n_forward}/{a.n_reverse})"
+    return f"{a.number_label or '?'}({a.n_reads_total})"
 
 
 def _load_regions(
@@ -1239,14 +1236,11 @@ def interpret(
         )
     console.print(t)
     console.print(
-        "[dim]Alleles called: allele number(AD; fwd/rev), where AD is the reads supporting "
-        "that allele and fwd/rev is how they split by mapped strand. Per-allele depth is "
-        "reported because it is the evidence behind each allele separately, which a "
-        "length-based caller cannot give you. A real allele is drawn from both strands "
-        "roughly in proportion to the locus; a lopsided split on a thin allele is worth "
-        "a second look even when no flag fired, because the strand-bias test needs more "
-        "reads than such an allele has. Reads that supported no called allele were "
-        "discarded; run --trace to see what they were and which rule discarded each.[/dim]"
+        "[dim]Alleles called: allele number(AD), where AD is the reads supporting that "
+        "allele. Per-allele depth is reported because it is the evidence behind each "
+        "allele separately, which a length-based caller cannot give you. Reads that "
+        "supported no called allele were discarded; run --trace to see what they were, "
+        "which rule discarded each, and how each allele's reads split by strand.[/dim]"
     )
 
 

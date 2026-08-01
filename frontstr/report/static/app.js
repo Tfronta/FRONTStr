@@ -68,6 +68,39 @@
     updatePill();
   }
 
+  /* ---------- any table marked data-sortable-table ----------
+   * The block above binds to the first table.profile on the page, which is the
+   * CE profile. Tables added later need sorting without inheriting that one's
+   * filters, so they opt in by attribute. */
+  document.querySelectorAll("table[data-sortable-table]").forEach((table) => {
+    const tbody = table.tBodies[0];
+    if (!tbody || !table.tHead) return;
+    const rows = Array.from(tbody.rows);
+    const headers = table.tHead.querySelectorAll("th[data-sortable]");
+    headers.forEach((th, idx) => {
+      th.addEventListener("click", () => {
+        const dir = th.dataset.sortDir === "asc" ? "desc" : "asc";
+        headers.forEach((h) => h.removeAttribute("data-sort-dir"));
+        th.dataset.sortDir = dir;
+        const numeric = th.dataset.sortable === "num";
+        const sorted = [...rows].sort((a, b) => {
+          let av = a.cells[idx]?.dataset.sortValue ?? a.cells[idx]?.textContent?.trim() ?? "";
+          let bv = b.cells[idx]?.dataset.sortValue ?? b.cells[idx]?.textContent?.trim() ?? "";
+          if (numeric) {
+            av = parseFloat(av);
+            bv = parseFloat(bv);
+            if (Number.isNaN(av)) av = -Infinity;
+            if (Number.isNaN(bv)) bv = -Infinity;
+          }
+          if (av < bv) return dir === "asc" ? -1 : 1;
+          if (av > bv) return dir === "asc" ? 1 : -1;
+          return 0;
+        });
+        for (const r of sorted) tbody.appendChild(r);
+      });
+    });
+  });
+
   /* ---------- sequencing table: filter + sort + sync from CE table ---------- */
   const seqTable = document.querySelector("table.seqtable");
   const seqSearch = document.querySelector("#seq-search");

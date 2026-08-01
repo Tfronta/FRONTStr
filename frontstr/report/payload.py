@@ -311,10 +311,6 @@ def _profile_row(r: MarkerResult, sample_name: str = "") -> dict[str, Any]:
             row[f"allele{i + 1}_cov"] = slot.n_reads_total
             row[f"allele{i + 1}_hp1"] = slot.n_reads_hp1
             row[f"allele{i + 1}_hp2"] = slot.n_reads_hp2
-            # Shown beside the depth, unconditionally. The STRAND_BIAS test
-            # needs strand_bias_min_reads before its binomial has any power, so
-            # on a thin allele — where artefacts live — the raw split is the
-            # only thing there is to look at.
             row[f"allele{i + 1}_fwd"] = slot.n_forward
             row[f"allele{i + 1}_rev"] = slot.n_reverse
             row[f"allele{i + 1}_seq"] = slot.consensus
@@ -451,8 +447,52 @@ def _compute_qc(results: list[MarkerResult]) -> dict[str, Any]:
         "min_coverage": min(covs) if covs else 0,
         "max_coverage": max(covs) if covs else 0,
         "coverage_table": coverage_table,
+        "strand_table": _strand_table(results),
         "status_breakdown": [{"status": s, "count": c} for s, c in sorted(statuses.items())],
     }
+
+
+def _strand_table(results: list[MarkerResult]) -> list[dict[str, Any]]:
+    """One row per called allele: its strand split, against its locus's own.
+
+    Which strand a fragment is read from is a coin flip of library prep and has
+    nothing to do with its sequence, so a real allele arrives from both strands
+    in roughly the proportion the locus does. A basecalling error is not
+    independent of sequence: ONT reads the two strands as complementary k-mer
+    contexts, so a systematic error in one context appears on one strand and
+    not the other, and a candidate it manufactures is lopsided.
+
+    The locus figure is carried beside the allele's because it is the reference
+    that makes the allele's readable. HG02555 D18S51 called a second allele on
+    8 reads, 1 forward and 7 reverse, at a locus that was 12 and 11 overall.
+    Against a bare 50% that is suggestive; against the locus it is stark, and
+    ``STRAND_BIAS`` could say nothing because its binomial has no power at
+    eight reads.
+
+    No verdict is attached and no threshold is applied. The numbers are put
+    where a reader can see them.
+    """
+    rows: list[dict[str, Any]] = []
+    for r in results:
+        locus_fwd = sum(a.n_forward for a in r.alleles)
+        locus_rev = sum(a.n_reverse for a in r.alleles)
+        locus_total = locus_fwd + locus_rev
+        for a in r.alleles_called:
+            reads = a.n_forward + a.n_reverse
+            rows.append(
+                {
+                    "marker": r.marker_name,
+                    "allele": a.number_label,
+                    "reads": reads,
+                    "forward": a.n_forward,
+                    "reverse": a.n_reverse,
+                    "pct_forward": (a.n_forward / reads * 100) if reads else None,
+                    "locus_forward": locus_fwd,
+                    "locus_reverse": locus_rev,
+                    "locus_pct_forward": (locus_fwd / locus_total * 100) if locus_total else None,
+                }
+            )
+    return rows
 
 
 def _file_sha256(path: Path, chunk: int = 1 << 20) -> str:

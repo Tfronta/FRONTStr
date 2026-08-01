@@ -560,24 +560,35 @@ def test_profile_reports_depth_for_every_called_allele(tmp_path: Path) -> None:
     assert checked, "no per-allele depth was rendered at all"
 
 
-def test_profile_shows_the_strand_split_beside_every_depth(tmp_path: Path) -> None:
-    """Each called allele's reads are broken down by mapped strand.
+def test_strand_balance_is_its_own_table_not_a_column_on_the_profile(tmp_path: Path) -> None:
+    """Strand evidence gets a view of its own, with a header that names it.
 
-    ``STRAND_BIAS`` cannot speak below ``strand_bias_min_reads``, and the thin
-    alleles it cannot reach are the ones most likely to be artefacts. HG02555
-    D18S51 called a second allele on 8 reads split 1 forward and 7 reverse,
-    against an even locus, with no flag on the row. Showing the split is what
-    lets a reader see what the test is not allowed to say.
+    It was briefly a sixth quantity inside the profile table, which already
+    carries allele number, depth, balance, QC and ISFG per row. Too much at
+    once, and unlabelled: the reader could not tell the pair apart from the
+    depth it sat under. ``STRAND_BIAS`` cannot speak below
+    ``strand_bias_min_reads``, and the thin alleles it cannot reach are the
+    ones most likely to be artefacts, so the numbers have to be somewhere.
     """
     out = tmp_path / "r.html"
     build_report(_make_results(), RunContext(sample_name="S-STR", panel_name="P"), out)
-    table = _profile_table(out.read_text(encoding="utf-8"))
+    html = out.read_text(encoding="utf-8")
 
-    splits = table.findall('.//td/span[@class="strand-split"]')
-    assert splits, "no strand split rendered in the profile table"
-    for span in splits:
-        text = (span.text or "").strip()
-        assert "+/" in text and text.endswith("-"), f"unreadable strand cell: {text!r}"
+    # Not on the profile table.
+    assert not _profile_table(html).findall('.//span[@class="strand-split"]')
+
+    root = lxml.html.fromstring(html)
+    heads = [h.text_content().strip() for h in root.findall(".//h3")]
+    assert "Strand balance" in heads, "the strand table has no heading of its own"
+
+    tables = root.findall('.//table[@data-sortable-table]')
+    assert tables, "the strand table is not sortable"
+    headers = [th.text_content().strip() for th in tables[0].findall(".//thead/tr/th")]
+    assert headers[:5] == ["Marker", "Allele", "Reads", "Fwd", "Rev"]
+    # The locus is carried beside the allele: it is the baseline that makes the
+    # allele's split readable, and a locus can be skewed on its own account.
+    assert sum("whole locus" in h for h in headers) == 1
+    assert tables[0].findall(".//tbody/tr"), "no called alleles listed"
 
 
 def test_no_way_back_to_the_cohort_without_one(tmp_path: Path) -> None:

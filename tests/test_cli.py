@@ -167,18 +167,15 @@ def test_profile_table_reports_depth_per_allele_only() -> None:
     assert "number_label" in cell
 
 
-def test_allele_cell_shows_the_strand_split() -> None:
-    """Every called allele prints how its reads split by mapped strand.
+def test_allele_cell_is_label_and_depth_only() -> None:
+    """The genotype cell stays two facts wide.
 
-    A real allele is drawn from both strands roughly in proportion to the
-    locus; a strand-specific basecalling error is not. ``STRAND_BIAS`` tests
-    exactly that, but its binomial has no power below ``strand_bias_min_reads``
-    and the candidates most likely to be artefacts are the thin ones the test
-    cannot reach. HG02555 D18S51 called a second allele on 8 reads split 1
-    forward and 7 reverse, against an even locus, and the row said nothing.
+    The strand split was briefly rendered here as ``14(17; 9/8)`` and made the
+    cell unreadable: three unlabelled numbers per allele on all 25 rows, where
+    the pair reads as a ratio rather than as a breakdown of the depth beside
+    it. Strand evidence belongs in a view whose header names it. This is the
+    profile at a glance.
     """
-    import inspect
-
     from frontstr import cli
     from frontstr.interp.models import Allele, AlleleStatus
 
@@ -199,5 +196,4 @@ def test_allele_cell_shows_the_strand_split() -> None:
         is_deletion=False,
         status=AlleleStatus.ALLELE,
     )
-    assert cli._interpret_allele_cell(a) == "14.2(8; 1/7)"
-    assert "strand" in inspect.getsource(cli.interpret).lower(), "the footnote must explain it"
+    assert cli._interpret_allele_cell(a) == "14.2(8)"
