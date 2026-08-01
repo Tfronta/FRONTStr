@@ -80,19 +80,23 @@ Samples that were called but have no row in the workbook are reported by name,
 not dropped — three of the five committed test slices have no truth, and a
 silent join made a five-sample batch look like a two-sample validation.
 
-## Pilot results
+## Results
 
-Three samples with truth (HG00112 fetched, HG00113 and HG00154 from the
-committed slices): 57 loci scored, 54 match, **94.7 %**. The three discordances
-are all HG00154 and all worth looking at rather than explaining away:
+The full 108-sample run and what every disagreement is:
+[`docs/concordance.md`](../docs/concordance.md). Headline is 1997 of 2045
+comparable loci, **97.7 %**, no locus left uncalled.
 
-| Marker | FRONTStr | Illumina | longTR | STRspy |
-|---|---|---|---|---|
-| D18S51 | 14/14 | 13/14 | 13/14 | 14/14 |
-| D5S818 | 13/13 | 12/13 | — | 12/13 |
-| FGA | 19/24 | 19/22 | 19/24 | 19/24 |
+A three-sample pilot preceded it and read 94.7 %. Recording what the cohort did
+to it, because it is the argument for running the whole thing: two of the
+pilot's three disagreements were classified from too little evidence. HG00154
+D18S51 was called a FRONTStr defect and turned out to have STRspy on FRONTStr's
+side; its D5S818 was dismissed as thin coverage and turned out to be one of the
+14 loci where both other callers find an allele FRONTStr misses. Three samples
+could not tell a mechanism from an accident.
 
-The first two are FRONTStr calling homozygous where Illumina calls
-heterozygous — allele dropout or the minor allele being absorbed as stutter. At
-FGA both ONT callers agree with FRONTStr against Illumina, which is a
-technology-level disagreement, not a FRONTStr defect.
+## What not to do with the number
+
+Do not tune against it. The comparison set is one technology's answer, not
+ground truth, and a threshold moved because concordance rose is fitted to these
+108 samples. The rule applied so far, and the reasoning behind it, are in
+[`docs/concordance.md`](../docs/concordance.md#how-this-number-is-and-is-not-used).

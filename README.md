@@ -690,9 +690,15 @@ Part of the documentation, not a disclaimer.
   not wired; `ingest.align` raises. Align externally, with minimap2 `-ax
   map-ont`, and start from the BAM.
 - **Not laboratory-validated.** No forensic partner has signed off. No mixture
-  series, no dropout study, no NIST control. The reference profile it is tested
-  against comes from another caller on matched Illumina data. That is
-  caller-vs-caller concordance, not validation against a reference method.
+  series, no dropout study, no NIST control. What exists is a concordance
+  measurement: 97.7 % against Illumina genotypes across 108 public 1000 Genomes
+  ONT samples, 1997 of 2045 comparable loci, no locus left uncalled. That says
+  how often two methods agree, not that either is right, and it covers neither
+  D21S11 nor the sex markers, which the comparison set does not carry. See
+  [`docs/concordance.md`](docs/concordance.md), including what the 48
+  disagreements are: 14 are allele dropout in FRONTStr, and most of the rest
+  are cases where the sequence-based callers agree with each other against a
+  length-based one, or disagree only on a microvariant's designation.
 - **The stutter model is PCR-free.** Fitted on WGS, so it has no PCR slippage
   component and will under-predict stutter on an amplicon panel. The model
   records its own protocol so this cannot be lost.
@@ -713,8 +719,9 @@ Part of the documentation, not a disclaimer.
 
 ### Planned
 
-- Validation across the published 1000 Genomes ONT cohort, against Illumina
-  genotypes for the same samples
+- Closing the allele dropout the cohort measured at 0.68 % of scored loci, by
+  reassigning reads against the cluster consensus rather than against a raw
+  seed read
 - FASTQ input, with the alignment step wired in behind a `run` command
 - A stutter model fitted on amplicon data, alongside the PCR-free one
 - A per-locus aligned-read view, to inspect the pileup a call was made from
@@ -728,6 +735,7 @@ Part of the documentation, not a disclaimer.
 |---|---|
 | [`docs/how_it_works.md`](docs/how_it_works.md) | Every stage step by step, with examples and measurements; full current state |
 | [`docs/stutter_calibration.md`](docs/stutter_calibration.md) | How the stutter model was measured, and its caveats |
+| [`docs/concordance.md`](docs/concordance.md) | Concordance against Illumina across 108 ONT samples, and what every disagreement is |
 | [`docs/architecture.md`](docs/architecture.md) | Module layout |
 | [`demodata/README.md`](demodata/README.md) | The bundled demo sample: provenance, how it was cut, and its expected profile |
 | [`benchmark/README.md`](benchmark/README.md) | The development benchmark against other callers. **Not part of running FRONTStr** |
