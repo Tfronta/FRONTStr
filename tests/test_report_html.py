@@ -581,7 +581,7 @@ def test_strand_balance_is_its_own_table_not_a_column_on_the_profile(tmp_path: P
     heads = [h.text_content().strip() for h in root.findall(".//h3")]
     assert "Strand balance" in heads, "the strand table has no heading of its own"
 
-    tables = root.findall('.//table[@data-sortable-table]')
+    tables = root.findall(".//table[@data-sortable-table]")
     assert tables, "the strand table is not sortable"
     headers = [th.text_content().strip() for th in tables[0].findall(".//thead/tr/th")]
     assert headers[:5] == ["Marker", "Allele", "Reads", "Fwd", "Rev"]
