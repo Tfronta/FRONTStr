@@ -549,12 +549,35 @@ def test_profile_reports_depth_for_every_called_allele(tmp_path: Path) -> None:
 
     checked = 0
     for tr in table.findall(".//tbody/tr"):
-        cells = [td.text_content().strip() for td in tr.findall("td")]
+        tds = tr.findall("td")
         for i in ad_cols:
-            if cells[i].isdigit():
-                assert int(cells[i]) > 0, "a called allele with zero depth is not a call"
+            # The cell holds the depth plus a .strand-split child; read the
+            # depth off the cell's own text so the two cannot be conflated.
+            depth = (tds[i].text or "").strip()
+            if depth.isdigit():
+                assert int(depth) > 0, "a called allele with zero depth is not a call"
                 checked += 1
     assert checked, "no per-allele depth was rendered at all"
+
+
+def test_profile_shows_the_strand_split_beside_every_depth(tmp_path: Path) -> None:
+    """Each called allele's reads are broken down by mapped strand.
+
+    ``STRAND_BIAS`` cannot speak below ``strand_bias_min_reads``, and the thin
+    alleles it cannot reach are the ones most likely to be artefacts. HG02555
+    D18S51 called a second allele on 8 reads split 1 forward and 7 reverse,
+    against an even locus, with no flag on the row. Showing the split is what
+    lets a reader see what the test is not allowed to say.
+    """
+    out = tmp_path / "r.html"
+    build_report(_make_results(), RunContext(sample_name="S-STR", panel_name="P"), out)
+    table = _profile_table(out.read_text(encoding="utf-8"))
+
+    splits = table.findall('.//td/span[@class="strand-split"]')
+    assert splits, "no strand split rendered in the profile table"
+    for span in splits:
+        text = (span.text or "").strip()
+        assert "+/" in text and text.endswith("-"), f"unreadable strand cell: {text!r}"
 
 
 def test_no_way_back_to_the_cohort_without_one(tmp_path: Path) -> None:

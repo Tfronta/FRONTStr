@@ -95,6 +95,16 @@ class ClusterTrace:
     #: what distinguishes one allele from another — while the flanks are cut to
     #: :data:`FLANK_SHOWN` bp, because ~80% of a panel window is flank and
     #: printing all of it would bury the part that matters.
+    #: Reads by mapped strand. A real allele is drawn from both strands roughly
+    #: in proportion to the locus; a strand-specific basecalling artefact is
+    #: not, because ONT reads the two strands through complementary k-mer
+    #: contexts and its systematic errors follow that. The statistical test
+    #: needs ``strand_bias_min_reads`` before its binomial has any power, so on
+    #: the small candidates — exactly where artefacts live — these numbers are
+    #: the only evidence there is.
+    n_forward: int = 0
+    n_reverse: int = 0
+
     flank_left: str = ""
     core: str = ""
     flank_right: str = ""
@@ -433,7 +443,8 @@ def render_locus(t: LocusTrace) -> str:
                 hp += f"  [block {c.phase_set}]"
             add(
                 f"    {mark} #{c.index}  {_plural(c.n_reads, 'read'):>10}  "
-                f"{c.fraction:5.1%}  {c.length_bp:>4} bp  {hp}"
+                f"{c.fraction:5.1%}  {c.length_bp:>4} bp  "
+                f"{c.n_forward}+/{c.n_reverse}-  {hp}"
             )
             name = c.strnaming_name or c.isfg or "—"
             if len(name) > 78:

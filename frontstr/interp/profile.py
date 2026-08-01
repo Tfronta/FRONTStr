@@ -364,6 +364,8 @@ def _fill_interp_trace(
             n_hp1=a.n_reads_hp1,
             n_hp2=a.n_reads_hp2,
             n_untagged=a.n_reads_hp_none,
+            n_forward=a.n_forward,
+            n_reverse=a.n_reverse,
             number_label=a.number_label,
             number_method=a.number_method,
             naming_status=a.strnaming_status,

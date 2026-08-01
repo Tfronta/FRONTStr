@@ -160,8 +160,44 @@ def test_profile_table_reports_depth_per_allele_only() -> None:
     for gone in ('add_column("Cov"', 'add_column("DP"', 'add_column("\u03a3AD"'):
         assert gone not in src, f"{gone} is a locus total; depth belongs per allele"
     assert "_interpret_allele_cell" in src, "the per-allele counts must still be rendered"
-    assert "where AD is the reads supporting that " in src, "the footnote must define AD"
+    assert "where AD is the reads supporting " in src, "the footnote must define AD"
 
     cell = inspect.getsource(cli._interpret_allele_cell)
     assert "n_reads_total" in cell
     assert "number_label" in cell
+
+
+def test_allele_cell_shows_the_strand_split() -> None:
+    """Every called allele prints how its reads split by mapped strand.
+
+    A real allele is drawn from both strands roughly in proportion to the
+    locus; a strand-specific basecalling error is not. ``STRAND_BIAS`` tests
+    exactly that, but its binomial has no power below ``strand_bias_min_reads``
+    and the candidates most likely to be artefacts are the thin ones the test
+    cannot reach. HG02555 D18S51 called a second allele on 8 reads split 1
+    forward and 7 reverse, against an even locus, and the row said nothing.
+    """
+    import inspect
+
+    from frontstr import cli
+    from frontstr.interp.models import Allele, AlleleStatus
+
+    a = Allele(
+        cluster_index=0,
+        consensus="AATG" * 8,
+        length_bp=32,
+        n_reads_total=8,
+        n_reads_hp1=4,
+        n_reads_hp2=4,
+        n_reads_hp_none=0,
+        n_forward=1,
+        n_reverse=7,
+        mean_qual=38.0,
+        ce=14.2,
+        isfg="[AATG]8",
+        bp_diff=0,
+        is_deletion=False,
+        status=AlleleStatus.ALLELE,
+    )
+    assert cli._interpret_allele_cell(a) == "14.2(8; 1/7)"
+    assert "strand" in inspect.getsource(cli.interpret).lower(), "the footnote must explain it"

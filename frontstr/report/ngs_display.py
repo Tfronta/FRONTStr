@@ -172,6 +172,10 @@ def build_ngs_panel(marker: dict[str, Any]) -> dict[str, Any]:
                     "is_isoallele": not is_canonical,
                     "iso_ordinal": iso_ord,
                     "coverage_reads": cov,
+                    # The split the STRAND_BIAS test cannot speak to on a thin
+                    # allele, shown so the reader can look at it directly.
+                    "n_forward": int(a.get("n_forward") or 0),
+                    "n_reverse": int(a.get("n_reverse") or 0),
                     "coverage_fraction_pct": pct,
                     "repeat_sequence": str(a.get("isfg") or ""),
                     "full_sequence": consensus,

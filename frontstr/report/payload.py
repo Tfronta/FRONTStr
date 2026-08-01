@@ -311,6 +311,12 @@ def _profile_row(r: MarkerResult, sample_name: str = "") -> dict[str, Any]:
             row[f"allele{i + 1}_cov"] = slot.n_reads_total
             row[f"allele{i + 1}_hp1"] = slot.n_reads_hp1
             row[f"allele{i + 1}_hp2"] = slot.n_reads_hp2
+            # Shown beside the depth, unconditionally. The STRAND_BIAS test
+            # needs strand_bias_min_reads before its binomial has any power, so
+            # on a thin allele — where artefacts live — the raw split is the
+            # only thing there is to look at.
+            row[f"allele{i + 1}_fwd"] = slot.n_forward
+            row[f"allele{i + 1}_rev"] = slot.n_reverse
             row[f"allele{i + 1}_seq"] = slot.consensus
         else:
             row[f"allele{i + 1}_isfg"] = None
@@ -322,6 +328,8 @@ def _profile_row(r: MarkerResult, sample_name: str = "") -> dict[str, Any]:
             row[f"allele{i + 1}_cov"] = None
             row[f"allele{i + 1}_hp1"] = None
             row[f"allele{i + 1}_hp2"] = None
+            row[f"allele{i + 1}_fwd"] = None
+            row[f"allele{i + 1}_rev"] = None
             row[f"allele{i + 1}_seq"] = None
 
     # Genotype string for the CE table headline (numeric, e.g. "12 / 14").

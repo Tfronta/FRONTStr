@@ -108,6 +108,8 @@
           {% set ce_sort = row['allele' ~ i ~ '_ce_sort'] %}
           {% set is_kit = row['allele' ~ i ~ '_ce_is_kit_ce'] %}
           {% set cov = row['allele' ~ i ~ '_cov'] %}
+          {% set fwd = row['allele' ~ i ~ '_fwd'] %}
+          {% set rev = row['allele' ~ i ~ '_rev'] %}
           <td class="num{% if is_kit %} ce-kit-ce{% endif %}"
               data-sort-value="{{ ce_sort if ce_sort is not none else '' }}"
               {% if ce_label %}
@@ -115,7 +117,12 @@
                 {% else %}title="Sizing only: tandem-repeat span within the marker window (compound motif; not a CODIS ladder allele)."
                 {% endif %}
               {% endif %}>{{ ce_label if ce_label else '–' }}</td>
-          <td class="num" data-sort-value="{{ cov or 0 }}">{{ cov if cov is not none else '–' }}</td>
+          {# Strand split under the depth rather than in its own column: three
+             allele slots would mean three more columns on an already wide
+             table, and the number only means anything next to the depth. #}
+          <td class="num" data-sort-value="{{ cov or 0 }}">{{ cov if cov is not none else '–' }}
+            {% if cov is not none %}<span class="strand-split" title="Reads by mapped strand, forward/reverse. A real allele is drawn from both strands roughly in proportion to the locus. The STRAND_BIAS test needs {{ payload.audit.qc_thresholds.strand_bias_min_reads }} reads before it has any power, so on a thinner allele this split is the only evidence there is.">{{ fwd }}+/{{ rev }}-</span>{% endif %}
+          </td>
           {% endif %}
           {% endfor %}
           <td class="num{% if row.allele_balance and row.allele_balance > payload.audit.qc_thresholds.balanced_ab_max %} ab-uneven{% endif %}"
@@ -276,6 +283,7 @@
                 <tr>
                   <th>Allele</th>
                   <th class="num">Coverage <span class="th-hint">(reads)</span></th>
+                  <th class="num">Strand <span class="th-hint">fwd / rev</span></th>
                   <th>Repeat Sequence</th>
                   <th>Full Sequence</th>
                 </tr>
@@ -285,6 +293,7 @@
                 <tr class="ngs-row" data-row-id="{{ row.id|e }}" tabindex="0" role="button">
                   <td class="allele-cell">{{ row.allele_display }}{% if row.is_isoallele %}<sup class="allele-iso">iso{% if row.iso_ordinal > 1 %}{{ row.iso_ordinal }}{% endif %}</sup>{% endif %}</td>
                   <td class="num cov-cell" title="{{ '%.2f'|format(row.coverage_fraction_pct) }}% of locus reads"><b>{{ row.coverage_reads }}</b></td>
+                  <td class="num mono strand-cell" title="Reads by mapped strand. A real allele is drawn from both strands roughly in proportion to the locus; a strand-specific basecalling error is not.">{{ row.n_forward }} / {{ row.n_reverse }}</td>
                   <td class="mono">{{ row.repeat_sequence }}</td>
                   <td class="mono sequence-cell"><div class="sequence-scroll">{{ row.full_sequence_html | safe }}</div></td>
                 </tr>
