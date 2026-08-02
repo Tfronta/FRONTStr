@@ -24,10 +24,10 @@ FRONTStr 0.1.0.dev0, panel `codis_20_grch38`, default parameters.
 |---|---|
 | Loci called | 2160 |
 | Loci with an Illumina genotype to compare against | 2045 |
-| Match | 1997 |
-| Mismatch | 48 |
+| Match | 2000 |
+| Mismatch | 45 |
 | **No call** | **0** |
-| Concordance | **97.7 %** |
+| Concordance | **97.8 %** |
 
 Per marker:
 
@@ -40,7 +40,7 @@ Per marker:
 | D13S317 | 107 | 1 | 99.1 % |
 | D16S539 | 108 | 1 | 99.1 % |
 | D22S1045 | 108 | 1 | 99.1 % |
-| TH01 | 108 | 1 | 99.1 % |
+| TH01 | 108 | 0 | 100.0 % |
 | D12S391 | 107 | 2 | 98.1 % |
 | D3S1358 | 108 | 2 | 98.1 % |
 | D5S818 | 108 | 2 | 98.1 % |
@@ -49,9 +49,9 @@ Per marker:
 | vWA | 108 | 2 | 98.1 % |
 | D19S433 | 108 | 3 | 97.2 % |
 | D2S441 | 108 | 4 | 96.3 % |
-| D1S1656 | 107 | 5 | 95.3 % |
+| D1S1656 | 107 | 4 | 96.3 % |
 | FGA | 107 | 8 | 92.5 % |
-| D18S51 | 107 | 11 | 89.7 % |
+| D18S51 | 107 | 10 | 90.7 % |
 | D21S11 | 0 | — | no Illumina genotype in the comparison set |
 
 **115 loci are excluded for want of a comparison, not skipped.** 108 of them are
@@ -59,11 +59,12 @@ D21S11, which the comparison set leaves blank for every sample. AMEL and the
 four sex markers (DYS391, DYS393, DXS7132, DXS8378) are absent from it
 altogether and are not scored at all, so nothing in this table speaks to them.
 
-## What the 48 mismatches are
+## What the 45 mismatches are
 
 Classified by mechanism from the per-locus evidence, not by which caller was
 assumed right. The counts are from the run before the identical-consensus merge
-(50 mismatches); the merge changed four loci, listed under it.
+(50 mismatches). Two later changes moved the total to 45, and each is listed
+below with the loci it touched.
 
 **Three sequence callers against one length caller — 11 loci.** FRONTStr,
 longTR and STRspy agree with each other and differ from Illumina. Both other
@@ -77,10 +78,10 @@ reports `.1`, Illumina `.2`, and STRspy agrees with FRONTStr in all four. A
 question about naming conventions, answerable against the ISFG recommendation
 rather than by counting agreements.
 
-**Allele dropout — 14 loci, 0.68 % of those scored.** FRONTStr calls homozygous
+**Allele dropout — 12 loci, 0.59 % of those scored.** FRONTStr calls homozygous
 and both other callers find the second allele in the same reads. This is the
-one class that is a defect in FRONTStr. Spread over D1S1656 (4), D18S51 (3),
-D5S818 (2), FGA (2), D8S1179 (2) and TH01 (1).
+one class that is a defect in FRONTStr. It was 14 before consensus-refined
+reassignment, which closed the TH01 case and one of the four on D1S1656.
 
 Two mechanisms, from the per-locus evidence:
 
@@ -89,9 +90,12 @@ Two mechanisms, from the per-locus evidence:
   allele carries exactly two haplotype-tagged reads and
   `haplotype.DEFAULT_MIN_TAGGED_READS` is three, so the phasing rescue cannot
   fire; in two more the major cluster's haplotype purity is 0.75 or 0.78
-  against a `DEFAULT_HP_PURITY` of 0.80.
+  against a `DEFAULT_HP_PURITY` of 0.80. This mechanism accounts for most of
+  what is left and is untouched: its gates are not moved to close a
+  disagreement.
 - *Split below the ratio.* One allele occupies more than one cluster, and no
-  fragment reaches the ratio on its own.
+  fragment reaches the ratio on its own. This is the mechanism the two later
+  changes address.
 
 **Genotypes carrying more than two alleles — 3 loci.** Two of them repeat a
 number (`10/12/12`, `21/22/22`), which is the split-cluster mechanism with both
@@ -122,6 +126,29 @@ sat in three clusters that each failed the heterozygote ratio, so the locus was
 called homozygous for a reason unrelated to any of that. `STRAND_BIAS` says
 nothing because its binomial has no power at eight reads. The merge did not
 create this candidate; it assembled one that was already there.
+
+### Change from consensus-refined reassignment
+
+Reassigning reads against the cluster consensus rather than a raw seed read
+(`evidence.cluster._refine_by_consensus`) moved three loci and took the total
+from 48 to 45.
+
+| Sample | Marker | Before | After | Illumina |
+|---|---|---|---|---|
+| HG01869 | TH01 | `7/7` | `7/9` | `7/9` |
+| HG03667 | D1S1656 | `13/13` | `13/14` | `13/14` |
+| HG03385 | D18S51 | `17.2/18` | `18/18` | `18/18` |
+
+The first two are dropouts: the second allele's reads had been split off by a
+seed that carried its own errors, and neither fragment reached the heterozygote
+ratio alone. The third is the same mechanism read from the other side, where
+the split fragment was strong enough to be called and the locus reported a
+microvariant that was never there.
+
+Across all 2052 comparable loci, no locus that matched before disagreed after,
+and no genotype changed anywhere else — the three above are the whole effect.
+That is the check that mattered, since a reassignment pass that merged reads of
+genuinely different alleles would show up here and nowhere in the total.
 
 ## Reproducing it
 
@@ -154,5 +181,8 @@ set, and the number would stop measuring anything.
 The test that separates the two: **would the change stand if concordance had
 fallen?** The identical-consensus merge would, because two clusters carrying
 byte-identical sequence are one allele by definition of allele, and the cohort
-found the case rather than justifying it. Loosening the phasing rescue's gates
-would not, which is why they are unchanged.
+found the case rather than justifying it. Consensus-refined reassignment would,
+because its justification is that clustering stopped depending on which read
+the BAM happened to yield first, which is checkable with no comparator at all.
+Loosening the phasing rescue's gates would not, which is why they are
+unchanged.
