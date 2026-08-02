@@ -12,6 +12,7 @@ from frontstr.evidence.cluster import (
     _merge_identical_consensus,
     cluster_observations,
 )
+from frontstr.evidence.consensus import poa_backend_name
 from frontstr.evidence.pileup import Observation, pileup_locus
 from tests.conftest import SYNTH_CHROM, SYNTH_TR_END, SYNTH_TR_START
 
@@ -337,3 +338,158 @@ def test_merged_fragments_carry_their_haplotype_reads_across() -> None:
     assert len(out) == 1
     assert out[0].n_reads == 6
     assert out[0].n_hp2 == 6
+
+
+# --- Refinement against the consensus -------------------------------------
+
+poa_only = pytest.mark.skipif(
+    not poa_backend_name(), reason="no POA backend installed (pyabpoa / pyspoa)"
+)
+
+
+def _noisy(truth: str, positions: list[int]) -> str:
+    """``truth`` with a substitution at each position, length preserved.
+
+    Substitutions only, so every read stays in one length bin and the test is
+    about identity rather than binning.
+    """
+    out = list(truth)
+    for p in positions:
+        out[p] = "C" if out[p] != "C" else "G"
+    return "".join(out)
+
+
+_TRUTH = "AATG" * 50  # 200 bp; at 0.97 identity the budget is 6 edits.
+
+
+def test_a_read_moves_to_the_consensus_it_actually_matches() -> None:
+    """The decision rule, isolated from how good POA's consensus is."""
+    from frontstr.evidence.cluster import _refine_by_consensus
+
+    stray = _obs(_noisy(_TRUTH, [7]), name="stray")
+    home = _obs_at(_TRUTH, 3)
+    clusters = [
+        Cluster(consensus=stray.sequence, members=[stray]),
+        Cluster(consensus=_TRUTH, members=home),
+    ]
+    out, moved = _refine_by_consensus(clusters, [stray, *home], 0.97)
+
+    assert moved == 1
+    assert len(out) == 1, "the stray read left no cluster behind"
+    assert out[0].n_reads == 4
+    assert "stray" in out[0].read_ids
+
+
+def test_a_genuinely_different_sequence_keeps_its_cluster() -> None:
+    """Refinement must not become a merge-everything pass."""
+    from frontstr.evidence.cluster import _refine_by_consensus
+
+    other = _obs(_noisy(_TRUTH, list(range(0, 60, 4))), name="other")
+    home = _obs_at(_TRUTH, 3)
+    clusters = [
+        Cluster(consensus=other.sequence, members=[other]),
+        Cluster(consensus=_TRUTH, members=home),
+    ]
+    out, moved = _refine_by_consensus(clusters, [other, *home], 0.97)
+
+    assert moved == 0
+    assert len(out) == 2
+
+
+def test_a_single_read_never_attracts() -> None:
+    """A lone read's "consensus" is itself, so it is not evidence of anything.
+
+    Were singletons allowed to attract, every read would match its own cluster
+    perfectly and nothing could ever move.
+    """
+    from frontstr.evidence.cluster import _refine_by_consensus
+
+    a, b = _obs(_noisy(_TRUTH, [3]), name="a"), _obs(_noisy(_TRUTH, [9]), name="b")
+    out, moved = _refine_by_consensus(
+        [Cluster(consensus=a.sequence, members=[a]), Cluster(consensus=b.sequence, members=[b])],
+        [a, b],
+        0.97,
+    )
+
+    assert moved == 0
+    assert len(out) == 2
+
+
+@poa_only
+def test_a_noisy_seed_no_longer_splits_one_allele() -> None:
+    """The defect: which reads cluster depended on which read seeded.
+
+    Every read here is the same allele. The first one carries five errors, so
+    seed-and-grow measures the rest against those errors as well as their own
+    and pushes them past the threshold. The POA consensus of the others does
+    not carry them, and against it the seed is back inside.
+    """
+    reads = [
+        _obs(_noisy(_TRUTH, [10, 30, 50, 70, 90]), name="seed"),
+        _obs(_noisy(_TRUTH, [11, 31]), name="r1"),
+        _obs(_noisy(_TRUTH, [13, 33]), name="r2"),
+        _obs(_noisy(_TRUTH, [15, 35]), name="r3"),
+        _obs(_noisy(_TRUTH, [17, 37]), name="r4"),
+    ]
+    out = cluster_observations(reads)
+
+    assert len(out) == 1, "one allele, one cluster"
+    assert out[0].n_reads == 5
+    assert out[0].consensus == _TRUTH
+
+
+@poa_only
+def test_clustering_no_longer_depends_on_read_order() -> None:
+    """Checkable without a comparator, which is the point.
+
+    The same reads arriving in a different order are the same sample, so they
+    have to yield the same clusters.
+    """
+    reads = [
+        _obs(_noisy(_TRUTH, [10, 30, 50, 70, 90]), name="seed"),
+        _obs(_noisy(_TRUTH, [11, 31]), name="r1"),
+        _obs(_noisy(_TRUTH, [13, 33]), name="r2"),
+        _obs(_noisy(_TRUTH, [15, 35]), name="r3"),
+        _obs(_noisy(_TRUTH, [17, 37]), name="r4"),
+    ]
+    seed_first = cluster_observations(reads)
+    seed_last = cluster_observations([*reads[1:], reads[0]])
+
+    assert [c.n_reads for c in seed_first] == [c.n_reads for c in seed_last]
+    assert [c.consensus for c in seed_first] == [c.consensus for c in seed_last]
+    assert sorted(seed_first[0].read_ids) == sorted(seed_last[0].read_ids)
+
+
+@poa_only
+def test_two_alleles_stay_two_alleles_under_refinement() -> None:
+    """Refinement runs inside a length bin, so a real heterozygote is safe.
+
+    Noise goes in the flank, where ONT actually puts most of it and where it
+    leaves the repeat core, and therefore the binning key, untouched.
+    """
+    flank_l, flank_r = "GCTA" * 25, "TCGA" * 25
+    short = flank_l + "AATG" * 10 + flank_r
+    long_ = flank_l + "AATG" * 14 + flank_r
+    reads = [
+        *[_obs(_noisy(short, [2 * i + 1]), name=f"s{i}") for i in range(4)],
+        *[_obs(_noisy(long_, [2 * i + 2]), name=f"l{i}") for i in range(4)],
+    ]
+    out = cluster_observations(reads, motifs=["AATG"])
+
+    assert len(out) == 2
+    assert sorted(c.n_reads for c in out) == [4, 4]
+    assert {c.consensus for c in out} == {short, long_}
+
+
+@poa_only
+def test_refinement_reports_every_read_it_moved() -> None:
+    """The trace has to be able to say a read changed candidate allele."""
+    reads = [
+        _obs(_noisy(_TRUTH, [10, 30, 50, 70, 90]), name="seed"),
+        *[_obs(_noisy(_TRUTH, [11 + 2 * i, 31 + 2 * i]), name=f"r{i}") for i in range(4)],
+    ]
+    reassigned: dict[int, int] = {}
+    cluster_observations(reads, reassigned=reassigned)
+
+    assert sum(reassigned.values()) == 1
+    assert list(reassigned) == [len(_TRUTH)], "keyed by the bin the move happened in"

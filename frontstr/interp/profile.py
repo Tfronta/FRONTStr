@@ -429,6 +429,8 @@ def _safe_pileup_and_cluster(
     core_binned: dict[int, int] | None = {} if trace is not None else None
     consensus_seconds: list[float] | None = [] if timing is not None else None
     merged_consensus: dict[str, int] | None = {} if trace is not None else None
+    reassigned: dict[int, int] | None = {} if trace is not None else None
+    split_sizes: dict[int, int] | None = {} if trace is not None else None
     with timed(timing, "clustering"):
         clusters = cluster_observations(
             obs,
@@ -441,6 +443,8 @@ def _safe_pileup_and_cluster(
             core_binned=core_binned,
             consensus_seconds=consensus_seconds,
             merged_consensus=merged_consensus,
+            reassigned=reassigned,
+            split_sizes=split_sizes,
         )
     if timing is not None and consensus_seconds is not None:
         # Consensus ran inside the block just timed, so move it out rather than
@@ -454,6 +458,10 @@ def _safe_pileup_and_cluster(
             for key, n in bin_sizes.items()
         ]
         trace.consensus_backend = poa_backend_name()
+        if split_sizes:
+            trace.n_clusters_split = sum(split_sizes.values())
+        if reassigned:
+            trace.reassigned_reads = sum(reassigned.values())
         # Reported rather than left implicit: without it the trace shows fewer
         # clusters than bins and nothing says why.
         if merged_consensus:

@@ -148,6 +148,28 @@ class TestNarrativeContent:
         t = _trace(counts=_counts(), clusters=[_cluster(hp_rescued=True)])
         assert "called on phasing" in render_locus(t)
 
+    def test_reassignment_is_narrated(self) -> None:
+        t = _trace(counts=_counts(), clusters=[_cluster()], reassigned_reads=2)
+        out = render_locus(t)
+        assert "Step 4: refined against consensus" in out
+        assert "2 reads moved cluster" in out
+
+    def test_the_split_is_reported_at_its_own_size(self) -> None:
+        """Steps 4 and 5 both reshape the list, so the finished count is not
+        what splitting did. Attributing their work to step 2 would make the
+        narrative disagree with the stage it names."""
+        t = _trace(
+            counts=_counts(),
+            bins=[BinTrace(56, 32), BinTrace(44, 1)],
+            clusters=[_cluster()],
+            n_clusters_split=5,
+            reassigned_reads=1,
+            merged_on_consensus=2,
+        )
+        out = render_locus(t)
+        assert "5 clusters, 3 more than bins" in out
+        assert "1 cluster" not in out.split("Step 3")[0], "must not report the finished count"
+
     def test_unpolished_consensus_is_called_out(self) -> None:
         t = _trace(counts=_counts(), clusters=[_cluster(consensus_method="single")])
         assert "NOT polished by POA" in render_locus(t)

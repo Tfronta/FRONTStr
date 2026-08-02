@@ -1,6 +1,6 @@
 """Cluster observations into alleles with ONT-aware tolerance.
 
-Two-stage clustering (plan-longtr-improved.md §5.3):
+Clustering runs in five stages:
 
 1. **Length binning** — observations of equal (or near-equal, within
    ``len_tolerance_bp``) length are gathered together. When ``motifs`` are
@@ -11,10 +11,13 @@ Two-stage clustering (plan-longtr-improved.md §5.3):
 3. **Consensus** — partial-order alignment via
    :mod:`frontstr.evidence.consensus`, which records *how* the consensus was
    derived on each cluster (see :class:`ConsensusMethod`).
-4. **Merge on identical consensus** — stage 2 compares raw read to raw read, so
-   one allele can seed two clusters; once POA has polished both, an identical
-   consensus is proof they were one allele all along. See
-   :func:`_merge_identical_consensus`.
+4. **Refine against the consensus** — stage 2 measured every read against a raw
+   seed read, which carries that read's own errors. Once a consensus exists it
+   is the better yardstick, so reads are reassigned against it and the
+   consensus rebuilt. See :func:`_refine_by_consensus`.
+5. **Merge on identical consensus** — one allele can still seed two clusters;
+   once POA has polished both, an identical consensus is proof they were one
+   allele all along. See :func:`_merge_identical_consensus`.
 
 Result objects carry per-haplotype tallies so the report can render HP-stacks
 without re-iterating the BAM.
@@ -117,6 +120,8 @@ def cluster_observations(
     core_binned: dict[int, int] | None = None,
     consensus_seconds: list[float] | None = None,
     merged_consensus: dict[str, int] | None = None,
+    reassigned: dict[int, int] | None = None,
+    split_sizes: dict[int, int] | None = None,
 ) -> list[Cluster]:
     """Cluster :class:`Observation` instances by length and sequence identity.
 
@@ -148,6 +153,14 @@ def cluster_observations(
             for each set of fragments folded together by
             :func:`_merge_identical_consensus`, so a trace can say a merge
             happened instead of just reporting fewer clusters than bins.
+        reassigned: Optional dict filled with ``{binning key: n reads that
+            changed cluster}`` during :func:`_refine_by_consensus`. A read
+            moving between candidate alleles is exactly the kind of step the
+            audit trail has to show rather than absorb.
+        split_sizes: Optional dict filled with ``{binning key: n clusters}`` as
+            the identity split left them, *before* refinement and the merge.
+            The returned list has been through both, so a trace that wants to
+            report what splitting alone did cannot count it from the result.
 
     Returns:
         Clusters sorted by ``n_reads`` descending. Each consensus string is in
@@ -175,12 +188,129 @@ def cluster_observations(
         bins = _merge_close_length_bins(bins, len_tolerance_bp)
 
     clusters: list[Cluster] = []
-    for members in bins.values():
-        clusters.extend(_cluster_by_identity(members, identity_threshold, consensus_seconds))
+    for key, members in bins.items():
+        binned = _cluster_by_identity(members, identity_threshold, consensus_seconds)
+        if split_sizes is not None:
+            split_sizes[key] = len(binned)
+        binned, moved = _refine_by_consensus(binned, members, identity_threshold, consensus_seconds)
+        if reassigned is not None and moved:
+            reassigned[key] = moved
+        clusters.extend(binned)
 
     clusters = _merge_identical_consensus(clusters, merged_consensus)
     clusters.sort(key=lambda c: c.n_reads, reverse=True)
     return clusters
+
+
+#: Reassignment passes before the result is accepted as-is. Each pass moves
+#: reads and rebuilds the consensus they were compared against, so a later pass
+#: can move more. The loop stops as soon as a pass moves nothing, which is the
+#: normal exit; this cap only guarantees termination, since membership can in
+#: principle alternate between two equally good consensuses. It is not a tuned
+#: quantity and no call should depend on its value.
+_MAX_REFINE_PASSES = 3
+
+
+def _refine_by_consensus(
+    clusters: list[Cluster],
+    bin_members: list[Observation],
+    identity_threshold: float,
+    consensus_seconds: list[float] | None = None,
+) -> tuple[list[Cluster], int]:
+    """Reassign reads against polished consensuses instead of raw seed reads.
+
+    Seed-and-grow asks "is this read within ``identity_threshold`` of *that
+    read*", and the seed is simply whichever read the BAM happened to yield
+    first. An ONT read differs from the truth by 2-4%, so the seed spends part
+    of the budget on its own errors and reads of the same allele are pushed
+    outside it. Which reads those are depends on which read seeded — the split
+    is an artifact of input order, not of the sample.
+
+    A POA consensus over several reads has had those random errors averaged
+    out, so read-to-consensus is a strictly better estimate of "same allele?"
+    than read-to-read. This reassigns every read to the consensus it matches
+    best and rebuilds the consensus from the new membership, which is checkable
+    without any comparator: the same reads in a different order now converge on
+    the same clusters.
+
+    Only clusters of **two or more reads** attract. A singleton's "consensus"
+    is the read itself, so it would match itself perfectly and never move, and
+    a lone read has none of the error-averaging that justifies the comparison
+    in the first place.
+
+    A read that matches no consensus at ``identity_threshold`` stays where it
+    is. Nothing is orphaned and no cluster is created here; genuinely distinct
+    sequence keeps its own cluster, and two fragments that converge on the same
+    sequence are left for :func:`_merge_identical_consensus` to fold together,
+    which needs no threshold at all.
+
+    Args:
+        clusters: Clusters from one bin.
+        bin_members: Every observation in that bin, in BAM order, so a cluster
+            that gains reads can be put back into that order before its
+            consensus is rebuilt. POA output depends on input order, and the
+            reproducibility guarantee rests on it.
+        identity_threshold: Same threshold stage 2 used, now applied to a
+            cleaner reference sequence. Reused rather than given its own knob:
+            it is the same question asked of better evidence, and against a
+            consensus the test is the more conservative of the two.
+        consensus_seconds: Appended with the seconds each rebuild took, so the
+            trace attributes refinement time rather than hiding it in binning.
+
+    Returns:
+        The refined clusters, and how many reads changed cluster in total.
+        Members stay in BAM order so the consensus stays reproducible.
+    """
+    if len(clusters) < 2:
+        return clusters, 0
+
+    bam_order = {id(o): i for i, o in enumerate(bin_members)}
+    moved_total = 0
+    for _ in range(_MAX_REFINE_PASSES):
+        attractors = sorted(
+            (c for c in clusters if c.n_reads >= 2 and c.consensus),
+            key=lambda c: c.n_reads,
+            reverse=True,
+        )
+        if not attractors:
+            break
+
+        assigned: dict[int, list[Observation]] = {id(c): [] for c in clusters}
+        moved = 0
+        for cluster in clusters:
+            for o in cluster.members:
+                # Ties go to the larger cluster, whose consensus rests on more
+                # reads: `attractors` is sorted and only a strict improvement
+                # displaces the incumbent, so the outcome is deterministic.
+                best, best_identity = attractors[0], _identity(attractors[0].consensus, o.sequence)
+                for a in attractors[1:]:
+                    identity = _identity(a.consensus, o.sequence)
+                    if identity > best_identity:
+                        best, best_identity = a, identity
+                target = best if best_identity >= identity_threshold else cluster
+                if target is not cluster:
+                    moved += 1
+                assigned[id(target)].append(o)
+        if not moved:
+            break
+        moved_total += moved
+
+        rebuilt: list[Cluster] = []
+        for cluster in clusters:
+            members = assigned[id(cluster)]
+            if not members:
+                continue
+            if len(members) == cluster.n_reads and all(
+                a is b for a, b in zip(members, cluster.members, strict=True)
+            ):
+                rebuilt.append(cluster)
+                continue
+            members.sort(key=lambda o: bam_order[id(o)])
+            consensus, method = _build_consensus_timed(members, consensus_seconds)
+            rebuilt.append(Cluster(consensus=consensus, members=members, consensus_method=method))
+        clusters = rebuilt
+
+    return clusters, moved_total
 
 
 def _merge_identical_consensus(
@@ -289,15 +419,7 @@ def _cluster_by_identity(
             else:
                 leftover.append(m)
         remaining = leftover
-        if consensus_seconds is None:
-            consensus, method = build_consensus([m.sequence for m in cluster_members])
-        else:
-            # Timed separately so a trace can tell "many divergent candidates
-            # to align" apart from "many reads to bin" — they look the same
-            # from outside clustering and mean very different things.
-            _started = time.perf_counter()
-            consensus, method = build_consensus([m.sequence for m in cluster_members])
-            consensus_seconds.append(time.perf_counter() - _started)
+        consensus, method = _build_consensus_timed(cluster_members, consensus_seconds)
         clusters.append(
             Cluster(
                 consensus=consensus,
@@ -306,6 +428,23 @@ def _cluster_by_identity(
             )
         )
     return clusters
+
+
+def _build_consensus_timed(
+    members: list[Observation], consensus_seconds: list[float] | None
+) -> tuple[str, ConsensusMethod]:
+    """Build a cluster consensus, charging the time to the consensus stage.
+
+    Timed separately so a trace can tell "many divergent candidates to align"
+    apart from "many reads to bin" — they look the same from outside clustering
+    and mean very different things.
+    """
+    if consensus_seconds is None:
+        return build_consensus([m.sequence for m in members])
+    started = time.perf_counter()
+    result = build_consensus([m.sequence for m in members])
+    consensus_seconds.append(time.perf_counter() - started)
+    return result
 
 
 def _identity(a: str, b: str) -> float:

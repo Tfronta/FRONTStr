@@ -225,6 +225,14 @@ class LocusTrace:
     binned_on_core: bool = True
     bins: list[BinTrace] = field(default_factory=list)
     consensus_backend: str = ""
+    #: Clusters the identity split produced, before refinement and the merge
+    #: reshaped them. :attr:`clusters` is the finished list, so it cannot be
+    #: counted to describe the split on its own.
+    n_clusters_split: int = 0
+    #: Reads that changed cluster once they were measured against a polished
+    #: consensus rather than a raw seed read. A read moving between candidate
+    #: alleles is a step the reader has to be able to see.
+    reassigned_reads: int = 0
     #: Fragments folded back together because POA gave them the same consensus.
     #: Without this the reader sees fewer clusters than bins and no reason why.
     merged_on_consensus: int = 0
@@ -408,11 +416,15 @@ def render_locus(t: LocusTrace) -> str:
 
     # 3. Clustering + consensus ---------------------------------------------
     if t.clusters:
-        split = len(t.clusters) - len(t.bins)
+        # The count the split itself produced, not the finished list: steps 4
+        # and 5 both reshape it, and attributing their work to step 2 would
+        # make the narrative disagree with the stage it names.
+        n_split = t.n_clusters_split or len(t.clusters)
+        split = n_split - len(t.bins)
         outcome = (
-            f"{_plural(len(t.clusters), 'cluster')}, none split"
+            f"{_plural(n_split, 'cluster')}, none split"
             if split <= 0
-            else f"{_plural(len(t.clusters), 'cluster')}, {split} more than bins"
+            else f"{_plural(n_split, 'cluster')}, {split} more than bins"
         )
         add(
             _row(
@@ -422,10 +434,18 @@ def render_locus(t: LocusTrace) -> str:
         )
         if t.consensus_backend:
             add(_row("Step 3: consensus per cluster", t.consensus_backend))
+        if t.reassigned_reads:
+            add(
+                _row(
+                    "Step 4: refined against consensus",
+                    f"{_plural(t.reassigned_reads, 'read')} moved cluster — "
+                    "the seed read they were first compared against carried its own errors",
+                )
+            )
         if t.merged_on_consensus:
             add(
                 _row(
-                    "Step 4: merged on consensus",
+                    "Step 5: merged on consensus",
                     f"{_plural(t.merged_on_consensus, 'fragment')} folded back in — "
                     "same allele, split by read-to-read identity, reunited by POA",
                 )

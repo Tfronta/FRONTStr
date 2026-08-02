@@ -117,15 +117,19 @@ Within each bin, reads are grouped by pairwise edit-distance identity (edlib,
 This separates iso-alleles: two alleles of equal core length but different
 internal structure share a bin and differ only by sequence.
 
+Each read is compared against the seed, which is a raw read carrying its own
+errors. Section 3.1 repeats the comparison against the cluster consensus, which
+does not.
+
 ### 2.4 Output
 
-TH01 in the demo sample gives two clusters of 10 and 7 reads, genotyped
-`9.3(10) / 7(7)`, plus eight singletons.
+TH01 in the demo sample gives two clusters of 12 and 7 reads, genotyped
+`9.3(12) / 7(7)`, plus six singletons.
 
 Two ONT reads of one allele diverge by 2 to 4%, near the identity threshold, so
-some reads of a real allele form singleton clusters. These fall below
-`--analytical-thresh` and are classified as noise. They appear in `--trace` as
-candidates and are not counted toward any allele's depth.
+a read of a real allele can still end up in a singleton cluster. Those fall
+below `--analytical-thresh` and are classified as noise. They appear in
+`--trace` as candidates and are not counted toward any allele's depth.
 
 ## 3. Consensus: clusters to sequences
 
@@ -140,6 +144,34 @@ all computed from this sequence.
 Alignment is global, not local. Clusters are length-binned, so their members
 are equal-length full-window sequences; local alignment could trim flanks and
 change the called length, which is the allele number.
+
+### 3.1 Refinement against the consensus
+
+**Module:** `frontstr/evidence/cluster.py`
+
+Splitting (§2.3) measures each read against a seed read, and the seed is
+whichever read the BAM yielded first. The seed's own errors count against every
+candidate, so reads of one allele can fall outside the threshold, and which
+ones do depends on the input order.
+
+Once a consensus exists it replaces the seed as the reference. Every read is
+compared against every consensus and joins the one it matches best, at the same
+`--identity` threshold; the consensus is then rebuilt from the new membership
+and the pass repeats until nothing moves.
+
+Only clusters of two or more reads attract. A single read's consensus is the
+read itself, so it matches itself perfectly and carries none of the
+error-averaging that makes the comparison worth doing.
+
+A read that matches no consensus keeps its cluster. Refinement moves reads
+between clusters; it never creates or discards one.
+
+`--trace` reports the reads it moved, per locus, as step 4.
+
+### 3.2 Merge on identical consensus
+
+Two clusters whose consensus is byte-identical are one allele and are folded
+together. This runs after refinement and across bins.
 
 ### A POA backend is required
 
