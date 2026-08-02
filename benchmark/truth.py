@@ -49,6 +49,34 @@ NOT_IN_PANEL = frozenset({"PentaD", "PentaE", "SE30"})
 #: See the ``reference-frontstr-truth-workbook`` note.
 NO_EXTERNAL_TRUTH = frozenset({"D21S11"})
 
+#: Motif length per marker, needed to read a cell written as bases over motif
+#: length instead of in ISFG notation. Held here rather than read from the
+#: panel because the workbook is a fixed artifact and the benchmark must be
+#: able to parse it without one; ``test_motif_lengths_match_the_shipped_panel``
+#: is what stops the two from drifting apart.
+MOTIF_LENGTHS = {
+    "CSF1PO": 4,
+    "D10S1248": 4,
+    "D12S391": 4,
+    "D13S317": 4,
+    "D16S539": 4,
+    "D18S51": 4,
+    "D19S433": 4,
+    "D1S1656": 4,
+    "D21S11": 4,
+    "D22S1045": 3,
+    "D2S1338": 4,
+    "D2S441": 4,
+    "D3S1358": 4,
+    "D5S818": 4,
+    "D7S820": 4,
+    "D8S1179": 4,
+    "FGA": 4,
+    "TH01": 4,
+    "TPOX": 4,
+    "vWA": 4,
+}
+
 #: A genotype: one or two allele designations as canonical strings.
 Genotype = tuple[str, ...]
 
@@ -82,7 +110,53 @@ def canonical_sample_id(raw: str) -> str:
     return sid
 
 
-def canonical_allele(raw: object) -> str | None:
+#: How far a stored suffix may sit from a notation's exact value and still be
+#: recognised as it. A third written to four decimals is off by 3e-5, and a
+#: typed cell can be shorter still. The nearest two candidates anywhere in the
+#: panel are ``.2`` and ``.25``, so anything well under 0.025 separates every
+#: pair; at 0.01 a suffix like ``.45``, which is neither notation, still falls
+#: through to being reported rather than guessed at.
+_SUFFIX_TOL = 0.01
+
+
+def isfg_from_repeat_units(value: float, motif_length: int) -> str | None:
+    """ISFG designation for a cell written in repeat units, or ``None``.
+
+    HipSTR and longTR report an allele in **bases**, and the workbook divides
+    that by the motif length, so three extra bases on a tetranucleotide are
+    stored as ``.75`` and not as ISFG's ``.3``. The two notations are
+    distinguishable: an ISFG suffix counts extra bases and is written as a
+    tenth, so it is one of ``.1 .2 .3`` on a tetranucleotide, while the
+    quotient can only be one of ``.25 .5 .75``. For every marker in this panel,
+    which is tri- and tetranucleotide throughout, those two sets are disjoint.
+
+    They stop being disjoint at a pentanucleotide, where ``.2`` and ``.4`` are
+    valid in both notations and mean different alleles. Nothing is converted
+    there; guessing would be worse than reporting the cell as it stands.
+
+    Returns:
+        The ISFG designation when ``value`` is unambiguously in repeat units,
+        ``None`` when it is already ISFG, or ambiguous, or neither.
+    """
+    if motif_length >= 5:
+        return None
+    fraction = value % 1
+    if fraction < _SUFFIX_TOL or fraction > 1 - _SUFFIX_TOL:
+        return None
+    if any(abs(fraction - extra / 10) < _SUFFIX_TOL for extra in range(1, motif_length)):
+        return None
+    for extra in range(1, motif_length):
+        if abs(fraction - extra / motif_length) < _SUFFIX_TOL:
+            return f"{int(value)}.{extra}"
+    return None
+
+
+def canonical_allele(
+    raw: object,
+    *,
+    motif_length: int | None = None,
+    converted: list[tuple[float, str]] | None = None,
+) -> str | None:
     """Render one allele cell as a canonical CE string, or ``None`` if absent.
 
     Accepts the several spellings the workbook and FRONTStr disagree on:
@@ -90,8 +164,17 @@ def canonical_allele(raw: object) -> str | None:
     workbook's ``NA`` / ``ND`` placeholders become ``None``.
 
     Whole numbers lose their ``.0`` so that FRONTStr's ``"12.0"`` and the
-    workbook's ``12`` compare equal; ``9.3`` keeps its fractional part because
-    in CE notation that is three extra bases, not a rounding artefact.
+    workbook's ``12`` compare equal.
+
+    Args:
+        raw: The cell.
+        motif_length: Set for workbook cells, which may be written in repeat
+            units and need :func:`isfg_from_repeat_units`. Left unset for
+            FRONTStr's own output, which is ISFG already and must not be
+            reinterpreted.
+        converted: Optional list appended with ``(stored value, ISFG)`` for
+            every cell that was in repeat units, so the run can report what it
+            re-read rather than silently changing a genotype.
     """
     if raw is None:
         return None
@@ -104,10 +187,24 @@ def canonical_allele(raw: object) -> str | None:
         # Something like "16/18" or a stray note — keep it verbatim so the
         # mismatch is visible rather than silently dropped.
         return text
+    if motif_length is not None:
+        isfg = isfg_from_repeat_units(value, motif_length)
+        if isfg is not None:
+            if converted is not None:
+                converted.append((value, isfg))
+            return isfg
+    # Rounding here is what made a stored 9.25 read as "9.2", an allele the
+    # workbook never asserted and one FRONTStr can legitimately call. Anything
+    # that reaches this line is already a tenth.
     return f"{value:.1f}".removesuffix(".0")
 
 
-def canonical_genotype(alleles: list[object]) -> Genotype:
+def canonical_genotype(
+    alleles: list[object],
+    *,
+    motif_length: int | None = None,
+    converted: list[tuple[float, str]] | None = None,
+) -> Genotype:
     """Build a comparable genotype from raw allele cells.
 
     A single reported allele is a homozygote, so it is expanded to a pair: a
@@ -116,7 +213,13 @@ def canonical_genotype(alleles: list[object]) -> Genotype:
     Alleles are sorted, because A1/A2 order is not meaningful and the workbook
     is not consistent about it (``13, 12`` appears alongside ``10, 12``).
     """
-    called = [a for a in (canonical_allele(x) for x in alleles) if a is not None]
+    called = [
+        a
+        for a in (
+            canonical_allele(x, motif_length=motif_length, converted=converted) for x in alleles
+        )
+        if a is not None
+    ]
     if not called:
         return ()
     if len(called) == 1:
@@ -170,6 +273,7 @@ def load_truth(
     *,
     sheet: str = TRUTH_SHEET,
     include_not_in_panel: bool = False,
+    converted: list[tuple[str, str, str, float, str]] | None = None,
 ) -> list[TruthCall]:
     """Read every (sample, marker, technology) genotype out of the workbook.
 
@@ -178,6 +282,10 @@ def load_truth(
         sheet: Sheet to read. The default carries all three technologies side
             by side, which is what makes a disagreement adjudicable.
         include_not_in_panel: Keep PentaD/PentaE, which FRONTStr does not call.
+        converted: Optional list appended with ``(sample, marker, technology,
+            stored value, ISFG)`` for every cell that was written in repeat
+            units. Re-reading a genotype is not something a validation run gets
+            to do quietly, so the caller is expected to report these.
 
     Returns:
         One :class:`TruthCall` per sample × marker × technology, including the
@@ -216,12 +324,22 @@ def load_truth(
             for tech in TECHNOLOGIES:
                 a1 = _cell(row, columns.get((marker, tech, "A1")))
                 a2 = _cell(row, columns.get((marker, tech, "A2")))
+                cells: list[tuple[float, str]] = []
+                genotype = canonical_genotype(
+                    [a1, a2],
+                    motif_length=MOTIF_LENGTHS.get(marker),
+                    converted=cells,
+                )
+                if converted is not None:
+                    converted.extend(
+                        (sample_id, marker, tech, stored, isfg) for stored, isfg in cells
+                    )
                 calls.append(
                     TruthCall(
                         sample_id=sample_id,
                         marker=marker,
                         technology=tech,
-                        genotype=canonical_genotype([a1, a2]),
+                        genotype=genotype,
                         coverage=_coverage(row, columns, marker, tech),
                     )
                 )

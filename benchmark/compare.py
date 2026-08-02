@@ -307,7 +307,8 @@ def main(
 ) -> None:
     """Score a FRONTStr batch against the external truth workbook."""
     calls = parse_summary(summary)
-    truth = index_by_sample_marker(load_truth(workbook, sheet=sheet))
+    converted: list[tuple[str, str, str, float, str]] = []
+    truth = index_by_sample_marker(load_truth(workbook, sheet=sheet, converted=converted))
     rows = compare(calls, truth)
 
     if not rows:
@@ -322,6 +323,15 @@ def main(
             f"[yellow]Not scored — no row in {sheet}:[/yellow] {', '.join(skipped)}"
             f"  ({len(skipped)} of {len(samples) + len(skipped)} called)"
         )
+    if converted:
+        # Named, not counted. These cells were scored as an allele other than
+        # the one the sheet stores, and which ones matters more than how many.
+        console.print(
+            f"\n[yellow]{len(converted)} workbook cell(s) written in repeat units, "
+            "read as ISFG:[/yellow]"
+        )
+        for sample_id, marker, tech, stored, isfg in converted:
+            console.print(f"  {sample_id}  {marker}  {tech}  {stored:g} -> {isfg}")
     console.print()
     console.print(render_per_marker(rows))
     console.print()
