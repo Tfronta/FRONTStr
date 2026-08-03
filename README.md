@@ -780,3 +780,22 @@ FRONTStr is an independent implementation. It uses and draws on:
   [10.1016/j.fsigen.2018.07.006](https://doi.org/10.1016/j.fsigen.2018.07.006)
 - **STRspy.** Hall, Kesharwani et al.
   [10.3390/ijms27041889](https://doi.org/10.3390/ijms27041889)
+- **Partial order alignment.** Every called allele's sequence is a POA consensus,
+  so the ISFG string, the iso-allele match and any microvariant rest on it. The
+  algorithm is Lee, Grasso & Sharlow (2002)
+  [10.1093/bioinformatics/18.3.452](https://doi.org/10.1093/bioinformatics/18.3.452);
+  the consensus step FRONTStr actually uses is the heaviest-bundle traversal of
+  Lee (2003)
+  [10.1093/bioinformatics/btg109](https://doi.org/10.1093/bioinformatics/btg109).
+  The backends are **SPOA**, Vaser et al. (2017)
+  [10.1101/gr.214270.116](https://doi.org/10.1101/gr.214270.116), reached through
+  `pyspoa`, and **abPOA**, Gao et al. (2021)
+  [10.1093/bioinformatics/btaa963](https://doi.org/10.1093/bioinformatics/btaa963).
+- **POA on forensic ONT data.** Vasiljevic et al. (2021)
+  [10.1016/j.fsigen.2021.102493](https://doi.org/10.1016/j.fsigen.2021.102493) is
+  a developmental validation of an ONT MinION pipeline whose consensus step is
+  `spoa`, the same backend FRONTStr uses, via NGSpeciesID (Sahlin, Lim & Prost
+  2021, [10.1002/ece3.7146](https://doi.org/10.1002/ece3.7146)). Species
+  identification rather than STR typing, and amplicon rather than PCR-free WGS,
+  so it is precedent for the consensus method and not for the application or the
+  error model.

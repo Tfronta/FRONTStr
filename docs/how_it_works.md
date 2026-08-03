@@ -203,6 +203,9 @@ does not build on macOS arm64. Each cluster records which method produced its
 consensus, and the fallback raises `CONSENSUS_FALLBACK` on every affected
 marker.
 
+The algorithm, the two backends and a forensic ONT pipeline built on the same
+one are cited under [Prior art](../README.md#prior-art).
+
 ---
 
 ## 4. ISFG nomenclature and allele number
